@@ -17,10 +17,20 @@ typedef struct {
 
 extern CPUState cpu;
 
+// CPSR flag constants
+#define CPSR_N_FLAG (1 << 31) // Negative flag
+#define CPSR_Z_FLAG (1 << 30) // Zero flag
+#define CPSR_C_FLAG (1 << 29) // Carry flag
+#define CPSR_V_FLAG (1 << 28) // Overflow flag
+#define CPSR_E_FLAG (1 << 9)  // Endianness flag
+
 // Function declarations
 void cpu_init();
 void cpu_step(uint32_t cycles); // Step forward a specified number of CPU cycles
-uint32_t fetch_instruction(uint32_t address);
-void decode_and_execute(uint32_t instruction);
-
+int check_condition_codes(uint8_t condition);
+void update_cpsr_flags(uint32_t result, uint8_t carry_out);
+// Function to set the CPU mode
+void set_cpu_mode(CPUState* state, CPUMode mode);
+// Function to get the current CPU mode from a given CPU state
+CPUMode get_cpu_state(CPUState* state);
 #endif // CPU_H
