@@ -1,4 +1,5 @@
 #include "cpu.h"
+#include "debug.h" // Include debug utilities
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,7 +103,7 @@ void update_cpsr_flags(uint32_t result, uint8_t carry_out) {
 // Function to set the CPU mode
 void set_cpu_mode(CPUState* state, CPUMode mode) {
     state->mode = mode; // Update the mode in the CPU state structure
-    printf("CPU mode set to %s\n", mode == ARM_MODE ? "ARM" : "Thumb");
+    LOG_INFO("CPU mode set to %s", mode == ARM_MODE ? "ARM" : "Thumb");
 }
 
 // Function to get the current CPU mode from a given CPU state

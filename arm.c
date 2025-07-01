@@ -2,6 +2,7 @@
 
 #include "cpu.h"
 #include "arm.h"
+#include "debug.h" // Include debug utilities
 #include <stdio.h>
 #include <stdint.h>
 
@@ -137,7 +138,7 @@ uint32_t arm_decode_and_execute(uint32_t instruction) {
         return instruction_cycle_hash_table[opcode];
     }
 
-    printf("Illegal instruction: 0x%08X\n", instruction);
+    LOG_INFO("Illegal instruction: 0x%08X", instruction);
     return 0; // Illegal instructions consume 0 cycles
 }
 
@@ -147,42 +148,42 @@ uint32_t arm_decode_and_execute(uint32_t instruction) {
 // ARM Instruction handlers
 // Data Processing Instructions
 static void handle_and(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing AND\n");
+    LOG_INFO("Executing AND");
 
     // Perform the AND operation
     cpu.r[rd] = cpu.r[rn] & operand2;
 }
 
 static void handle_eor(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing EOR\n");
+    LOG_INFO("Executing EOR");
 
     // Perform the EOR operation
     cpu.r[rd] = cpu.r[rn] ^ operand2;
 }
 
 static void handle_sub(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing SUB\n");
+    LOG_INFO("Executing SUB");
 
     // Perform the SUB operation
     cpu.r[rd] = cpu.r[rn] - operand2;
 }
 
 static void handle_rsb(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing RSB\n");
+    LOG_INFO("Executing RSB");
 
     // Perform the RSB operation
     cpu.r[rd] = operand2 - cpu.r[rn];
 }
 
 static void handle_add(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing ADD\n");
+    LOG_INFO("Executing ADD");
 
     // Perform the ADD operation
     cpu.r[rd] = cpu.r[rn] + operand2;
 }
 
 static void handle_adc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing ADC\n");
+    LOG_INFO("Executing ADC");
 
     // Perform the ADC operation (Add with Carry)
     uint8_t carry = (cpu.cpsr & CPSR_C_FLAG) ? 1 : 0;
@@ -190,7 +191,7 @@ static void handle_adc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_sbc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing SBC\n");
+    LOG_INFO("Executing SBC");
 
     // Perform the SBC operation (Subtract with Carry)
     uint8_t carry = (cpu.cpsr & CPSR_C_FLAG) ? 1 : 0;
@@ -198,7 +199,7 @@ static void handle_sbc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_rsc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing RSC\n");
+    LOG_INFO("Executing RSC");
 
     // Perform the RSC operation (Reverse Subtract with Carry)
     uint8_t carry = (cpu.cpsr & CPSR_C_FLAG) ? 1 : 0;
@@ -206,7 +207,7 @@ static void handle_rsc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_tst(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing TST\n");
+    LOG_INFO("Executing TST");
 
     // Perform the TST operation (Test bits)
     uint32_t result = cpu.r[rn] & operand2;
@@ -216,7 +217,7 @@ static void handle_tst(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_teq(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing TEQ\n");
+    LOG_INFO("Executing TEQ");
 
     // Perform the TEQ operation (Test Equivalence)
     uint32_t result = cpu.r[rn] ^ operand2;
@@ -226,7 +227,7 @@ static void handle_teq(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_cmp(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing CMP\n");
+    LOG_INFO("Executing CMP");
 
     // Perform the CMP operation (Compare)
     uint32_t result = cpu.r[rn] - operand2;
@@ -236,7 +237,7 @@ static void handle_cmp(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_cmn(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing CMN\n");
+    LOG_INFO("Executing CMN");
 
     // Perform the CMN operation (Compare Negative)
     uint32_t result = cpu.r[rn] + operand2;
@@ -246,28 +247,28 @@ static void handle_cmn(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_orr(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing ORR\n");
+    LOG_INFO("Executing ORR");
 
     // Perform the ORR operation (Logical OR)
     cpu.r[rd] = cpu.r[rn] | operand2;
 }
 
 static void handle_mov(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing MOV\n");
+    LOG_INFO("Executing MOV");
 
     // Perform the MOV operation (Move)
     cpu.r[rd] = operand2;
 }
 
 static void handle_bic(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing BIC\n");
+    LOG_INFO("Executing BIC");
 
     // Perform the BIC operation (Bit Clear)
     cpu.r[rd] = cpu.r[rn] & ~operand2;
 }
 
 static void handle_mvn(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing MVN\n");
+    LOG_INFO("Executing MVN");
 
     // Perform the MVN operation (Move Not)
     cpu.r[rd] = ~operand2;
@@ -275,7 +276,7 @@ static void handle_mvn(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 
 // Load/Store Instructions
 static void handle_ldr(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing LDR\n");
+    LOG_INFO("Executing LDR");
 
     // Perform the LDR operation (Load Register)
     uint32_t address = cpu.r[rn] + operand2;
@@ -283,7 +284,7 @@ static void handle_ldr(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_str(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing STR\n");
+    LOG_INFO("Executing STR");
 
     // Perform the STR operation (Store Register)
     uint32_t address = cpu.r[rn] + operand2;
@@ -291,7 +292,7 @@ static void handle_str(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_ldrb(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing LDRB\n");
+    LOG_INFO("Executing LDRB");
 
     // Perform the LDRB operation (Load Register Byte)
     uint32_t address = cpu.r[rn] + operand2;
@@ -299,7 +300,7 @@ static void handle_ldrb(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry
 }
 
 static void handle_strb(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing STRB\n");
+    LOG_INFO("Executing STRB");
 
     // Perform the STRB operation (Store Register Byte)
     uint32_t address = cpu.r[rn] + operand2;
@@ -307,7 +308,7 @@ static void handle_strb(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry
 }
 
 static void handle_ldrh(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing LDRH\n");
+    LOG_INFO("Executing LDRH");
 
     // Perform the LDRH operation (Load Register Halfword)
     uint32_t address = cpu.r[rn] + operand2;
@@ -315,7 +316,7 @@ static void handle_ldrh(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry
 }
 
 static void handle_strh(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing STRH\n");
+    LOG_INFO("Executing STRH");
 
     // Perform the STRH operation (Store Register Halfword)
     uint32_t address = cpu.r[rn] + operand2;
@@ -323,7 +324,7 @@ static void handle_strh(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry
 }
 
 static void handle_ldrsb(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing LDRSB\n");
+    LOG_INFO("Executing LDRSB");
 
     // Perform the LDRSB operation (Load Register Signed Byte)
     uint32_t address = cpu.r[rn] + operand2;
@@ -331,7 +332,7 @@ static void handle_ldrsb(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carr
 }
 
 static void handle_ldrsh(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing LDRSH\n");
+    LOG_INFO("Executing LDRSH");
 
     // Perform the LDRSH operation (Load Register Signed Halfword)
     uint32_t address = cpu.r[rn] + operand2;
@@ -340,7 +341,7 @@ static void handle_ldrsh(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carr
 
 // Branch Instructions
 static void handle_b(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing B\n");
+    LOG_INFO("Executing B");
 
     // Perform the B operation (Branch)
     int32_t offset = (int32_t)(operand2 << 2); // Sign-extend and shift left by 2
@@ -348,7 +349,7 @@ static void handle_b(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_ou
 }
 
 static void handle_bl(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing BL\n");
+    LOG_INFO("Executing BL");
 
     // Perform the BL operation (Branch with Link)
     int32_t offset = (int32_t)(operand2 << 2); // Sign-extend and shift left by 2
@@ -358,21 +359,21 @@ static void handle_bl(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_o
 
 // Multiply Instructions
 static void handle_mul(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing MUL\n");
+    LOG_INFO("Executing MUL");
 
     // Perform the MUL operation (Multiply)
     cpu.r[rd] = cpu.r[rn] * operand2;
 }
 
 static void handle_mla(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing MLA\n");
+    LOG_INFO("Executing MLA");
 
     // Perform the MLA operation (Multiply-Accumulate)
     cpu.r[rd] = (cpu.r[rn] * operand2) + cpu.r[carry_out]; // Assuming carry_out is used as the accumulator register
 }
 
 static void handle_umull(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing UMULL\n");
+    LOG_INFO("Executing UMULL");
 
     // Perform the UMULL operation (Unsigned Multiply Long)
     uint64_t result = (uint64_t)cpu.r[rn] * (uint64_t)operand2;
@@ -381,7 +382,7 @@ static void handle_umull(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carr
 }
 
 static void handle_smull(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing SMULL\n");
+    LOG_INFO("Executing SMULL");
 
     // Perform the SMULL operation (Signed Multiply Long)
     int64_t result = (int64_t)(int32_t)cpu.r[rn] * (int64_t)(int32_t)operand2;
@@ -390,7 +391,7 @@ static void handle_smull(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carr
 }
 
 static void handle_umlal(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing UMLAL\n");
+    LOG_INFO("Executing UMLAL");
 
     // Perform the UMLAL operation (Unsigned Multiply-Accumulate Long)
     uint64_t result = (uint64_t)cpu.r[rn] * (uint64_t)operand2 + ((uint64_t)cpu.r[rd] | ((uint64_t)cpu.r[carry_out] << 32));
@@ -399,7 +400,7 @@ static void handle_umlal(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carr
 }
 
 static void handle_smlal(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing SMLAL\n");
+    LOG_INFO("Executing SMLAL");
 
     // Perform the SMLAL operation (Signed Multiply-Accumulate Long)
     int64_t result = (int64_t)(int32_t)cpu.r[rn] * (int64_t)(int32_t)operand2 + ((int64_t)cpu.r[rd] | ((int64_t)cpu.r[carry_out] << 32));
@@ -409,14 +410,14 @@ static void handle_smlal(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carr
 
 // Status Register Access Instructions
 static void handle_mrs(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing MRS\n");
+    LOG_INFO("Executing MRS");
 
     // Perform the MRS operation (Move PSR to Register)
     cpu.r[rd] = cpu.cpsr; // Move CPSR to destination register
 }
 
 static void handle_msr(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing MSR\n");
+    LOG_INFO("Executing MSR");
 
     // Perform the MSR operation (Move Register to PSR)
     cpu.cpsr = operand2; // Move operand to CPSR
@@ -424,7 +425,7 @@ static void handle_msr(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 
 // Coprocessor Instructions
 static void handle_cdp(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing CDP\n");
+    LOG_INFO("Executing CDP");
 
     // Perform the CDP operation (Coprocessor Data Operation)
     // Placeholder: Implement coprocessor-specific logic here
@@ -432,7 +433,7 @@ static void handle_cdp(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_ldc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing LDC\n");
+    LOG_INFO("Executing LDC");
 
     // Perform the LDC operation (Load Coprocessor)
     uint32_t address = cpu.r[rn] + operand2;
@@ -442,7 +443,7 @@ static void handle_ldc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_stc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing STC\n");
+    LOG_INFO("Executing STC");
 
     // Perform the STC operation (Store Coprocessor)
     uint32_t address = cpu.r[rn] + operand2;
@@ -451,7 +452,7 @@ static void handle_stc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_mcr(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing MCR\n");
+    LOG_INFO("Executing MCR");
 
     // Perform the MCR operation (Move to Coprocessor)
     // Placeholder: Implement coprocessor-specific logic to move data to coprocessor
@@ -459,7 +460,7 @@ static void handle_mcr(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_
 }
 
 static void handle_mrc(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing MRC\n");
+    LOG_INFO("Executing MRC");
 
     // Perform the MRC operation (Move from Coprocessor)
     // Placeholder: Implement coprocessor-specific logic to move data from coprocessor
@@ -474,7 +475,7 @@ static void handle_undefined(uint32_t instruction) {
 
 // NOP Instruction
 static void handle_nop(uint8_t rd, uint8_t rn, uint32_t operand2, uint8_t carry_out) {
-    printf("Executing NOP\n");
+    LOG_INFO("Executing NOP");
 }
 
 // SWP and SWPB Instructions

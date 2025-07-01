@@ -23,6 +23,7 @@ extern CPUState cpu;
 #define CPSR_C_FLAG (1 << 29) // Carry flag
 #define CPSR_V_FLAG (1 << 28) // Overflow flag
 #define CPSR_E_FLAG (1 << 9)  // Endianness flag
+#define CPSR_T_FLAG (1 << 5)  // Thumb mode flag
 
 // Function declarations
 void cpu_init();
