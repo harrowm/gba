@@ -25,27 +25,21 @@
 // --- Per-file debug bitmask system ---
 // Assign a bit to each file
 #define DEBUG_MAIN      (1 << 0)
-#define DEBUG_LEXER     (1 << 1)
-#define DEBUG_PARSER    (1 << 2)
-#define DEBUG_CFG       (1 << 3)
-#define DEBUG_TAC       (1 << 4)
-#define DEBUG_OPTIMIZE  (1 << 5)
-// ...add more as needed
+#define DEBUG_ARM       (1 << 1)
+#define DEBUG_CPU       (1 << 2)
+#define DEBUG_THUMB     (1 << 3)
 
-// Set the debug mask for enabled files
-#define DEBUG_FILE_MASK (DEBUG_TAC | DEBUG_OPTIMIZE)  // Example: enable TAC and OPTIMIZE
+// Update the debug mask for enabled files
+#define DEBUG_FILE_MASK (DEBUG_ARM | DEBUG_CPU | DEBUG_THUMB)  // Example: enable ARM, CPU, and Thumb debugging
 //#define DEBUG_FILE_MASK 0 // Uncomment to disable all debugging
 
 
 // Map filename to debug bit
 static inline int debug_file_flag(const char *filename) {
     if (strcmp(filename, "main.c") == 0) return DEBUG_MAIN;
-    if (strcmp(filename, "lexer.c") == 0 || strcmp(filename, "test_lexer.c") == 0) return DEBUG_LEXER;
-    if (strcmp(filename, "parser.c") == 0 || strcmp(filename, "test_parser.c") == 0) return DEBUG_PARSER;
-    if (strcmp(filename, "cfg.c") == 0 || strcmp(filename, "test_cfg.c") == 0) return DEBUG_CFG;
-    if (strcmp(filename, "tac.c") == 0 || strcmp(filename, "test_tac.c") == 0) return DEBUG_TAC;
-    if (strcmp(filename, "optimize.c") == 0 || strcmp(filename, "test_optimize.c") == 0) return DEBUG_OPTIMIZE;
-    if (strcmp(filename, "dominance.c") == 0 || strcmp(filename, "test_dominance.c") == 0) return DEBUG_CFG; // or define DEBUG_DOMINANCE if you want a separate bit
+    if (strcmp(filename, "arm.c") == 0) return DEBUG_ARM;
+    if (strcmp(filename, "cpu.c") == 0) return DEBUG_CPU;
+    if (strcmp(filename, "thumb.c") == 0) return DEBUG_THUMB;
     return 0;
 }
 
