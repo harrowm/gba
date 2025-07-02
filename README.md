@@ -30,3 +30,7 @@ https://github.com/matanlurey/armv4t.dart?tab=readme-ov-file
 Some tests here:
 https://github.com/daniel5151/armv4t_emu/tree/master/tests
 
+
+The tests use Google Test, installed with:
+brew install googletest
+

@@ -6,6 +6,8 @@
 #include <iostream>
 #include <unordered_map>
 #include <source_location>
+#include <iomanip>
+#include <sstream>
 
 
 // Namespace for Debugging
@@ -79,6 +81,13 @@ public:
         }
     }
 };
+
+// Convert integer to hex string
+inline std::string toHexString(uint32_t value, int width) {
+    std::ostringstream oss;
+    oss << std::hex << std::uppercase << std::setfill('0') << std::setw(width) << value;
+    return oss.str();
+}
 
 } // namespace Debug
 
