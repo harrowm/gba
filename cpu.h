@@ -2,6 +2,7 @@
 #define CPU_H
 
 #include <stdint.h>
+#include <stdbool.h> // Include stdbool.h for boolean type
 
 typedef enum {
     ARM_MODE = 0,
@@ -13,6 +14,7 @@ typedef struct {
     uint32_t r[16];        // General-purpose registers (R0-R15)
     uint32_t cpsr;          // Current Program Status Register
     CPUMode mode;           // ARM or Thumb mode
+    bool big_endian;        // Memory endianness
 } CPUState;
 
 extern CPUState cpu;
