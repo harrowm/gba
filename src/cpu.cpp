@@ -31,6 +31,26 @@ bool CPU::isThumbMode() const {
     return cpsr & (1 << 5);
 }
 
+void CPU::setCPUState(const CPUState& state) {
+    Debug::log::info("Setting CPU state");
+    for (int i = 0; i < 16; ++i) {
+        registers[i] = state.registers[i];
+    }
+    cpsr = state.cpsr;
+    bigEndian = state.bigEndian;
+}
+
+CPUState CPU::getCPUState() const {
+    Debug::log::info("Getting CPU state");
+    CPUState state;
+    for (int i = 0; i < 16; ++i) {
+        state.registers[i] = registers[i];
+    }
+    state.cpsr = cpsr;
+    state.bigEndian = bigEndian;
+    return state;
+}
+
 void CPU::execute(uint32_t cycles) {
     Debug::log::info("Executing CPU for " + std::to_string(cycles) + " cycles");
 
@@ -41,4 +61,22 @@ void CPU::execute(uint32_t cycles) {
         Debug::log::debug("Executing ARM instructions");
         armCPU->execute(cycles); // Use pointer
     }
+}
+
+void CPU::printCPUState() const {
+    Debug::log::info("Printing CPU state");
+
+    std::string stateStr = "\nCPU State:\n";
+    for (int i = 0; i < 16; ++i) {
+        stateStr += "R" + std::to_string(i) + (i < 10 ? " : " : ": ") + Debug::toHexString(registers[i], 8) + "\t";
+        if ((i + 1) % 4 == 0) {
+            stateStr += "\n"; // New line every 4 registers
+        }
+    }
+
+    stateStr += "CPSR: " + Debug::toHexString(cpsr, 8) + "\tBig Endian: " + (bigEndian ? "true" : "false") + "\n";
+
+    stateStr += "Flags: Z:" + std::to_string(isFlagSet(cpsr, FLAG_ZERO)) + " N:" + std::to_string(isFlagSet(cpsr, FLAG_NEGATIVE)) + " V:" + std::to_string(isFlagSet(cpsr, FLAG_OVERFLOW)) + " C:" + std::to_string(isFlagSet(cpsr, FLAG_CARRY)) + " T:" + std::to_string(isFlagSet(cpsr, FLAG_THUMB)) + "\n";
+
+    Debug::log::info(stateStr);
 }

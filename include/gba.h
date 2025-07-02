@@ -23,6 +23,7 @@ public:
     GBA() : memory(0x40000), cpu(memory, interruptController), gpu(memory) {} // Pass size to Memory constructor
     void run();
     void syncScanline();
+    ThumbCPU& getCPU() { return cpu; }
 };
 
 #endif
