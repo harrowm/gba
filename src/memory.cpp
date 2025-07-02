@@ -2,11 +2,12 @@
 // Contains method definitions for memory operations
 
 #include "memory.h"
+#include "debug.h" // Include Debug class
 #include <fstream>
 #include <iostream>
 
 Memory::Memory(uint32_t size, bool initializeGBA) : data(size, 0) {
-    if (initializeGBARegions) {
+    if (initializeGBA) {
         initializeGBARegions("assets/bios.bin", "assets/roms/gamepak.bin");
     } else {
         initializeTestRegions();
@@ -33,8 +34,6 @@ uint32_t Memory::read32(uint32_t address, bool big_endian /* = false */) {
     return big_endian ? __builtin_bswap32(value) : value;
 }
 
-// Helper method to check if an address is in a ROM region
-// I should check how efficient this check really is ..
 bool Memory::isAddressInROM(uint32_t address) const {
     auto it = std::lower_bound(romRegions.begin(), romRegions.end(), address,
         [](const std::pair<uint32_t, uint32_t>& region, uint32_t addr) {

@@ -27,10 +27,10 @@ public:
 
     virtual void step(uint32_t cycles) = 0; // Abstract method for stepping through instructions
     virtual void decodeAndExecute(uint32_t instruction) = 0; // Abstract method for decoding and executing instructions
+    virtual void execute(uint32_t cycles); // Made virtual to allow overriding
     void updateCPSRFlags(uint32_t result, uint8_t carryOut);
     void setMode(bool thumbMode);
     bool isThumbMode() const;
-    void execute(uint32_t cycles);
 };
 
 #endif
