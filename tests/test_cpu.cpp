@@ -5,43 +5,40 @@
 #include "interrupt.h"
 
 TEST(CPU, SimpleProgram) {
-    // Setup test RAM and GBA
-    Memory memory(0x40000); // Pass size to Memory constructor
-    GBA gba; // Use default constructor
+    // Setup test GBA with test RAM region
+    GBA gba(true); // Pass true to indicate test mode
+
+    // Debug: Log before writing to memory
+    Debug::log::info("Writing Thumb instruction MOV R1, #27 to memory at address 0x00000000");
 
     // Load a simple program into RAM
     // Program: MOV R1, #27 (Thumb instruction: 0x213B)
-    memory.write16(0x00000000, 0x213B); // MOV R1, #27
+    gba.getMemory().write16(0x00000000, 0x213B); // MOV R1, #27
+
+    // Debug: Log after writing to memory
+    Debug::log::info("Thumb instruction written successfully to memory");
 
     // Initialize CPU state
-    CPUState initialState;
-    for (int i = 0; i < 16; ++i) {
-        initialState.registers[i] = 0;
-    }
-    initialState.cpsr = CPU::FLAG_THUMB; // Set Thumb mode
-    initialState.bigEndian = false;
-    gba.getCPU().setCPUState(initialState); // Use getCPU to access CPU
+    auto& cpu = gba.getCPU();
+    auto& registers = cpu.getRegisters();
+    registers.fill(0); // Reset all registers to zero
+    cpu.getCPSR() = CPU::FLAG_T; // Set Thumb mode
 
     // Print initial CPU state
-    gba.getCPU().printCPUState();
-
+    cpu.printCPUState();
+    
     // Run the program
-    gba.getCPU().execute(1); // Execute one instruction
+    cpu.execute(1); // Execute one instruction - hack should be the number of cycles
 
     // Print final CPU state
-    gba.getCPU().printCPUState();
-
+    cpu.printCPUState();
+   
     // Verify CPU state
-    CPUState finalState = gba.getCPU().getCPUState();
-    for (int i = 0; i < 16; ++i) {
-        if (i == 1) {
-            ASSERT_EQ(finalState.registers[i], static_cast<unsigned int>(27)); // R1 should contain 27
-        } else {
-            ASSERT_EQ(finalState.registers[i], static_cast<unsigned int>(0)); // Other registers should remain unchanged
+    ASSERT_EQ(registers[1], static_cast<unsigned int>(27)); // R1 should contain 27
+    for (size_t i = 0; i < registers.size(); ++i) {
+        if (i != 1) {
+            ASSERT_EQ(registers[i], static_cast<unsigned int>(0)); // Other registers should remain unchanged
         }
     }
-    ASSERT_EQ(finalState.cpsr, CPU::FLAG_THUMB); // CPSR should only have the Thumb flag set
-    ASSERT_EQ(finalState.cpsr & CPU::FLAG_ZERO, 0u); // Zero flag should not be set
-    ASSERT_EQ(finalState.cpsr & CPU::FLAG_NEGATIVE, 0u); // Negative flag should not be set
-    ASSERT_EQ(finalState.cpsr & CPU::FLAG_THUMB, CPU::FLAG_THUMB); // Thumb flag should be set
+    ASSERT_EQ(cpu.getCPSR(), CPU::FLAG_T); // CPSR should only have the Thumb flag set
 }
