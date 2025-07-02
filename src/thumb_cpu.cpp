@@ -1,25 +1,27 @@
 #include "thumb_cpu.h"
 #include "debug.h"
-#include "thumb_instruction_decoder.h"
-#include "thumb_instruction_executor.h"
 
-ThumbCPU::ThumbCPU(Memory& mem, InterruptController& ic) : CPU(mem, ic), decoder(), executor() {}
+ThumbCPU::ThumbCPU(CPU& cpu) : parentCPU(cpu) {
+Debug::log::info("Initializing ThumbCPU with parent CPU");
+    // Initialize any Thumb-specific state or resources here
+    // For example, you might want to set up instruction decoding tables or other structures
+}
 
-void ThumbCPU::step(uint32_t cycles) {
+ThumbCPU::~ThumbCPU() {
+    // Cleanup logic if necessary
+}
+
+void ThumbCPU::execute(uint32_t cycles) {
+    Debug::log::info("Executing Thumb instructions for " + std::to_string(cycles) + " cycles");
+    Debug::log::info("Parent CPU memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
     while (cycles > 0) {
-        uint32_t instruction = memory.read16(registers[15]); // Fetch instruction
+        uint16_t instruction = parentCPU.getMemory().read16(parentCPU.getRegisters()[15]); // Fetch instruction
         decodeAndExecute(instruction);
         cycles -= 1; // Placeholder for cycle deduction
     }
 }
 
-void ThumbCPU::execute(uint32_t cycles) {
-    Debug::log::info("Executing Thumb CPU for " + std::to_string(cycles) + " cycles");
-    step(cycles); // Delegate to step method
-}
-
-void ThumbCPU::decodeAndExecute(uint32_t instruction) {
-    uint16_t thumbInstruction = static_cast<uint16_t>(instruction); // Cast to 16-bit
-    decoder.decode(thumbInstruction);
-    executor.execute(thumbInstruction);
+void ThumbCPU::decodeAndExecute(uint16_t instruction) {
+    Debug::log::info("Decoding and executing Thumb instruction: 0x" + std::to_string(instruction));
+    // Implement ARM instruction decoding and execution logic
 }

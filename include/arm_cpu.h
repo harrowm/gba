@@ -1,14 +1,20 @@
 #ifndef ARM_CPU_H
 #define ARM_CPU_H
 
+#include <cstdint>
 #include "cpu.h"
+class CPU; // Forward declaration
 
-class ARMCPU : public CPU {
+class ARMCPU {
+private:
+    CPU& parentCPU; // Reference to the parent CPU
+
 public:
-    ARMCPU(Memory& mem, InterruptController& ic);
-    void step(uint32_t cycles) override;
-    void decodeAndExecute(uint32_t instruction) override;
-    void execute(uint32_t cycles) override; // Added missing declaration
+    explicit ARMCPU(CPU& cpu);
+    ~ARMCPU();
+
+    void execute(uint32_t cycles);
+    void decodeAndExecute(uint32_t instruction);
 };
 
 #endif

@@ -1,7 +1,7 @@
 #ifndef GBA_H
 #define GBA_H
 
-#include "thumb_cpu.h" // Use ThumbCPU as the concrete CPU implementation
+#include "cpu.h" // Use CPU as the central instance
 #include "gpu.h"
 #include "memory.h"
 #include "interrupt.h"
@@ -12,7 +12,7 @@
 class GBA {
 private:
     Memory memory; // Shared memory instance
-    ThumbCPU cpu;  // Use ThumbCPU instead of abstract CPU
+    CPU* cpu; // Pointer to CPU instance
     GPU gpu;
     InterruptController interruptController;
 
@@ -20,10 +20,18 @@ private:
     std::condition_variable syncCondition;
 
 public:
-    GBA() : memory(0x40000), cpu(memory, interruptController), gpu(memory) {} // Pass size to Memory constructor
+    GBA(bool testMode = false) : memory(testMode), gpu(memory), interruptController() {
+        cpu = new CPU(memory, interruptController); // Pass Memory and InterruptController to CPU constructor
+    }
+
+    ~GBA() {
+        delete cpu; // Clean up dynamically allocated CPU
+    }
+
     void run();
     void syncScanline();
-    ThumbCPU& getCPU() { return cpu; }
+    CPU& getCPU() { return *cpu; }
+    Memory& getMemory() { return memory; } // Provide access to the Memory instance
 };
 
 #endif

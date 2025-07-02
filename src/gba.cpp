@@ -8,11 +8,11 @@
 #include <condition_variable>
 
 void GBA::run() {
-    std::thread cpuThread([this]() { cpu.execute(1231); }); // Bind execute method to cpu object
-    std::thread gpuThread([this]() { gpu.renderScanline(); }); // Bind renderScanline method to gpu object
+//    std::thread cpuThread([this]() { cpu.execute(1231); }); // Bind execute method to cpu object
+    // std::thread gpuThread([this]() { gpu.renderScanline(); }); // Bind renderScanline method to gpu object
 
-    cpuThread.join();
-    gpuThread.join();
+    // cpuThread.join();
+    // gpuThread.join();
 }
 
 void GBA::syncScanline() {

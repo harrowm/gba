@@ -2,7 +2,8 @@
 
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++23 -Wall -Wextra -pedantic -O3
+CXXFLAGS = -std=c++23 -Wall -Wextra -pedantic
+# removed -O3 to enable gdb debugging
 
 # Add Google Test include and library paths
 GTEST_INCLUDE = /opt/homebrew/include
@@ -48,6 +49,9 @@ CXXFLAGS += -I$(GTEST_INCLUDE)
 
 # Ensure include directory is applied during compilation for tests
 CXXFLAGS += -I$(INCLUDE_DIR)
+
+# Add debug flag for gdb
+CXXFLAGS += -g
 
 # Move Google Test linker flags to the linking step
 LDFLAGS += -L$(GTEST_LIB) -lgtest -lgtest_main

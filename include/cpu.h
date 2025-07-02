@@ -4,64 +4,59 @@
 #include "memory.h"
 #include "interrupt.h"
 #include "debug.h"
-#include <cstdint>
+#include "thumb_cpu.h"
+#include "arm_cpu.h"
 #include <array>
+#include <cstdint>
 
-class ThumbCPU; // Forward declaration
-class ARMCPU;   // Forward declaration
-
-struct CPUState {
-    std::array<uint32_t, 16> registers; // General-purpose registers
-    uint32_t cpsr;                     // Current Program Status Register
-    bool bigEndian;                    // Memory endianness
-};
+// Forward definition of ThumbCPU and ARMCPU
+class ThumbCPU;
+class ARMCPU;
 
 class CPU {
-protected:
-    Memory& memory;
-    InterruptController& interruptController;
-    uint32_t registers[16]; // General-purpose registers
-    uint32_t cpsr;          // Current Program Status Register
-    bool bigEndian;         // Memory endianness
+public:
+    struct CPUState {
+        std::array<uint32_t, 16> registers; // General-purpose registers
+        uint32_t cpsr; // Current Program Status Register
+    };
 
 private:
-    ThumbCPU* thumbCPU; // Changed to pointer
-    ARMCPU* armCPU;     // Changed to pointer
+    Memory& memory;
+    InterruptController& interruptController;
+    std::array<uint32_t, 16> registers; // Shared registers
+    uint32_t cpsr; // Current Program Status Register
+
+    ThumbCPU* thumbCPU; // Delegate for Thumb instructions
+    ARMCPU* armCPU; // Delegate for ARM instructions
+
 
 public:
-    CPU(Memory& mem, InterruptController& ic);
-    virtual ~CPU() = default;
+    CPU(Memory& mem, InterruptController& interrupt);
+    ~CPU();
 
-    virtual void step(uint32_t cycles) = 0; // Abstract method for stepping through instructions
-    virtual void decodeAndExecute(uint32_t instruction) = 0; // Abstract method for decoding and executing instructions
-    virtual void execute(uint32_t cycles); // Made virtual to allow overriding
+    void execute(uint32_t cycles);
+
+    std::array<uint32_t, 16>& getRegisters() { return registers; }
+    uint32_t& getCPSR() { return cpsr; }
+    Memory& getMemory() { return memory; }
+    InterruptController& getInterruptController() { return interruptController; }
 
     void updateCPSRFlags(uint32_t result, uint8_t carryOut);
-    void setMode(bool thumbMode);
-    bool isThumbMode() const;
+    
+    static constexpr uint32_t FLAG_N = 1 << 31; // Negative flag
+    static constexpr uint32_t FLAG_Z = 1 << 30; // Zero flag
+    static constexpr uint32_t FLAG_C = 1 << 29; // Carry flag
+    static constexpr uint32_t FLAG_V = 1 << 28; // Overflow flag
+    static constexpr uint32_t FLAG_T = 1 << 5;  // Thumb mode flag
+    static constexpr uint32_t FLAG_E = 1 << 9;  // Endianness flag
+    
+    void setFlag(uint32_t flag);
+    void clearFlag(uint32_t flag);
+    bool checkFlag(uint32_t flag) const;
 
-    void setCPUState(const CPUState& state); // Set CPU state
-    CPUState getCPUState() const;           // Get CPU state
+    void setCPUState(const CPUState& state);
+    CPUState getCPUState() const;
     void printCPUState() const;
-
-    // Flag manipulation methods for CPSR
-    static constexpr uint32_t FLAG_ZERO = 1 << 30;
-    static constexpr uint32_t FLAG_NEGATIVE = 1 << 31;
-    static constexpr uint32_t FLAG_OVERFLOW = 1 << 28;
-    static constexpr uint32_t FLAG_CARRY = 1 << 29;
-    static constexpr uint32_t FLAG_THUMB = 1 << 5;
-
-    static bool isFlagSet(uint32_t cpsr, uint32_t flag) {
-        return (cpsr & flag) != 0;
-    }
-
-    static void setFlag(uint32_t& cpsr, uint32_t flag) {
-        cpsr |= flag;
-    }
-
-    static void clearFlag(uint32_t& cpsr, uint32_t flag) {
-        cpsr &= ~flag;
-    }
 };
 
 #endif

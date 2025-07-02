@@ -6,85 +6,144 @@
 #include <fstream>
 #include <iostream>
 
-Memory::Memory(uint32_t size, bool initializeGBA) : data(size, 0) {
-    if (initializeGBA) {
+Memory::Memory(bool initializeGBAR) {
+    if (initializeGBAR) {
         initializeGBARegions("assets/bios.bin", "assets/roms/gamepak.bin");
     } else {
         initializeTestRegions();
     }
+
+    // Calculate total memory size based on regions
+    uint32_t totalSize = 0;
+    for (const auto& region : regions) {
+        totalSize += (region.end_address - region.start_address + 1);
+    }
+    data.resize(totalSize, 0);
+
+    Debug::log::info("Total memory size calculated: 0x" + Debug::toHexString(totalSize, 8) + " bytes.");
 }
 
 Memory::~Memory() {}
 
+int Memory::mapAddress(uint32_t gbaAddress, bool isWrite /* = false */) const {
+    // Check if the address is within the cached region
+    if (lastRegion && gbaAddress >= lastRegion->start_address && gbaAddress <= lastRegion->end_address) {
+        return gbaAddress - lastRegion->start_address + lastRegion->offsetInMemoryArray;
+    }
+
+    // Check if the address is within a ROM region
+    if (isWrite) {
+        auto romIt = std::lower_bound(romRegions.begin(), romRegions.end(), gbaAddress,
+            [](const std::pair<uint32_t, uint32_t>& region, uint32_t addr) {
+                return region.second < addr;
+            });
+        if (romIt != romRegions.end() && gbaAddress >= romIt->first && gbaAddress <= romIt->second) {
+            return -2; // Write-protected address
+        }
+    }
+
+    // Map the address to the memory array
+    auto it = std::lower_bound(regions.begin(), regions.end(), gbaAddress,
+        [](const MemoryRegion& region, uint32_t addr) {
+            return region.end_address < addr;
+        });
+    if (it != regions.end() && gbaAddress >= it->start_address && gbaAddress <= it->end_address) {
+        lastRegion = &(*it); // Update the cache
+        lastRegionIndex = std::distance(regions.begin(), it);
+        return gbaAddress - it->start_address + it->offsetInMemoryArray;
+    }
+    return -1; // Invalid address
+}
+
 uint8_t Memory::read8(uint32_t address) {
-    std::lock_guard<std::mutex> lock(memoryMutex);
-    return data[address];
+    int mappedIndex = mapAddress(address);
+    if (mappedIndex == -1) {
+        Debug::log::error("Invalid memory access at address: " + std::to_string(address));
+        return 0; // Return default value
+    }
+    return data[mappedIndex];
 }
 
 uint16_t Memory::read16(uint32_t address, bool big_endian /* = false */) {
+    int mappedIndex = mapAddress(address, false);
+    if (mappedIndex == -1) {
+        Debug::log::error("Invalid memory access at address: " + std::to_string(address));
+        return 0; // Return default value
+    }
     std::lock_guard<std::mutex> lock(memoryMutex);
-    uint16_t value = (data[address] | (data[address + 1] << 8));
+    uint16_t value = (data[mappedIndex] | (data[mappedIndex + 1] << 8));
     return big_endian ? __builtin_bswap16(value) : value;
 }
 
 uint32_t Memory::read32(uint32_t address, bool big_endian /* = false */) {
+    int mappedIndex = mapAddress(address, false);
+    if (mappedIndex == -1) {
+        Debug::log::error("Invalid memory access at address: " + std::to_string(address));
+        return 0; // Return default value
+    }
     std::lock_guard<std::mutex> lock(memoryMutex);
-    uint32_t value = (data[address] | (data[address + 1] << 8) |
-                      (data[address + 2] << 16) | (data[address + 3] << 24));
+    uint32_t value = (data[mappedIndex] | (data[mappedIndex + 1] << 8) |
+                      (data[mappedIndex + 2] << 16) | (data[mappedIndex + 3] << 24));
     return big_endian ? __builtin_bswap32(value) : value;
 }
 
-bool Memory::isAddressInROM(uint32_t address) const {
-    auto it = std::lower_bound(romRegions.begin(), romRegions.end(), address,
-        [](const std::pair<uint32_t, uint32_t>& region, uint32_t addr) {
-            return region.second < addr;
-        });
-    return (it != romRegions.end() && it->first <= address && address <= it->second);
-}
-
 void Memory::write8(uint32_t address, uint8_t value) {
-    std::lock_guard<std::mutex> lock(memoryMutex);
-    if (isAddressInROM(address)) {
-        Debug::log::info("Attempted write to ROM address " + std::to_string(address) + ", write ignored.");
+    int mappedIndex = mapAddress(address, true);
+    if (mappedIndex == -1) {
+        Debug::log::error("Invalid memory write at address: " + std::to_string(address));
         return;
     }
-    data[address] = value;
+    if (mappedIndex == -2) {
+        Debug::log::info("Attempted write to ROM address: " + std::to_string(address) + ", write ignored.");
+        return;
+    }
+    data[mappedIndex] = value;
 }
 
 void Memory::write16(uint32_t address, uint16_t value, bool big_endian /* = false */) {
-    std::lock_guard<std::mutex> lock(memoryMutex);
-    if (isAddressInROM(address)) {
-        Debug::log::info("Attempted write to ROM address " + std::to_string(address) + ", write ignored.");
+    int mappedIndex = mapAddress(address, true);
+    if (mappedIndex == -1) {
+        Debug::log::error("Invalid memory write at address: " + std::to_string(address));
         return;
     }
+    if (mappedIndex == -2) {
+        Debug::log::info("Attempted write to ROM address: " + std::to_string(address) + ", write ignored.");
+        return;
+    }
+    std::lock_guard<std::mutex> lock(memoryMutex);
     if (big_endian) value = __builtin_bswap16(value);
-    data[address] = value & 0xFF;
-    data[address + 1] = (value >> 8) & 0xFF;
+    data[mappedIndex] = value & 0xFF;
+    data[mappedIndex + 1] = (value >> 8) & 0xFF;
 }
 
 void Memory::write32(uint32_t address, uint32_t value, bool big_endian /* = false */) {
-    std::lock_guard<std::mutex> lock(memoryMutex);
-    if (isAddressInROM(address)) {
-        Debug::log::info("Attempted write to ROM address " + std::to_string(address) + ", write ignored.");
+    int mappedIndex = mapAddress(address, true);
+    if (mappedIndex == -1) {
+        Debug::log::error("Invalid memory write at address: " + std::to_string(address));
         return;
     }
+    if (mappedIndex == -2) {
+        Debug::log::info("Attempted write to ROM address: " + std::to_string(address) + ", write ignored.");
+        return;
+    }
+    std::lock_guard<std::mutex> lock(memoryMutex);
     if (big_endian) value = __builtin_bswap32(value);
-    data[address] = value & 0xFF;
-    data[address + 1] = (value >> 8) & 0xFF;
-    data[address + 2] = (value >> 16) & 0xFF;
-    data[address + 3] = (value >> 24) & 0xFF;
+    data[mappedIndex] = value & 0xFF;
+    data[mappedIndex + 1] = (value >> 8) & 0xFF;
+    data[mappedIndex + 2] = (value >> 16) & 0xFF;
+    data[mappedIndex + 3] = (value >> 24) & 0xFF;
 }
 
 void Memory::initializeGBARegions(const std::string& biosFilename, const std::string& gamePakFilename) {
     regions = {
-        {0x00000000, 0x00003FFF, MEMORY_TYPE_ROM, 32}, // BIOS
-        {0x02000000, 0x0203FFFF, MEMORY_TYPE_RAM, 32}, // WRAM
-        {0x03000000, 0x03007FFF, MEMORY_TYPE_RAM, 32}, // IWRAM
-        {0x05000000, 0x050003FF, MEMORY_TYPE_RAM, 16}, // Palette RAM
-        {0x06000000, 0x06017FFF, MEMORY_TYPE_RAM, 16}, // VRAM
-        {0x07000000, 0x070003FF, MEMORY_TYPE_RAM, 16}, // OAM
-        {0x08000000, 0x09FFFFFF, MEMORY_TYPE_ROM, 32}, // Game Pak ROM
-        {0x0E000000, 0x0E00FFFF, MEMORY_TYPE_RAM, 16}  // Game Pak SRAM
+        {0x00000000, 0x00003FFF, MEMORY_TYPE_ROM, 32, 0}, // BIOS
+        {0x02000000, 0x0203FFFF, MEMORY_TYPE_RAM, 32, 0x4000}, // WRAM
+        {0x03000000, 0x03007FFF, MEMORY_TYPE_RAM, 32, 0x44000}, // IWRAM
+        {0x05000000, 0x050003FF, MEMORY_TYPE_RAM, 16, 0x4C000}, // Palette RAM
+        {0x06000000, 0x06017FFF, MEMORY_TYPE_RAM, 16, 0x4C400}, // VRAM
+        {0x07000000, 0x070003FF, MEMORY_TYPE_RAM, 16, 0x64400}, // OAM
+        {0x08000000, 0x09FFFFFF, MEMORY_TYPE_ROM, 32, 0x64800}, // Game Pak ROM
+        {0x0E000000, 0x0E00FFFF, MEMORY_TYPE_RAM, 16, 0x264800}  // Game Pak SRAM
     };
 
     romRegions = {
@@ -113,6 +172,10 @@ void Memory::initializeGBARegions(const std::string& biosFilename, const std::st
 
 void Memory::initializeTestRegions() {
     regions = {
-        {0x00000000, 0x00000FFF, MEMORY_TYPE_RAM, 32}, // Small RAM region for testing
+        {0x00000000, 0x00000FFF, MEMORY_TYPE_RAM, 32, 0}, // Small RAM region for testing
     };
+}
+
+uint32_t Memory::getSize() const {
+    return data.size();
 }
