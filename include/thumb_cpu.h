@@ -10,6 +10,7 @@ public:
     ThumbCPU(Memory& mem, InterruptController& ic);
     void step(uint32_t cycles) override;
     void decodeAndExecute(uint32_t instruction) override; // Updated parameter type to match base class
+    void execute(uint32_t cycles) override; // Added missing declaration
 
 private:
     ThumbInstructionDecoder decoder;

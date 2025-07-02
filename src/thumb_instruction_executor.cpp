@@ -6,6 +6,6 @@ ThumbInstructionExecutor::ThumbInstructionExecutor() {
 }
 
 void ThumbInstructionExecutor::execute(uint16_t instruction) {
-    LOG_INFO("Executing Thumb instruction: 0x%04X", instruction);
+    Debug::log::info("Executing Thumb instruction: 0x" + std::to_string(instruction));
     // Implement execution logic here
 }

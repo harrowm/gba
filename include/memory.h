@@ -10,6 +10,9 @@
 #include <fstream>
 #include <iostream>
 
+#define MEMORY_TYPE_ROM 0
+#define MEMORY_TYPE_RAM 1
+
 class Memory {
 private:
     struct MemoryRegion {
@@ -21,6 +24,7 @@ private:
 
     std::vector<uint8_t> data;
     std::vector<MemoryRegion> regions;
+    std::vector<std::pair<uint32_t, uint32_t>> romRegions; // Added romRegions
     std::mutex memoryMutex;
 
 public:
@@ -37,6 +41,8 @@ public:
     void write8(uint32_t address, uint8_t value);
     void write16(uint32_t address, uint16_t value, bool big_endian = false);
     void write32(uint32_t address, uint32_t value, bool big_endian = false);
+
+    bool isAddressInROM(uint32_t address) const;
 
 private:
     void initializeGBARegions(const std::string& biosFilename = "assets/bios.bin", const std::string& gamePakFilename = "assets/roms/gamepak.bin");

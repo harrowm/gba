@@ -13,6 +13,11 @@ void ThumbCPU::step(uint32_t cycles) {
     }
 }
 
+void ThumbCPU::execute(uint32_t cycles) {
+    Debug::log::info("Executing Thumb CPU for " + std::to_string(cycles) + " cycles");
+    step(cycles); // Delegate to step method
+}
+
 void ThumbCPU::decodeAndExecute(uint32_t instruction) {
     uint16_t thumbInstruction = static_cast<uint16_t>(instruction); // Cast to 16-bit
     decoder.decode(thumbInstruction);

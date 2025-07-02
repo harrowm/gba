@@ -8,7 +8,7 @@ private:
     Memory& memory;
 
 public:
-    GPU(Memory& mem) : memory(mem) {}
+    GPU(Memory& mem); // Declaration only
     void renderScanline();
 };
 
