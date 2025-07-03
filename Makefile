@@ -30,7 +30,9 @@ TEST_OBJS = $(patsubst tests/%.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
 
 # Include all source files for the test target
 TEST_SRCS += $(wildcard $(SRC_DIR)/*.cpp)
-TEST_OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
+
+# Exclude main.cpp from test builds
+TEST_SRCS := $(filter-out $(SRC_DIR)/main.cpp, $(TEST_SRCS))
 
 # Default rule
 all: $(TARGET) $(TEST_TARGET)

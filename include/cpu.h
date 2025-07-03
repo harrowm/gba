@@ -36,9 +36,10 @@ public:
 
     void execute(uint32_t cycles);
 
-    std::array<uint32_t, 16>& getRegisters() { return registers; }
-    uint32_t& getCPSR() { return cpsr; }
+    std::array<uint32_t, 16>& R() { return registers; }
+    uint32_t& CPSR() { return cpsr; }
     Memory& getMemory() { return memory; }
+    
     InterruptController& getInterruptController() { return interruptController; }
 
     void updateCPSRFlags(uint32_t result, uint8_t carryOut);
