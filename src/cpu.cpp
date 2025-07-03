@@ -14,13 +14,6 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     cpsr = 0; // Sets us up in ARM mode and little endian by default
 }
 
-void CPU::updateCPSRFlags(uint32_t result, uint8_t carryOut) {
-    Debug::log::info("Updating CPSR flags");
-    cpsr = (result == 0) ? (cpsr | (1 << 30)) : (cpsr & ~(1 << 30)); // Zero flag
-    cpsr = (result & (1 << 31)) ? (cpsr | (1 << 31)) : (cpsr & ~(1 << 31)); // Negative flag
-    cpsr = carryOut ? (cpsr | (1 << 29)) : (cpsr & ~(1 << 29)); // Carry flag
-}
-
 void CPU::setFlag(uint32_t flag) {
     cpsr |= flag;
 }
@@ -77,7 +70,7 @@ void CPU::printCPUState() const {
 
     stateStr += "CPSR: " + Debug::toHexString(cpsr, 8);
 
-    stateStr += "Flags: Z:" + std::to_string(checkFlag(FLAG_Z)) + " N:" + std::to_string(checkFlag(FLAG_N)) + " V:" + std::to_string(checkFlag(FLAG_V)) + " C:" + std::to_string(checkFlag(FLAG_C)) + " T:" + std::to_string(checkFlag(FLAG_T)) + " E:" + std::to_string(checkFlag(FLAG_E)) + "\n";
+    stateStr += " Flags: Z:" + std::to_string(checkFlag(FLAG_Z)) + " N:" + std::to_string(checkFlag(FLAG_N)) + " V:" + std::to_string(checkFlag(FLAG_V)) + " C:" + std::to_string(checkFlag(FLAG_C)) + " T:" + std::to_string(checkFlag(FLAG_T)) + " E:" + std::to_string(checkFlag(FLAG_E)) + "\n";
 
     Debug::log::info(stateStr);
 }

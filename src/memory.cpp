@@ -6,11 +6,13 @@
 #include <fstream>
 #include <iostream>
 
-Memory::Memory(bool initializeGBAR) {
-    if (initializeGBAR) {
-        initializeGBARegions("assets/bios.bin", "assets/roms/gamepak.bin");
-    } else {
+Memory::Memory(bool initializeTestMode) {
+    if (initializeTestMode) {
+        Debug::log::info("Initializing memory regions for testing.");
         initializeTestRegions();
+    } else {
+        Debug::log::info("Initializing GBA memory regions with BIOS and GamePak ROM.");
+        initializeGBARegions("assets/bios.bin", "assets/roms/gamepak.bin");
     }
 
     // Calculate total memory size based on regions
@@ -26,6 +28,8 @@ Memory::Memory(bool initializeGBAR) {
 Memory::~Memory() {}
 
 int Memory::mapAddress(uint32_t gbaAddress, bool isWrite /* = false */) const {
+    Debug::log::info("Mapping address: 0x" + Debug::toHexString(gbaAddress, 8));
+
     // Check if the address is within the cached region
     if (lastRegion && gbaAddress >= lastRegion->start_address && gbaAddress <= lastRegion->end_address) {
         return gbaAddress - lastRegion->start_address + lastRegion->offsetInMemoryArray;
@@ -50,6 +54,7 @@ int Memory::mapAddress(uint32_t gbaAddress, bool isWrite /* = false */) const {
     if (it != regions.end() && gbaAddress >= it->start_address && gbaAddress <= it->end_address) {
         lastRegion = &(*it); // Update the cache
         lastRegionIndex = std::distance(regions.begin(), it);
+        Debug::log::info("Mapped to address: 0x" + Debug::toHexString(gbaAddress - it->start_address + it->offsetInMemoryArray, 8));
         return gbaAddress - it->start_address + it->offsetInMemoryArray;
     }
     return -1; // Invalid address
@@ -151,29 +156,37 @@ void Memory::initializeGBARegions(const std::string& biosFilename, const std::st
         {0x08000000, 0x09FFFFFF}  // Game Pak ROM
     };
 
+    // The location to load the roms is hardcoded .. should probably soft code this
     // Load BIOS ROM
+    Debug::log::info("Initializing GBA memory regions with BIOS ROM.");
     std::ifstream biosFile(biosFilename, std::ios::binary);
-    if (biosFile.is_open()) {
-        biosFile.read(reinterpret_cast<char*>(&data[0x00000000]), 0x4000); // Load 16KB BIOS
-        biosFile.close();
-    } else {
+    if (!biosFile.is_open()) {
         Debug::log::error("Failed to load BIOS ROM from " + biosFilename);
+        return;
     }
 
+    Debug::log::info("1");
+    biosFile.read(reinterpret_cast<char*>(&data[0]), 0x4000); // Load 16KB BIOS
+    Debug::log::info("2");
+    biosFile.close();
+
+    
     // Load Game Pak ROM
+    Debug::log::info("Initializing GBA memory regions with GamePak ROM.");
     std::ifstream gamePakFile(gamePakFilename, std::ios::binary);
-    if (gamePakFile.is_open()) {
-        gamePakFile.read(reinterpret_cast<char*>(&data[0x08000000]), 0x2000000); // Load up to 32MB Game Pak ROM
-        gamePakFile.close();
-    } else {
+    if (!gamePakFile.is_open()) {
         Debug::log::error("Failed to load Game Pak ROM from " + gamePakFilename);
+        return;
     }
+    gamePakFile.read(reinterpret_cast<char*>(&data[0x64800]), 0x2000000); // Load up to 32MB Game Pak ROM
+    gamePakFile.close();
 }
 
 void Memory::initializeTestRegions() {
     regions = {
         {0x00000000, 0x00000FFF, MEMORY_TYPE_RAM, 32, 0}, // Small RAM region for testing
     };
+    Debug::log::info("Test regions initialized: Start = 0x00000000, End = 0x00000FFF, Type = RAM, Width = 32 bits");
 }
 
 uint32_t Memory::getSize() const {

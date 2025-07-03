@@ -42,7 +42,44 @@ public:
     
     InterruptController& getInterruptController() { return interruptController; }
 
-    void updateCPSRFlags(uint32_t result, uint8_t carryOut);
+    // Update declarations for member functions to update CPSR flags
+    // constexpr functions have to be declared in the same file as their definition
+    
+    constexpr void updateZFlag(uint32_t result) {
+        cpsr = (result == 0) ? (cpsr | FLAG_Z) : (cpsr & ~FLAG_Z);
+    }
+
+    constexpr void updateNFlag(uint32_t result) {
+        cpsr = (result & (1 << 31)) ? (cpsr | FLAG_N) : (cpsr & ~FLAG_N);
+    }
+
+    constexpr void updateCFlag(bool carryOut) {
+        cpsr = carryOut ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+    }
+
+    constexpr void updateVFlag(bool overflow) {
+        cpsr = overflow ? (cpsr | FLAG_V) : (cpsr & ~FLAG_V);
+    }
+
+    constexpr void updateAllFlags(uint32_t result, bool carryOut, bool overflow) {
+        updateZFlag(result);
+        updateNFlag(result);
+        updateCFlag(carryOut);
+        updateVFlag(overflow);
+    }
+
+    constexpr void updateNZCFlags(uint32_t result, bool carryOut) {
+        updateZFlag(result);
+        updateNFlag(result);
+        updateCFlag(carryOut);
+    }
+
+    constexpr void updateNZFlags(uint32_t result) {
+        updateZFlag(result);
+        updateNFlag(result);
+    }
+
+ 
     
     static constexpr uint32_t FLAG_N = 1 << 31; // Negative flag
     static constexpr uint32_t FLAG_Z = 1 << 30; // Zero flag
@@ -58,6 +95,11 @@ public:
     void setCPUState(const CPUState& state);
     CPUState getCPUState() const;
     void printCPUState() const;
+
+    const std::array<uint32_t, 16>& R() const { return registers; }
+    const uint32_t& CPSR() const { return cpsr; }
 };
+
+
 
 #endif
