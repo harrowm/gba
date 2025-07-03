@@ -13,16 +13,16 @@ TEST(CPU, SimpleProgram) {
 
     // Load a simple program into RAM
     // Program: MOV R1, #27 (Thumb instruction: 0x213B)
-    gba.getMemory().write16(0x00000000, 0x213B); // MOV R1, #27
+    gba.getCPU().getMemory().write16(0x00000000, 0x213B); // MOV R1, #27
 
     // Debug: Log after writing to memory
     Debug::log::info("Thumb instruction written successfully to memory");
 
     // Initialize CPU state
     auto& cpu = gba.getCPU();
-    auto& registers = cpu.getRegisters();
+    auto& registers = cpu.R();
     registers.fill(0); // Reset all registers to zero
-    cpu.getCPSR() = CPU::FLAG_T; // Set Thumb mode
+    cpu.CPSR() = CPU::FLAG_T; // Set Thumb mode
 
     // Print initial CPU state
     cpu.printCPUState();
@@ -40,5 +40,10 @@ TEST(CPU, SimpleProgram) {
             ASSERT_EQ(registers[i], static_cast<unsigned int>(0)); // Other registers should remain unchanged
         }
     }
-    ASSERT_EQ(cpu.getCPSR(), CPU::FLAG_T); // CPSR should only have the Thumb flag set
+    ASSERT_EQ(cpu.CPSR(), CPU::FLAG_T); // CPSR should only have the Thumb flag set
+}
+
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }
