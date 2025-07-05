@@ -22,7 +22,7 @@ void CPU::clearFlag(uint32_t flag) {
     cpsr &= ~flag;
 }
 
-bool CPU::checkFlag(uint32_t flag) const {
+bool CPU::getFlag(uint32_t flag) const {
     return (cpsr & flag) != 0;
 }
 
@@ -48,7 +48,7 @@ CPU::CPUState CPU::getCPUState() const {
 void CPU::execute(uint32_t cycles) {
     Debug::log::info("Executing CPU for " + std::to_string(cycles) + " cycles");
 
-    if (checkFlag(FLAG_T)) {
+    if (getFlag(FLAG_T)) {
         Debug::log::debug("Executing Thumb instructions");
         thumbCPU->execute(cycles); // Use pointer
     } else {
@@ -70,7 +70,7 @@ void CPU::printCPUState() const {
 
     stateStr += "CPSR: " + Debug::toHexString(cpsr, 8);
 
-    stateStr += " Flags: Z:" + std::to_string(checkFlag(FLAG_Z)) + " N:" + std::to_string(checkFlag(FLAG_N)) + " V:" + std::to_string(checkFlag(FLAG_V)) + " C:" + std::to_string(checkFlag(FLAG_C)) + " T:" + std::to_string(checkFlag(FLAG_T)) + " E:" + std::to_string(checkFlag(FLAG_E)) + "\n";
+    stateStr += " Flags: Z:" + std::to_string(getFlag(FLAG_Z)) + " N:" + std::to_string(getFlag(FLAG_N)) + " V:" + std::to_string(getFlag(FLAG_V)) + " C:" + std::to_string(getFlag(FLAG_C)) + " T:" + std::to_string(getFlag(FLAG_T)) + " E:" + std::to_string(getFlag(FLAG_E)) + "\n";
 
     Debug::log::info(stateStr);
 }
