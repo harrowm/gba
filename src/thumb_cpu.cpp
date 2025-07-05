@@ -223,229 +223,236 @@ void ThumbCPU::execute(uint32_t cycles) {
     Debug::log::info("Executing Thumb instructions for " + std::to_string(cycles) + " cycles");
     Debug::log::info("Parent CPU memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
     while (cycles > 0) {
+        // HACK - do we need to model the cpu pipeline?
         uint16_t instruction = parentCPU.getMemory().read16(parentCPU.R()[15]); // Fetch instruction
+        uint8_t opcode = instruction >> 8;
+
         Debug::log::info("Fetched Thumb instruction: " + Debug::toHexString(instruction, 4) + " at PC: " + Debug::toHexString(parentCPU.R()[15], 8));
         parentCPU.R()[15] += 2; // Increment PC for Thumb instructions
         Debug::log::info("Incremented PC to: " + Debug::toHexString(parentCPU.R()[15], 8));
-        Debug::log::info("Decoding and executing Thumb instruction: " + Debug::toHexString(instruction, 4));
+        
         // Decode and execute the instruction
-        decodeAndExecute(instruction);
+        if (thumb_instruction_table[opcode]) {
+            (this->*thumb_instruction_table[opcode])(instruction);
+        } else {
+            Debug::log::error("Unknown Thumb instruction");
+        }
         cycles -= 1; // Placeholder for cycle deduction
     }
 }
 
-void ThumbCPU::decodeAndExecute(uint16_t instruction) {
-    Debug::log::info("Decoding and executing Thumb instruction");
-    uint8_t opcode = instruction >> 8;
-    if (thumb_instruction_table[opcode]) {
-        (this->*thumb_instruction_table[opcode])(instruction);
-    } else {
-        Debug::log::error("Unknown Thumb instruction");
-    }
-}
 
 // Thumb instruction handlers
 
 // Stub handlers for undefined Thumb instruction functions
 void ThumbCPU::handle_thumb_lsl(uint16_t instruction) {
-    // Extract destination register and source register
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-    uint8_t shift_amount = (instruction >> 6) & 0x1F; // Shift amount (bits 6-10)
+    uint8_t rd = bits2to0(instruction);
+    uint8_t rs = bits5to3(instruction);
+    uint8_t shift_amount = bits10to6(instruction);
 
-    // Perform the logical shift left operation
-    uint32_t result = parentCPU.R()[rs] << shift_amount;
-    parentCPU.R()[rd] = result;
-
-    // Update CPSR flags based on the result
-    parentCPU.updateNZCFlags(result, (parentCPU.R()[rs] >> (32 - shift_amount))); // Carry out is the last shifted-out bit, no overflow for LSL
+    // Update C flag before shifting
+    parentCPU.updateCFlagShiftLSL(parentCPU.R()[rd], shift_amount);
+    parentCPU.R()[rd] = parentCPU.R()[rs] << shift_amount;
+    
+    parentCPU.updateZFlag(parentCPU.R()[rd]);
+    parentCPU.updateNFlag(parentCPU.R()[rd]);
+    // No effect on overflow flag
 
     Debug::log::info("Executing Thumb LSL: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " << " + std::to_string(shift_amount));
 }
 
 void ThumbCPU::handle_thumb_lsr(uint16_t instruction) {
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-    uint8_t shift_amount = (instruction >> 6) & 0x1F; // Shift amount (bits 6-10)
+    uint8_t rd = bits2to0(instruction);
+    uint8_t rs = bits5to3(instruction);
+    uint8_t shift_amount = bits10to6(instruction);
 
-    // Perform the logical shift right operation
-    uint32_t result = parentCPU.R()[rs] >> shift_amount;
+    // LSR has some unique handling as a shift of 0 is treated as a shift by 32
+    // Update C flag before shifting
+    parentCPU.updateCFlagShiftLSR(parentCPU.R()[rs], shift_amount);
+    if (shift_amount == 0) {
+        // Special case: LSR with shift amount 0 means shift by 32
+        parentCPU.R()[rd] = 0; // Result is 0
+    } else {
+        // Standard LSR behavior
+        parentCPU.R()[rd] = parentCPU.R()[rs] >> shift_amount;
+    }
 
-    // Update the destination register
-    parentCPU.R()[rd] = result;
-
-    // Update CPSR flags based on the result
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] >> (parentCPU.R()[rs] - 1)) & 1, /*overflow=*/false); // Carry-out is the last shifted-out bit, no overflow for LSR
+    parentCPU.updateZFlag(parentCPU.R()[rd]);
+    parentCPU.clearFlag(CPU::FLAG_N); // Clear N flag as LSR always results in a non-negative value
+    // No effect on overflow flag
 
     Debug::log::info("Executing Thumb LSR: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " >> " + std::to_string(shift_amount));
 }
 
 void ThumbCPU::handle_thumb_asr(uint16_t instruction) {
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-    uint8_t shift_amount = (instruction >> 6) & 0x1F; // Shift amount (bits 6-10)
+    uint8_t rd = bits2to0(instruction);
+    uint8_t rs = bits5to3(instruction);
+    uint8_t shift_amount = bits10to6(instruction);
 
-    // Perform the arithmetic shift right operation
-    uint32_t result;
+    // ASR has some unique handling as a shift of 0 
+    // Update C flag before shifting
+    parentCPU.updateCFlagShiftASR(parentCPU.R()[rs], shift_amount);
     if (shift_amount == 0) {
         // Special case: if shift_amount is 0, the result is all bits of the source register set to its sign bit
-        result = (parentCPU.R()[rs] & 0x80000000) ? 0xFFFFFFFF : 0;
+        parentCPU.R()[rd] = (parentCPU.R()[rs] & 0x80000000) ? 0xFFFFFFFF : 0;
     } else {
-        result = static_cast<int32_t>(parentCPU.R()[rs]) >> shift_amount;
+        // Have to cast to int32_t for correct sign extension
+        parentCPU.R()[rd] = static_cast<int32_t>(parentCPU.R()[rs]) >> shift_amount;
     }
 
-    // Update the destination register
-    parentCPU.R()[rd] = result;
-
-    // Update CPSR flags based on the result
-    parentCPU.updateNZCFlags(result, (shift_amount != 0 && (parentCPU.R()[rs] >> (shift_amount - 1)) & 1)); // Carry out is the last shifted-out bit, no overflow for ASR
+    parentCPU.updateZFlag(parentCPU.R()[rd]);
+    parentCPU.updateNFlag(parentCPU.R()[rd]);
+    // No effect on overflow flag
 
     Debug::log::info("Executing Thumb ASR: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " >> " + std::to_string(shift_amount));
 }
 
 void ThumbCPU::handle_thumb_add_register(uint16_t instruction) {
-    // Extract destination register and source registers
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t rs = (instruction >> 3) & 0x07; // First source register (bits 3-5)
-    uint8_t rn = (instruction >> 6) & 0x07; // Second source register (bits 6-8)
+    uint8_t rd = bits2to0(instruction);
+    uint8_t rs = bits5to3(instruction);
+    uint8_t rn = bits8to6(instruction);
 
     // Perform the addition operation
-    uint32_t result = parentCPU.R()[rs] + parentCPU.R()[rn];
+    uint32_t op1 = parentCPU.R()[rs];
+    uint32_t op2 = parentCPU.R()[rn];
+    uint32_t result = op1 + op2;
 
     // Update the destination register
     parentCPU.R()[rd] = result;
 
-    // Update CPSR flags based on the result
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] < parentCPU.R()[rs]), ((parentCPU.R()[rs] ^ result) & (parentCPU.R()[rn] ^ result) & (1 << 31)) != 0); // Carry out and overflow conditions
+    // Update flags
+    parentCPU.updateZFlag(result); // Zero flag
+    parentCPU.updateNFlag(result); // Negative flag
+    parentCPU.updateCFlagAdd(op1, op2); // Carry flag
+    parentCPU.updateVFlag(op1, op2, result); // Overflow flag
 
     Debug::log::info("Executing Thumb ADD (register): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " + R" + std::to_string(rn));
 }
 
 void ThumbCPU::handle_thumb_add_offset(uint16_t instruction) {
-    // Extract destination register and source register
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-    uint8_t offset = (instruction >> 6) & 0x1F; // Immediate offset (bits 6-10)
+    uint8_t rd = bits2to0(instruction);
+    uint8_t rs = bits5to3(instruction);
+    uint8_t offset = bits10to6(instruction);
 
     // Perform the addition operation
-    uint32_t result = parentCPU.R()[rs] + offset;
+    uint32_t op1 = parentCPU.R()[rs];
+    uint32_t result = op1 + offset;
 
     // Update the destination register
     parentCPU.R()[rd] = result;
 
-    // Update CPSR flags based on the result
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] < parentCPU.R()[rs]), ((parentCPU.R()[rs] ^ result) & (offset ^ result) & (1 << 31)) != 0); // Carry out and overflow conditions
+    parentCPU.updateZFlag(result); // Zero flag
+    parentCPU.updateNFlag(result); // Negative flag
+    parentCPU.updateCFlagAdd(op1, offset); // Carry flag
+    parentCPU.updateVFlag(op1, offset, result); // Overflow flag
 
     Debug::log::info("Executing Thumb ADD (offset): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " + " + std::to_string(offset));
 }
 
 void ThumbCPU::handle_thumb_sub_register(uint16_t instruction) {
-    // Extract destination register and source registers
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t rs = (instruction >> 3) & 0x07; // First source register (bits 3-5)
-    uint8_t rn = (instruction >> 6) & 0x07; // Second source register (bits 6-8)
+    uint8_t rd = bits2to0(instruction);
+    uint8_t rs = bits5to3(instruction);
+    uint8_t rn = bits8to6(instruction);
 
     // Perform the subtraction operation
-    uint32_t result = parentCPU.R()[rs] - parentCPU.R()[rn];
+    uint32_t op1 = parentCPU.R()[rs];
+    uint32_t op2 = parentCPU.R()[rn];
+    uint32_t result = op1 - op2;
 
     // Update the destination register
     parentCPU.R()[rd] = result;
 
-    // Update CPSR flags based on the result
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rs] < parentCPU.R()[rn]), ((parentCPU.R()[rs] ^ result) & (~parentCPU.R()[rn] ^ result) & (1 << 31)) != 0); // Carry out and overflow conditions
+    parentCPU.updateZFlag(result); // Zero flag
+    parentCPU.updateNFlag(result); // Negative flag
+    parentCPU.updateCFlagSub(op1, op2); // Carry flag
+    parentCPU.updateVFlagSub(op1, op2, result); // Overflow flag
 
     Debug::log::info("Executing Thumb SUB (register): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " - R" + std::to_string(rn));
 }
 
 void ThumbCPU::handle_thumb_sub_offset(uint16_t instruction) {
-    // Extract destination register and source register
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-    uint8_t offset = (instruction >> 6) & 0x1F; // Immediate offset (bits 6-10)
+    uint8_t rd = bits2to0(instruction);
+    uint8_t rs = bits5to3(instruction);
+    uint8_t offset = bits10to6(instruction);
+    uint32_t op1 = parentCPU.R()[rs];
 
     // Perform the subtraction operation
-    uint32_t result = parentCPU.R()[rs] - offset;
+    uint32_t result = op1 - offset;
 
     // Update the destination register
     parentCPU.R()[rd] = result;
 
-    // Update CPSR flags based on the result
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rs] < offset), ((parentCPU.R()[rs] ^ result) & (~offset ^ result) & (1 << 31)) != 0); // Carry out and overflow conditions
-
+    parentCPU.updateZFlag(result); // Zero flag
+    parentCPU.updateNFlag(result); // Negative flag
+    parentCPU.updateCFlagSub(op1, offset); // Carry flag
+    parentCPU.updateVFlagSub(op1, offset, result); // Overflow flag
+    
     Debug::log::info("Executing Thumb SUB (offset): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " - " + std::to_string(offset));
 }
 
 void ThumbCPU::handle_thumb_mov_imm(uint16_t instruction) {
-    // Debug log to print the instruction in binary (16 bits)
-    Debug::log::info("Instruction (binary): " + std::bitset<16>(instruction).to_string());
+    uint8_t rd = bits10to8(instruction);
+    uint8_t imm = bits7to0(instruction);
 
-    // Extract destination register and immediate value
-    uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 10-8)
-    uint8_t imm = instruction & 0xFF; // Immediate value (bits 7-0)
-
-    // Perform the move operation
     parentCPU.R()[rd] = imm;
-
-    // Update CPSR flags based on the result
-    Debug::log::info("About to call updateZFlag");
     parentCPU.updateZFlag(parentCPU.R()[rd]); // No negative, carry-out or overflow for MOV
+    parentCPU.clearFlag(CPU::FLAG_N); // N flag is always cleared for this instruction as the 8bit immediate is always non-negative
 
     Debug::log::info("Executing Thumb MOV (immediate): R" + std::to_string(rd) + " = " + std::to_string(imm));
 }
 
 void ThumbCPU::handle_thumb_cmp_imm(uint16_t instruction) {
-    // Extract source register and immediate value
-    uint8_t rs = instruction & 0x07; // Source register (bits 0-2)
-    uint8_t imm = (instruction >> 6) & 0xFF; // Immediate value (bits 6-13)
+    uint8_t rd = bits10to8(instruction);
+    uint8_t imm = bits7to0(instruction);
 
-    // Perform the comparison operation
-    uint32_t result = parentCPU.R()[rs] - imm;
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t result = parentCPU.R()[rd] - imm; // Unsigned subtraction for carry/zero
+    
+    parentCPU.updateZFlag(result);
+    parentCPU.updateCFlagSub(op1, imm);
+    parentCPU.updateVFlagSub(op1, imm, result);
+    parentCPU.updateNFlag(result);
 
-    // Update CPSR flags based on the result
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rs] < imm), ((parentCPU.R()[rs] ^ result) & (~imm ^ result) & (1 << 31)) != 0); // Carry out and overflow conditions
-
-    Debug::log::info("Executing Thumb CMP (immediate): R" + std::to_string(rs) + " - " + std::to_string(imm));
+    Debug::log::info("CMP_IMM: R[" + std::to_string(rd) + "] = " + std::to_string(parentCPU.R()[rd]) + ", imm = " + std::to_string(imm));
 }
 
 void ThumbCPU::handle_thumb_add_imm(uint16_t instruction) {
-    // Extract destination register and immediate value
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t imm = (instruction >> 6) & 0xFF; // Immediate value (bits 6-13)
+    uint8_t rd = bits10to8(instruction);
+    uint8_t imm = bits7to0(instruction);
 
-    // Perform the addition operation
-    uint32_t result = parentCPU.R()[rd] + imm;
-
-    // Update the destination register
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t result = op1 + imm;
     parentCPU.R()[rd] = result;
 
-    // Update CPSR flags based on the result
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] > (UINT32_MAX - imm)), ((parentCPU.R()[rd] ^ result) & (imm ^ result) & (1 << 31)) != 0); // Carry out and overflow conditions
-
+    parentCPU.updateZFlag(result);
+    parentCPU.updateCFlagAdd(op1, imm);
+    parentCPU.updateVFlag(op1, imm, result);
+    parentCPU.updateNFlag(result);
+    
     Debug::log::info("Executing Thumb ADD (immediate): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + " + std::to_string(imm));
 }
 
 void ThumbCPU::handle_thumb_sub_imm(uint16_t instruction) {
-    // Extract destination register and immediate value
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t imm = (instruction >> 6) & 0xFF; // Immediate value (bits 6-13)
+    uint8_t rd = bits10to8(instruction);
+    uint8_t imm = bits7to0(instruction);
 
-    // Perform the subtraction operation
-    uint32_t result = parentCPU.R()[rd] - imm;
-
-    // Update the destination register
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t result = op1 - imm;
     parentCPU.R()[rd] = result;
 
-    // Update CPSR flags based on the result
-    parentCPU.updateNZCFlags(result, (parentCPU.R()[rd] < imm)); // Carry out is set if borrow occurs
+    parentCPU.updateZFlag(result);
+    parentCPU.updateCFlagSub(op1, imm);
+    parentCPU.updateVFlagSub(op1, imm, result);
+    parentCPU.updateNFlag(result);
 
     Debug::log::info("Executing Thumb SUB (immediate): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " - " + std::to_string(imm));
 }
 
 void ThumbCPU::handle_thumb_alu_operations(uint16_t instruction) {
-    uint8_t sub_opcode = (instruction >> 6) & 0x0F; // Sub-opcode (bits 6-9)
-    uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-
+    uint8_t sub_opcode = bits9to6(instruction);
+    uint8_t rd = bits2to0(instruction);
+    uint8_t rs = bits5to3(instruction);
+    
     if (thumb_alu_operations_table[sub_opcode] != NULL) {
          (this->*thumb_alu_operations_table[sub_opcode])(rd, rs);
     } else {
@@ -455,111 +462,253 @@ void ThumbCPU::handle_thumb_alu_operations(uint16_t instruction) {
 
 // Define individual ALU operation functions
 void ThumbCPU::thumb_alu_and(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] & parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 & op2;
     parentCPU.R()[rd] = result;
-    parentCPU.updateAllFlags(result, /*carryOut=*/false, /*overflow=*/false); // No carry-out or overflow for AND
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // No update to V and C flags for AND operation
+
     Debug::log::info("Executing Thumb AND: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " & R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_eor(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] ^ parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 ^ op2;
     parentCPU.R()[rd] = result;
-    parentCPU.updateAllFlags(result, /*carryOut=*/false, /*overflow=*/false); // No carry-out or overflow for EOR
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // No update to V and C flags for EOR operation
+
     Debug::log::info("Executing Thumb EOR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " ^ R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_lsl(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] << parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint8_t shift_amount = parentCPU.R()[rs] & 0xFF; // Shift amount is the bottom 8 bits of Rs
+
+    // Update C flag before the shift
+    parentCPU.updateCFlagShiftLSL(op1, shift_amount);
+
+    uint32_t result = op1 << shift_amount;
     parentCPU.R()[rd] = result;
-    parentCPU.updateNZCFlags(result, (parentCPU.R()[rd] >> (32 - parentCPU.R()[rs])) & 1); // Carry-out is the last shifted-out bit, no overflow for LSL
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // V flag is not affected by LSL
+
     Debug::log::info("Executing Thumb LSL: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " << R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_lsr(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] >> parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t shift_amount = parentCPU.R()[rs] & 0xFF; // Shift amount is the bottom 8 bits of Rs;
+    
+    parentCPU.updateCFlagShiftLSR(op1, shift_amount);
+
+    uint32_t result = op1 >> shift_amount;
     parentCPU.R()[rd] = result;
-    parentCPU.updateNZCFlags(result, (parentCPU.R()[rd] >> (parentCPU.R()[rs] - 1)) & 1); // Carry-out is the last shifted-out bit, no overflow for LSR
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // No update to V flag for LSR operation
+
     Debug::log::info("Executing Thumb LSR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " >> R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_asr(uint8_t rd, uint8_t rs) {
-    uint32_t result = (int32_t)parentCPU.R()[rd] >> parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t shift_amount = parentCPU.R()[rs] & 0xFF; // Shift amount is the bottom 8 bits of Rs;
+    
+    parentCPU.updateCFlagShiftASR(op1, shift_amount);
+
+    uint32_t result = static_cast<int32_t>(op1) >> shift_amount; // ASR is arithmetic shift right, so we cast to int32_t for sign extension
     parentCPU.R()[rd] = result;
-    parentCPU.updateNZCFlags(result, (parentCPU.R()[rd] >> (parentCPU.R()[rs] - 1)) & 1); // Carry-out is the last shifted-out bit, no overflow for ASR
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // No update to V flag for ASR operation
+
     Debug::log::info("Executing Thumb ASR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " >> R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_adc(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] + parentCPU.R()[rs] + (parentCPU.CPSR() & CPU::FLAG_C ? 1 : 0);
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t carry_in = parentCPU.getFlag(CPU::FLAG_C);
+
+    uint32_t result = op1 + op2 + carry_in;
     parentCPU.R()[rd] = result;
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] > (UINT32_MAX - parentCPU.R()[rs])), ((parentCPU.R()[rd] ^ result) & (parentCPU.R()[rs] ^ result) & (1 << 31)) != 0); // Carry-out and overflow conditions
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateCFlagAddWithCarry(op1, op2);
+    parentCPU.updateVFlag(op1, (op2 + carry_in), result);
+    parentCPU.updateNFlag(result);
+
     Debug::log::info("Executing Thumb ADC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + R" + std::to_string(rs) + " + Carry");
 }
 
 void ThumbCPU::thumb_alu_sbc(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] - parentCPU.R()[rs] - (parentCPU.CPSR() & CPU::FLAG_C  ? 0 : 1);
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t borrow = 1 - parentCPU.getFlag(CPU::FLAG_C);
+
+    uint32_t result = op1 - op2 - borrow;
     parentCPU.R()[rd] = result;
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] < parentCPU.R()[rs]), ((parentCPU.R()[rd] ^ result) & (~parentCPU.R()[rs] ^ result) & (1 << 31)) != 0); // Carry-out and overflow conditions
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateCFlagSubWithCarry(op1, op2);
+    parentCPU.updateVFlagSub(op1, op2 + borrow, result);
+    parentCPU.updateNFlag(result);
+
     Debug::log::info("Executing Thumb SBC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " - R" + std::to_string(rs) + " - Borrow");
 }
 
 void ThumbCPU::thumb_alu_ror(uint8_t rd, uint8_t rs) {
-    uint32_t result = (parentCPU.R()[rd] >> parentCPU.R()[rs]) | (parentCPU.R()[rd] << (32 - parentCPU.R()[rs]));
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t shift_reg_val = parentCPU.R()[rs];
+    uint8_t shift_amount_8 = shift_reg_val & 0xFF;
+
+    uint32_t result;
+
+    if (shift_amount_8 == 0) {
+        // C flag is not affected, result is op1
+        result = op1;
+    } else {
+        uint8_t shift_imm = shift_amount_8 & 0x1F;
+        if (shift_imm == 0) {
+            // This is a rotate by a multiple of 32 (but not 0).
+            // The result is unchanged.
+            result = op1;
+            // The C flag becomes the MSB of op1.
+            if (op1 & 0x80000000) {
+                parentCPU.setFlag(CPU::FLAG_C);
+            } else {
+                parentCPU.clearFlag(CPU::FLAG_C);
+            }
+        } else {
+            result = (op1 >> shift_imm) | (op1 << (32 - shift_imm));
+            // The C flag is the last bit shifted out.
+            if ((op1 >> (shift_imm - 1)) & 1) {
+                parentCPU.setFlag(CPU::FLAG_C);
+            } else {
+                parentCPU.clearFlag(CPU::FLAG_C);
+            }
+        }
+    }
+
     parentCPU.R()[rd] = result;
-    parentCPU.updateNZCFlags(result, (parentCPU.R()[rd] >> (parentCPU.R()[rs] - 1)) & 1); // Carry-out is the last shifted-out bit, no overflow for ROR
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // V flag is not affected.
+
     Debug::log::info("Executing Thumb ROR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " ROR R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_tst(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] & parentCPU.R()[rs];
-    parentCPU.updateNZFlags(result); // No carry-out or overflow for TST
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 & op2;
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // No update to V and C flags for TST operation
+
     Debug::log::info("Executing Thumb TST: R" + std::to_string(rd) + " & R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_neg(uint8_t rd, uint8_t rs) {
-    uint32_t result = -parentCPU.R()[rs];
+    uint32_t op1 = 0;
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 - op2;
     parentCPU.R()[rd] = result;
-    parentCPU.updateNZFlags(result); // No carry-out or overflow for NEG
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    parentCPU.updateCFlagSub(op1, op2);
+    parentCPU.updateVFlagSub(op1, op2, result);
+
     Debug::log::info("Executing Thumb NEG: R" + std::to_string(rd) + " = -R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_cmp(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] - parentCPU.R()[rs];
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] < parentCPU.R()[rs]), ((parentCPU.R()[rd] ^ result) & (~parentCPU.R()[rs] ^ result) & (1 << 31)) != 0); // Carry-out and overflow conditions
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 - op2;
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    parentCPU.updateCFlagSub(op1, op2);
+    parentCPU.updateVFlagSub(op1, op2, result);
+
     Debug::log::info("Executing Thumb CMP: R" + std::to_string(rd) + " - R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_cmn(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] + parentCPU.R()[rs];
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] > (UINT32_MAX - parentCPU.R()[rs])), ((parentCPU.R()[rd] ^ result) & (parentCPU.R()[rs] ^ result) & (1 << 31)) != 0); // Carry-out and overflow conditions
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 + op2;
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    parentCPU.updateCFlagAdd(op1, op2);
+    parentCPU.updateVFlag(op1, op2, result);
+
     Debug::log::info("Executing Thumb CMN: R" + std::to_string(rd) + " + R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_orr(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] | parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 | op2;
     parentCPU.R()[rd] = result;
-    parentCPU.updateNZFlags(result); // No carry-out or overflow for ORR
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // No update to V and C flags for ORR operation
+
     Debug::log::info("Executing Thumb ORR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " | R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_mul(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] * parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 * op2;
     parentCPU.R()[rd] = result;
-    parentCPU.updateNZFlags(result); // No carry-out or overflow for MUL
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // No update to V and C flags for MUL operation
+
     Debug::log::info("Executing Thumb MUL: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " * R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_bic(uint8_t rd, uint8_t rs) {
-    uint32_t result = parentCPU.R()[rd] & ~parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 & ~op2;
     parentCPU.R()[rd] = result;
-    parentCPU.updateNZFlags(result); // No carry-out or overflow for BIC
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // No update to V and C flags for BIC operation
+
     Debug::log::info("Executing Thumb BIC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " & ~R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_mvn(uint8_t rd, uint8_t rs) {
-    uint32_t result = ~parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rs];
+    uint32_t result = ~op1;
     parentCPU.R()[rd] = result;
-    parentCPU.updateNZFlags(result); // No carry-out or overflow for MVN
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    // No update to V and C flags for MVN operation
+
     Debug::log::info("Executing Thumb MVN: R" + std::to_string(rd) + " = ~R" + std::to_string(rs));
 }
 
@@ -568,13 +717,18 @@ void ThumbCPU::handle_add_hi(uint16_t instruction) {
     uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
 
     // Perform the addition operation
-    uint32_t result = parentCPU.R()[rd] + parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 + op2;
 
     // Update the destination register
     parentCPU.R()[rd] = result;
 
     // Update CPSR flags based on the result
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] > (UINT32_MAX - parentCPU.R()[rs])), ((parentCPU.R()[rd] ^ result) & (parentCPU.R()[rs] ^ result) & (1 << 31)) != 0); // Carry-out and overflow conditions
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    parentCPU.updateCFlagAdd(op1, op2);
+    parentCPU.updateVFlag(op1, op2, result);
 
     Debug::log::info("Executing Thumb ADD (HI register): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + R" + std::to_string(rs));
 }
@@ -584,10 +738,15 @@ void ThumbCPU::handle_cmp_hi(uint16_t instruction) {
     uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
 
     // Perform the comparison operation
-    uint32_t result = parentCPU.R()[rd] - parentCPU.R()[rs];
+    uint32_t op1 = parentCPU.R()[rd];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t result = op1 - op2;
 
     // Update CPSR flags based on the result
-    parentCPU.updateAllFlags(result, (parentCPU.R()[rd] < parentCPU.R()[rs]), ((parentCPU.R()[rd] ^ result) & (~parentCPU.R()[rs] ^ result) & (1 << 31)) != 0); // Carry-out and overflow conditions
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    parentCPU.updateCFlagSub(op1, op2);
+    parentCPU.updateVFlagSub(op1, op2, result);
 
     Debug::log::info("Executing Thumb CMP (HI register): R" + std::to_string(rd) + " - R" + std::to_string(rs));
 }
@@ -597,9 +756,11 @@ void ThumbCPU::handle_mov_hi(uint16_t instruction) {
     uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
 
     // Perform the move operation
-    parentCPU.R()[rd] = parentCPU.R()[rs];
+    uint32_t result = parentCPU.R()[rs];
+    parentCPU.R()[rd] = result;
 
-    parentCPU.updateNZFlags(parentCPU.R()[rd]); // No carry-out or overflow for MOV
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
 
     Debug::log::info("Executing Thumb MOV (HI register): R" + std::to_string(rd) + " = R" + std::to_string(rs));
 }

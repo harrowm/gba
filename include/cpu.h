@@ -53,33 +53,94 @@ public:
         cpsr = (result & (1 << 31)) ? (cpsr | FLAG_N) : (cpsr & ~FLAG_N);
     }
 
-    constexpr void updateCFlag(bool carryOut) {
-        cpsr = carryOut ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+    constexpr void updateCFlagSub(uint32_t op1, uint32_t op2) {
+        cpsr = (op1 >= op2) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
     }
 
-    constexpr void updateVFlag(bool overflow) {
-        cpsr = overflow ? (cpsr | FLAG_V) : (cpsr & ~FLAG_V);
+    constexpr void updateCFlagAdd(uint32_t op1, uint32_t op2) {
+        cpsr = (op1 > (UINT32_MAX - op2)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+    };
+
+    constexpr void updateCFlagSubWithCarry(uint32_t op1, uint32_t op2) {
+        cpsr = (op1 >= (op2 + (1 - getFlag(FLAG_C)))) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
     }
 
-    constexpr void updateAllFlags(uint32_t result, bool carryOut, bool overflow) {
-        updateZFlag(result);
-        updateNFlag(result);
-        updateCFlag(carryOut);
-        updateVFlag(overflow);
+    constexpr void updateCFlagAddWithCarry(uint32_t op1, uint32_t op2) {
+        cpsr = (op1 > (UINT32_MAX - op2 - getFlag(FLAG_C))) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+    };
+
+    constexpr void updateCFlagShiftLSL(uint32_t value, uint8_t shift_amount) {
+        // For logical shifts, the carry flag is set to the last bit shifted out
+        if (shift_amount != 0) {  
+            cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+        }
     }
 
-    constexpr void updateNZCFlags(uint32_t result, bool carryOut) {
-        updateZFlag(result);
-        updateNFlag(result);
-        updateCFlag(carryOut);
+    constexpr void updateCFlagShiftLSR(uint32_t value, uint8_t shift_amount) {
+        if (shift_amount == 0) {
+            // Special case: LSR with shift amount 0 means shift by 32
+            cpsr = (value & (1 << 31)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // MSB becomes carry
+        } else {
+            // Standard LSR behavior
+            cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+        }
     }
 
-    constexpr void updateNZFlags(uint32_t result) {
-        updateZFlag(result);
-        updateNFlag(result);
+    constexpr void updateCFlagShiftASR(uint32_t value, uint8_t shift_amount) {
+        if (shift_amount == 0) {
+            // Special case: ASR with shift amount 0 means shift by 32
+            cpsr = (value & (1 << 31)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // MSB becomes carry
+        } else {
+            // Standard ASR behavior
+            cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+        }
     }
 
- 
+    constexpr void updateCFlagShiftRight(uint32_t value, uint8_t shift_amount, char shift_type) {
+        if (shift_amount == 0) {
+            return; // Do not alter the carry flag for other cases
+        }
+
+        switch (shift_type) {
+            case 'L': // Logical Shift Right (LSR)
+                cpsr = (shift_amount >= 32) ? (cpsr & ~FLAG_C) : 
+                       ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+                break;
+
+            case 'A': // Arithmetic Shift Right (ASR)
+                if (shift_amount >= 32) {
+                    cpsr = (value & (1 << 31)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // Sign bit
+                } else {
+                    cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+                }
+                break;
+
+            case 'O': // Rotate Right (ROR)
+                if (shift_amount == 0) {
+                    // Rotate Right (ROR) with shift amount 0 is treated as RRX
+                    cpsr = (value & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // LSB becomes carry
+                } else {
+                    cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+                }
+                break;
+
+            case 'X': // Rotate Right with Extend (RRX)
+                cpsr = (value & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // LSB becomes carry
+                break;
+
+            default:
+                // Invalid shift type
+                break;
+        }
+    }
+
+    constexpr void updateVFlag(uint32_t op1, uint32_t op2, uint32_t result) {
+        cpsr = (((op1 ^ result) & (op2 ^ result) & (1 << 31)) != 0) ? (cpsr | FLAG_V) : (cpsr & ~FLAG_V);
+    }
+    
+    constexpr void updateVFlagSub(uint32_t op1, uint32_t op2, uint32_t result) {
+        cpsr = ((((op1 ^ op2) & (op1 ^ result)) & (1 << 31)) != 0) ? (cpsr | FLAG_V) : (cpsr & ~FLAG_V);
+    }
     
     static constexpr uint32_t FLAG_N = 1 << 31; // Negative flag
     static constexpr uint32_t FLAG_Z = 1 << 30; // Zero flag
@@ -90,7 +151,7 @@ public:
     
     void setFlag(uint32_t flag);
     void clearFlag(uint32_t flag);
-    bool checkFlag(uint32_t flag) const;
+    bool getFlag(uint32_t flag) const;
 
     void setCPUState(const CPUState& state);
     CPUState getCPUState() const;

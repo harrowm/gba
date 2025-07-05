@@ -94,9 +94,15 @@ private:
 
     void initializeInstructionTable();
     void thumb_init_alu_operations_table();
-    
-    void decodeAndExecute(uint16_t instruction);
 
+    constexpr uint8_t bits10to8(uint16_t instruction) { return (uint8_t)((instruction >> 8) & 0x07); } 
+    constexpr uint8_t bits7to0(uint16_t instruction) { return (uint8_t)(instruction & 0xFF); }
+    constexpr uint8_t bits2to0(uint16_t instruction) { return (uint8_t)(instruction & 0x07); }
+    constexpr uint8_t bits5to3(uint16_t instruction) { return (uint8_t)((instruction >> 3) & 0x07); }
+    constexpr uint8_t bits10to6(uint16_t instruction) { return (uint8_t)((instruction >> 6) & 0x1F); }
+    constexpr uint8_t bits8to6(uint16_t instruction) { return (uint8_t)((instruction >> 6) & 0x07); }
+    constexpr uint8_t bits9to6(uint16_t instruction) { return (uint8_t)((instruction >> 6) & 0x0F); }
+    
 public:
     explicit ThumbCPU(CPU& cpu);
     ~ThumbCPU();
