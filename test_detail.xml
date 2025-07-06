@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="1" failures="1" disabled="0" errors="0" time="0." timestamp="2025-07-06T08:23:21.906" name="AllTests">
-  <testsuite name="CPU" tests="1" failures="1" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-07-06T08:23:21.906">
-    <testcase name="LDSH" file="tests/test_cpu.cpp" line="2098" status="run" result="completed" time="0." timestamp="2025-07-06T08:23:21.906" classname="CPU">
-      <failure message="tests/test_cpu.cpp:2133&#x0A;Expected equality of these values:&#x0A;  registers[4]&#x0A;    Which is: 0&#x0A;  static_cast&lt;uint32_t&gt;(0xFFFF8000)&#x0A;    Which is: 4294934528&#x0A;" type=""><![CDATA[tests/test_cpu.cpp:2133
+<testsuites tests="1" failures="1" disabled="0" errors="0" time="0." timestamp="2025-07-06T13:29:26.646" name="AllTests">
+  <testsuite name="CPU" tests="1" failures="1" disabled="0" skipped="0" errors="0" time="0." timestamp="2025-07-06T13:29:26.646">
+    <testcase name="B" file="tests/test_cpu.cpp" line="3047" status="run" result="completed" time="0." timestamp="2025-07-06T13:29:26.646" classname="CPU">
+      <failure message="tests/test_cpu.cpp:3149&#x0A;Expected equality of these values:&#x0A;  registers[15]&#x0A;    Which is: 158&#x0A;  static_cast&lt;uint32_t&gt;(0x0000023A)&#x0A;    Which is: 570&#x0A;" type=""><![CDATA[tests/test_cpu.cpp:3149
 Expected equality of these values:
-  registers[4]
-    Which is: 0
-  static_cast<uint32_t>(0xFFFF8000)
-    Which is: 4294934528
+  registers[15]
+    Which is: 158
+  static_cast<uint32_t>(0x0000023A)
+    Which is: 570
 ]]></failure>
     </testcase>
   </testsuite>
