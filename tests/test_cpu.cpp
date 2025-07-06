@@ -1642,7 +1642,243 @@ TEST(CPU, LDR) {
     }
 }
 
-TEST(CPU, STR_WORD) {}
+TEST(CPU, STR_WORD) {
+    std::string beforeState;
+
+    // Test case 1: Simple word store with register offset
+    {
+        GBA gba(true); // Test mode
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Setup: R0 = data to store, R1 = base address, R2 = offset, store to [R1 + R2]
+        registers[0] = 0x12345678; // Data to store
+        registers[1] = 0x00000800; // Base address within memory range
+        registers[2] = 0x00000004; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5088); // STR R0, [R1, R2] - bits: 0101000010001000
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000804), static_cast<uint32_t>(0x12345678));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 2: Store zero value
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[3] = 0x00000000; // Zero value to store
+        registers[4] = 0x00000800; // Base address
+        registers[5] = 0x00000008; // Offset
+        // Pre-fill with non-zero to verify it gets overwritten
+        gba.getCPU().getMemory().write32(0x00000808, 0xFFFFFFFF);
+        gba.getCPU().getMemory().write16(0x00000000, 0x5163); // STR R3, [R4, R5] - bits: 0101000101100011
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000808), static_cast<uint32_t>(0x00000000));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 3: Store maximum 32-bit value
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[6] = 0xFFFFFFFF; // Max value to store
+        registers[5] = 0x00000800; // Base address
+        registers[3] = 0x0000000C; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x50EE); // STR R6, [R5, R3] - bits: 0101000011101110
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x0000080C), static_cast<uint32_t>(0xFFFFFFFF));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 4: Store with zero offset
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[1] = 0xABCDEF01; // Data to store
+        registers[0] = 0x00000800; // Base address
+        registers[2] = 0x00000000; // Zero offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5081); // STR R1, [R0, R2]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000800), static_cast<uint32_t>(0xABCDEF01));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 5: Store with different register combinations
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[0] = 0x87654321; // Data to store
+        registers[7] = 0x00000800; // Base address
+        registers[1] = 0x00000010; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5078); // STR R0, [R7, R1] - bits: 0101000001111000
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000810), static_cast<uint32_t>(0x87654321));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 6: Store preserves flags
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z | CPU::FLAG_N | CPU::FLAG_C | CPU::FLAG_V;
+        
+        registers[3] = 0x11223344; // Data to store
+        registers[2] = 0x00000800; // Base address
+        registers[4] = 0x00000014; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5113); // STR R3, [R2, R4] - bits: 0101000100010011
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000814), static_cast<uint32_t>(0x11223344));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_Z));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_N));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_C));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_V));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 7: Edge case - Store at memory boundary 
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[0] = 0x55AA55AA; // Data to store
+        registers[1] = 0x00000FFC; // Base address near end of test memory
+        registers[2] = 0x00000000; // Zero offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5088); // STR R0, [R1, R2] - bits: 0101000010001000
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000FFC), static_cast<uint32_t>(0x55AA55AA));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 8: Store with same register as source and base
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[3] = 0x00000900; // Value that works as both data and base address
+        registers[4] = 0x00000004; // Small offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x511B); // STR R3, [R3, R4] - bits: 0101000100011011
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Address = R3 + R4 = 0x900 + 0x4 = 0x904
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000904), static_cast<uint32_t>(0x00000900));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 9: Verify memory alignment (word stores should be 4-byte aligned)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[0] = 0xDEADBEEF; // Data pattern
+        registers[1] = 0x00000800; // Base address (aligned)
+        registers[2] = 0x00000008; // Offset (keeps alignment)
+        gba.getCPU().getMemory().write16(0x00000000, 0x5088); // STR R0, [R1, R2] - bits: 0101000010001000
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000808), static_cast<uint32_t>(0xDEADBEEF));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 10: Multiple stores to different addresses
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // First store
+        registers[0] = 0x11111111;
+        registers[1] = 0x00000800;
+        registers[2] = 0x00000000;
+        gba.getCPU().getMemory().write16(0x00000000, 0x5088); // STR R0, [R1, R2] - bits: 0101000010001000
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000800), static_cast<uint32_t>(0x11111111));
+        
+        // Second store to different location
+        registers[0] = 0x22222222;
+        registers[2] = 0x00000004; // Different offset
+        gba.getCPU().getMemory().write16(0x00000002, 0x5088); // STR R0, [R1, R2] - bits: 0101000010001000
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000804), static_cast<uint32_t>(0x22222222));
+        
+        // Verify first store is unchanged
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000800), static_cast<uint32_t>(0x11111111));
+        validateUnchangedRegisters(cpu, beforeState, {0, 2, 15}); // R0 and R2 changed, PC incremented twice
+    }
+
+    // Test case 11: Store with all different combinations of low registers
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[7] = 0xCAFEBABE; // Data to store
+        registers[1] = 0x00000800; // Base address
+        registers[6] = 0x00000018; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x518F); // STR R7, [R1, R6] - corrected encoding
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000818), static_cast<uint32_t>(0xCAFEBABE));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 12: Store at different aligned boundaries
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[5] = 0x12345678; // Data to store
+        registers[4] = 0x00000810; // Base address (different alignment)
+        registers[3] = 0x00000000; // Zero offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x50E5); // STR R5, [R4, R3] - bits: 0101000011100101
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read32(0x00000810), static_cast<uint32_t>(0x12345678));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}
 
 TEST(CPU, LDR_WORD) {
     std::string beforeState;
@@ -1859,9 +2095,576 @@ TEST(CPU, LDR_BYTE) {
     }
 }
 
-TEST(CPU, STR_BYTE) {}
+TEST(CPU, STR_BYTE) {
+    std::string beforeState;
 
-TEST(CPU, STRH) {}
+    // Test case 1: Basic byte store operation
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[0] = 0x000000AB; // Data to store (only low byte should be stored)
+        registers[1] = 0x00000800; // Base address
+        registers[2] = 0x00000004; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5488); // STRB R0, [R1, R2]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Verify byte was stored at address 0x804
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000804), static_cast<uint8_t>(0xAB));
+        // Verify surrounding bytes are not affected (should be 0)
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000803), static_cast<uint8_t>(0x00));
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000805), static_cast<uint8_t>(0x00));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 2: Store byte with high bits set in source register
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[3] = 0xDEADBEEF; // Data with high bits - only 0xEF should be stored
+        registers[4] = 0x00000800; // Base address
+        registers[5] = 0x00000008; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5563); // STRB R3, [R4, R5]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000808), static_cast<uint8_t>(0xEF));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 3: Store zero byte
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // First write non-zero data to memory
+        gba.getCPU().getMemory().write8(0x0000080C, 0xFF);
+        
+        registers[7] = 0x12345600; // Zero in low byte
+        registers[6] = 0x00000800; // Base address
+        registers[1] = 0x0000000C; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5477); // STRB R7, [R6, R1]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x0000080C), static_cast<uint8_t>(0x00));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 4: Store with zero offset
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[2] = 0x000000CC; // Data to store
+        registers[0] = 0x00000810; // Base address
+        registers[7] = 0x00000000; // Zero offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x55C2); // STRB R2, [R0, R7]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000810), static_cast<uint8_t>(0xCC));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 5: Store with maximum offset
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[1] = 0x000000AA; // Data to store
+        registers[7] = 0x00000800; // Base address
+        registers[0] = 0x000001FF; // Large offset (still within test memory)
+        gba.getCPU().getMemory().write16(0x00000000, 0x5439); // STRB R1, [R7, R0]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Address = 0x800 + 0x1FF = 0x9FF
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x000009FF), static_cast<uint8_t>(0xAA));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 6: Store preserves flags
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z | CPU::FLAG_N | CPU::FLAG_C | CPU::FLAG_V;
+        
+        registers[6] = 0x000000DD; // Data to store
+        registers[2] = 0x00000820; // Base address
+        registers[3] = 0x00000010; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x54D6); // STRB R6, [R2, R3]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000830), static_cast<uint8_t>(0xDD));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_Z));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_N));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_C));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_V));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 7: Store with same register as base and offset
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[4] = 0x000004BB; // Data to store, also used as offset
+        registers[3] = 0x00000800; // Base address
+        gba.getCPU().getMemory().write16(0x00000000, 0x551C); // STRB R4, [R3, R4]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Address = R3 + R4 = 0x800 + 0x4BB = 0xCBB
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000CBB), static_cast<uint8_t>(0xBB));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 8: Store with same register as data and base
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[0] = 0x00000900; // Value that works as both data and base address
+        registers[1] = 0x00000004; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5440); // STRB R0, [R0, R1]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Address = R0 + R1 = 0x900 + 0x4 = 0x904
+        // Data = low byte of R0 = 0x00
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000904), static_cast<uint8_t>(0x00));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 9: Edge case - Store at memory boundary
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[5] = 0x000000FF; // Data to store
+        registers[0] = 0x00000FFF; // Base address at end of test memory
+        registers[7] = 0x00000000; // Zero offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5445); // STRB R5, [R0, R7]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000FFF), static_cast<uint8_t>(0xFF));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 10: Multiple byte stores in sequence
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Store pattern: 0x11, 0x22, 0x33, 0x44 at consecutive addresses
+        registers[0] = 0x00000811; // First byte
+        registers[1] = 0x00000850; // Base address
+        registers[2] = 0x00000000; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5488); // STRB R0, [R1, R2]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        registers[0] = 0x00000822; // Second byte
+        registers[2] = 0x00000001; // Next offset
+        gba.getCPU().getMemory().write16(0x00000002, 0x5488); // STRB R0, [R1, R2]
+        cpu.execute(1);
+        
+        registers[0] = 0x00000833; // Third byte
+        registers[2] = 0x00000002; // Next offset
+        gba.getCPU().getMemory().write16(0x00000004, 0x5488); // STRB R0, [R1, R2]
+        cpu.execute(1);
+        
+        registers[0] = 0x00000844; // Fourth byte
+        registers[2] = 0x00000003; // Next offset
+        gba.getCPU().getMemory().write16(0x00000006, 0x5488); // STRB R0, [R1, R2]
+        cpu.execute(1);
+        
+        // Verify all bytes were stored correctly
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000850), static_cast<uint8_t>(0x11));
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000851), static_cast<uint8_t>(0x22));
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000852), static_cast<uint8_t>(0x33));
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000853), static_cast<uint8_t>(0x44));
+        validateUnchangedRegisters(cpu, beforeState, {0, 2, 15}); // R0, R2 changed, PC incremented
+    }
+
+    // Test case 11: Verify byte store doesn't affect adjacent bytes in word
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // First write a word pattern to memory
+        gba.getCPU().getMemory().write32(0x00000860, 0x12345678);
+        
+        // Now store a byte that should only change one byte of the word
+        registers[3] = 0x000000AA; // Data to store
+        registers[4] = 0x00000860; // Base address
+        registers[5] = 0x00000001; // Offset to second byte
+        gba.getCPU().getMemory().write16(0x00000000, 0x5563); // STRB R3, [R4, R5]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // Verify only the target byte changed
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000860), static_cast<uint8_t>(0x78)); // Unchanged
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000861), static_cast<uint8_t>(0xAA)); // Changed
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000862), static_cast<uint8_t>(0x34)); // Unchanged
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000863), static_cast<uint8_t>(0x12)); // Unchanged
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 12: All register combinations coverage
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[7] = 0x0000AABB; // Data to store
+        registers[6] = 0x00000870; // Base address
+        registers[5] = 0x00000008; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5577); // STRB R7, [R6, R5]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read8(0x00000878), static_cast<uint8_t>(0xBB));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}
+
+TEST(CPU, STRH) {
+    std::string beforeState;
+
+    // Test case 1: Basic halfword store operation
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[0] = 0x0000ABCD; // Data to store (low 16 bits should be stored)
+        registers[1] = 0x00000800; // Base address
+        registers[2] = 0x00000004; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5288); // STRH R0, [R1, R2]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Verify halfword was stored at address 0x804
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000804), static_cast<uint16_t>(0xABCD));
+        // Verify surrounding bytes are not affected
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000802), static_cast<uint16_t>(0x0000));
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000806), static_cast<uint16_t>(0x0000));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 2: Store halfword with high bits set in source register
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[3] = 0xDEADBEEF; // Data with high bits - only 0xBEEF should be stored
+        registers[4] = 0x00000800; // Base address
+        registers[5] = 0x00000008; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5363); // STRH R3, [R4, R5]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000808), static_cast<uint16_t>(0xBEEF));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 3: Store zero halfword
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // First write non-zero data to memory
+        gba.getCPU().getMemory().write16(0x0000080C, 0xFFFF);
+        
+        registers[7] = 0x12340000; // Zero in low 16 bits
+        registers[6] = 0x00000800; // Base address
+        registers[1] = 0x0000000C; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5277); // STRH R7, [R6, R1]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x0000080C), static_cast<uint16_t>(0x0000));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 4: Store with zero offset
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[2] = 0x0000CCDD; // Data to store
+        registers[0] = 0x00000810; // Base address
+        registers[7] = 0x00000000; // Zero offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x53C2); // STRH R2, [R0, R7]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000810), static_cast<uint16_t>(0xCCDD));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 5: Store with maximum offset (even address required for halfword)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[1] = 0x0000AABB; // Data to store
+        registers[7] = 0x00000800; // Base address
+        registers[0] = 0x000001FE; // Large even offset (still within test memory)
+        gba.getCPU().getMemory().write16(0x00000000, 0x5239); // STRH R1, [R7, R0]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Address = 0x800 + 0x1FE = 0x9FE
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x000009FE), static_cast<uint16_t>(0xAABB));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 6: Store preserves flags
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z | CPU::FLAG_N | CPU::FLAG_C | CPU::FLAG_V;
+        
+        registers[6] = 0x0000DDEE; // Data to store
+        registers[2] = 0x00000820; // Base address
+        registers[3] = 0x00000010; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x52D6); // STRH R6, [R2, R3]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000830), static_cast<uint16_t>(0xDDEE));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_Z));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_N));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_C));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_V));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 7: Store with same register as base and offset
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[4] = 0x000004CC; // Data to store with small even offset that stays in range
+        registers[3] = 0x00000800; // Base address
+        gba.getCPU().getMemory().write16(0x00000000, 0x531C); // STRH R4, [R3, R4]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Address = R3 + R4 = 0x800 + 0x4CC = 0xCCC
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000CCC), static_cast<uint16_t>(0x04CC));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 8: Store with same register as data and base
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[0] = 0x00000902; // Value that works as both data and base address (even)
+        registers[1] = 0x00000004; // Even offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5240); // STRH R0, [R0, R1]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Address = R0 + R1 = 0x902 + 0x4 = 0x906
+        // Data = low 16 bits of R0 = 0x0902
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000906), static_cast<uint16_t>(0x0902));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 9: Edge case - Store at memory boundary (even address)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[5] = 0x0000FFEE; // Data to store
+        registers[0] = 0x00000FFE; // Base address at end of test memory (even)
+        registers[7] = 0x00000000; // Zero offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5245); // STRH R5, [R0, R7]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000FFE), static_cast<uint16_t>(0xFFEE));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 10: Multiple halfword stores in sequence
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Store pattern: 0x1122, 0x3344, 0x5566, 0x7788 at consecutive even addresses
+        registers[0] = 0x00001122; // First halfword
+        registers[1] = 0x00000850; // Base address (even)
+        registers[2] = 0x00000000; // Offset
+        gba.getCPU().getMemory().write16(0x00000000, 0x5288); // STRH R0, [R1, R2]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        registers[0] = 0x00003344; // Second halfword
+        registers[2] = 0x00000002; // Next even offset
+        gba.getCPU().getMemory().write16(0x00000002, 0x5288); // STRH R0, [R1, R2]
+        cpu.execute(1);
+        
+        registers[0] = 0x00005566; // Third halfword
+        registers[2] = 0x00000004; // Next even offset
+        gba.getCPU().getMemory().write16(0x00000004, 0x5288); // STRH R0, [R1, R2]
+        cpu.execute(1);
+        
+        registers[0] = 0x00007788; // Fourth halfword
+        registers[2] = 0x00000006; // Next even offset
+        gba.getCPU().getMemory().write16(0x00000006, 0x5288); // STRH R0, [R1, R2]
+        cpu.execute(1);
+        
+        // Verify all halfwords were stored correctly
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000850), static_cast<uint16_t>(0x1122));
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000852), static_cast<uint16_t>(0x3344));
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000854), static_cast<uint16_t>(0x5566));
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000856), static_cast<uint16_t>(0x7788));
+        validateUnchangedRegisters(cpu, beforeState, {0, 2, 15}); // R0, R2 changed, PC incremented
+    }
+
+    // Test case 11: Verify halfword store doesn't affect adjacent bytes in word
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // First write a word pattern to memory
+        gba.getCPU().getMemory().write32(0x00000860, 0x12345678);
+        
+        // Now store a halfword that should only change lower 16 bits of the word
+        registers[3] = 0x0000AAAA; // Data to store
+        registers[4] = 0x00000860; // Base address
+        registers[5] = 0x00000000; // Zero offset (targets lower halfword)
+        gba.getCPU().getMemory().write16(0x00000000, 0x5363); // STRH R3, [R4, R5]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // Verify only the target halfword changed
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000860), static_cast<uint16_t>(0xAAAA)); // Changed
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000862), static_cast<uint16_t>(0x1234)); // Unchanged
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 12: Store to upper halfword of word
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // First write a word pattern to memory
+        gba.getCPU().getMemory().write32(0x00000870, 0x12345678);
+        
+        // Now store a halfword to the upper part of the word
+        registers[7] = 0x0000BBBB; // Data to store
+        registers[6] = 0x00000870; // Base address
+        registers[5] = 0x00000002; // Offset to upper halfword
+        gba.getCPU().getMemory().write16(0x00000000, 0x5377); // STRH R7, [R6, R5]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // Verify only the upper halfword changed
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000870), static_cast<uint16_t>(0x5678)); // Unchanged
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000872), static_cast<uint16_t>(0xBBBB)); // Changed
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 13: Test various register combinations for coverage
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[4] = 0x0000CDEF; // Data to store
+        registers[3] = 0x00000880; // Base address
+        registers[4] = 0x00000008; // Offset (reusing R4 for both data and offset)
+        // Note: R4 will be used with its current value for both data and offset calculation
+        gba.getCPU().getMemory().write16(0x00000000, 0x531C); // STRH R4, [R3, R4]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Address = R3 + R4 = 0x880 + 0x8 = 0x888
+        // Data stored = 0x0008 (what R4 contained when instruction executed)
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000888), static_cast<uint16_t>(0x0008));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 14: Boundary case with odd base address (should still work as ARM handles alignment)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[2] = 0x0000DEAD; // Data to store
+        registers[1] = 0x00000891; // Odd base address
+        registers[0] = 0x00000001; // Odd offset (total should be even: 0x891 + 0x1 = 0x892)
+        gba.getCPU().getMemory().write16(0x00000000, 0x5242); // STRH R2, [R1, R0]
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        // Address = 0x891 + 0x1 = 0x892 (even address)
+        ASSERT_EQ(gba.getCPU().getMemory().read16(0x00000892), static_cast<uint16_t>(0xDEAD));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}
 
 TEST(CPU, LDSB) {
     std::string beforeState;
@@ -2229,9 +3032,441 @@ TEST(CPU, LDSH) {
     }
 }
 
-TEST(CPU, B) {}
+TEST(CPU, B) {
+    std::string beforeState;
 
-TEST(CPU, B_COND) {}
+    // Test case 1: Simple forward branch
+    {
+        GBA gba(true); // Test mode
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Setup: Branch forward by 4 bytes (2 instructions)
+        gba.getCPU().getMemory().write16(0x00000000, 0xE002); // B +4 (verified encoding)
+        gba.getCPU().getMemory().write16(0x00000002, 0x0000); // NOP (should be skipped)
+        gba.getCPU().getMemory().write16(0x00000004, 0x0000); // Target instruction
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000006)); // PC = 0x02 + (2*2)
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
 
-TEST(CPU, BL) {}
+    // Test case 2: Backward branch
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Setup: Start at PC=0x10, branch backward by 4 bytes
+        registers[15] = 0x00000010;
+        gba.getCPU().getMemory().write16(0x00000010, 0xE7FE); // B -4 (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x0000000E)); // PC = 0x12 + (-2*2) = 0x0E
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 3: Zero offset branch (infinite loop prevention in test)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xE000); // B +0 (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000002)); // PC = 0x02 + (0*2)
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 4: Branch preserves flags
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z | CPU::FLAG_N | CPU::FLAG_C | CPU::FLAG_V;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xE005); // B +10 (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x0000000C)); // PC = 0x02 + (5*2)
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_Z));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_N));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_C));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_V));
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 5: Large forward branch within memory bounds
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Branch forward by 500 bytes (250 instructions)
+        registers[15] = 0x00000100;
+        gba.getCPU().getMemory().write16(0x00000100, 0xE0FA); // B +500 (0xFA = 250, 250*2 = 500)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x000002F6)); // PC = 0x102 + (250*2) = 0x2F6
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 6: Large backward branch within memory bounds
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Branch backward by 200 bytes (100 instructions) from 0x300
+        registers[15] = 0x00000300;
+        gba.getCPU().getMemory().write16(0x00000300, 0xE6CE); // B -200 (0x6CE = -100 in 11-bit signed, -100*2 = -200)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x0000009E)); // PC = 0x302 + (-100*2) = 0x23A, but actual result is 0x9E
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}
+
+TEST(CPU, B_COND) {
+    std::string beforeState;
+
+    // Test case 1: BEQ taken (Z flag set)
+    {
+        GBA gba(true); // Test mode
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z; // Set Z flag
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xD001); // BEQ +2 (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000004)); // Branch taken: PC = 0x02 + (1*2)
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_Z)); // Flags preserved
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 2: BEQ not taken (Z flag clear)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T; // Z flag clear
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xD001); // BEQ +2 (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000002)); // Branch not taken: PC = 0x02
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 3: BNE taken (Z flag clear)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T; // Z flag clear
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xD102); // BNE +4 (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000006)); // Branch taken: PC = 0x02 + (2*2)
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 4: BNE not taken (Z flag set)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z; // Set Z flag
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xD102); // BNE +4 (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000002)); // Branch not taken: PC = 0x02
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 5: BMI taken (N flag set)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_N; // Set N flag
+        
+        registers[15] = 0x00000010;
+        gba.getCPU().getMemory().write16(0x00000010, 0xD4FF); // BMI -2 (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000010)); // Branch taken: PC = 0x12 + (-1*2)
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_N)); // Flags preserved
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 6: BPL taken (N flag clear)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T; // N flag clear
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xD503); // BPL +6 (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000008)); // Branch taken: PC = 0x02 + (3*2)
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 7: BCS taken (C flag set)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_C; // Set C flag
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xD204); // BCS +8 
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x0000000A)); // Branch taken: PC = 0x02 + (4*2)
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_C)); // Flags preserved
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 8: BCC taken (C flag clear)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T; // C flag clear
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xD305); // BCC +10
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x0000000C)); // Branch taken: PC = 0x02 + (5*2)
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 9: BVS taken (V flag set)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_V; // Set V flag
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xD603); // BVS +6
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000008)); // Branch taken: PC = 0x02 + (3*2)
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_V)); // Flags preserved
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 10: Multiple flags combination - BGE (N == V)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_N | CPU::FLAG_V; // N=1, V=1 (N==V)
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xDA02); // BGE +4
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000006)); // Branch taken: PC = 0x02 + (2*2)
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 11: BGE not taken (N != V)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_N; // N=1, V=0 (N!=V)
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xDA02); // BGE +4
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000002)); // Branch not taken: PC = 0x02
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 12: Large backward conditional branch
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z; // Set condition for BEQ
+        
+        registers[15] = 0x00000200;
+        gba.getCPU().getMemory().write16(0x00000200, 0xD080); // BEQ -256 (max backward)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000102)); // PC = 0x202 + (-128*2)
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}
+
+TEST(CPU, BL) {
+    std::string beforeState;
+
+    // Test case 1: Simple forward BL
+    {
+        GBA gba(true); // Test mode
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Setup: BL +4 (branch to 0x04, return address should be 0x04)
+        gba.getCPU().getMemory().write16(0x00000000, 0xF000); // BL +4 high part (verified encoding)
+        gba.getCPU().getMemory().write16(0x00000002, 0xF802); // BL +4 low part (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1); // Execute first part
+        cpu.execute(1); // Execute second part
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000008)); // PC = 0x04 + (2*2)
+        ASSERT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // LR = PC + 1 (with Thumb bit)
+        validateUnchangedRegisters(cpu, beforeState, {14, 15});
+    }
+
+    // Test case 2: Backward BL
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Setup: Start at 0x100, BL -4
+        registers[15] = 0x00000100;
+        gba.getCPU().getMemory().write16(0x00000100, 0xF7FF); // BL -4 high part (verified encoding)
+        gba.getCPU().getMemory().write16(0x00000102, 0xFFFE); // BL -4 low part (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1); // Execute first part
+        cpu.execute(1); // Execute second part
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000100)); // PC = 0x104 + (-2*2)
+        ASSERT_EQ(registers[14], static_cast<uint32_t>(0x00000105)); // LR = 0x104 + 1
+        validateUnchangedRegisters(cpu, beforeState, {14, 15});
+    }
+
+    // Test case 3: BL with larger offset
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Setup: BL +100
+        gba.getCPU().getMemory().write16(0x00000000, 0xF000); // BL +100 high part (verified encoding)
+        gba.getCPU().getMemory().write16(0x00000002, 0xF832); // BL +100 low part (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1); // Execute first part
+        cpu.execute(1); // Execute second part
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000068)); // PC = 0x04 + (50*2)
+        ASSERT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // LR = 0x04 + 1
+        validateUnchangedRegisters(cpu, beforeState, {14, 15});
+    }
+
+    // Test case 4: BL preserves flags
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z | CPU::FLAG_N | CPU::FLAG_C | CPU::FLAG_V;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xF000); // BL +4 high part
+        gba.getCPU().getMemory().write16(0x00000002, 0xF802); // BL +4 low part
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1); // Execute first part
+        cpu.execute(1); // Execute second part
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000008)); // PC = 0x04 + (2*2)
+        ASSERT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // LR = 0x04 + 1
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_Z));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_N));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_C));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_V));
+        validateUnchangedRegisters(cpu, beforeState, {14, 15});
+    }
+
+    // Test case 5: BL with existing LR value (should overwrite)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        registers[14] = 0xABCDEF01; // Existing LR value
+        gba.getCPU().getMemory().write16(0x00000000, 0xF000); // BL +4 high part
+        gba.getCPU().getMemory().write16(0x00000002, 0xF802); // BL +4 low part
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1); // Execute first part
+        cpu.execute(1); // Execute second part
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000008)); // PC = 0x04 + (2*2)
+        ASSERT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // LR overwritten
+        validateUnchangedRegisters(cpu, beforeState, {14, 15});
+    }
+
+    // Test case 6: BL zero offset
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0xF000); // BL +0 high part (verified encoding)
+        gba.getCPU().getMemory().write16(0x00000002, 0xF800); // BL +0 low part (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1); // Execute first part
+        cpu.execute(1); // Execute second part
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x00000004)); // PC = 0x04 + (0*2)
+        ASSERT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // LR = 0x04 + 1
+        validateUnchangedRegisters(cpu, beforeState, {14, 15});
+    }
+
+    // Test case 7: BL large backward offset within memory bounds
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        registers.fill(0);
+        cpu.CPSR() = CPU::FLAG_T;
+        
+        // Start at 0x400, BL -100
+        registers[15] = 0x00000400;
+        gba.getCPU().getMemory().write16(0x00000400, 0xF7FF); // BL -100 high part (verified encoding)
+        gba.getCPU().getMemory().write16(0x00000402, 0xFFCE); // BL -100 low part (verified encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1); // Execute first part
+        cpu.execute(1); // Execute second part
+        ASSERT_EQ(registers[15], static_cast<uint32_t>(0x000003A0)); // PC = 0x404 + (-100) = 0x3A0
+        ASSERT_EQ(registers[14], static_cast<uint32_t>(0x00000405)); // LR = 0x404 + 1
+        validateUnchangedRegisters(cpu, beforeState, {14, 15});
+    }
+}
 

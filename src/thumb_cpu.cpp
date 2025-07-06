@@ -855,7 +855,10 @@ void ThumbCPU::handle_thumb_str_byte(uint16_t instruction) {
     // Perform the store operation using memory_write_8
     parentCPU.getMemory().write8(address, parentCPU.R()[rd] & 0xFF); // Store only the least significant byte
 
-    Debug::log::info("Executing Thumb STR (byte): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
+    Debug::log::info("Executing Thumb STR (byte): [0x" + Debug::toHexString(address, 8) + "] = R" + std::to_string(rd) + 
+        " (R" + std::to_string(rn) + "=0x" + Debug::toHexString(parentCPU.R()[rn], 8) + 
+        " + R" + std::to_string(rm) + "=0x" + Debug::toHexString(parentCPU.R()[rm], 8) + 
+        ", data=0x" + Debug::toHexString(parentCPU.R()[rd] & 0xFF, 2) + ")");
 }
 
 void ThumbCPU::handle_thumb_strh(uint16_t instruction) {
@@ -869,7 +872,7 @@ void ThumbCPU::handle_thumb_strh(uint16_t instruction) {
     // Perform the store operation using memory_write_16
     parentCPU.getMemory().write16(address, parentCPU.R()[rd] & 0xFFFF); // Store only the least significant halfword
 
-    Debug::log::info("Executing Thumb STRH: [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
+    Debug::log::info("Executing Thumb STRH: [0x" + Debug::toHexString(address, 8) + "] = R" + std::to_string(rd));
 }
 
 void ThumbCPU::handle_thumb_ldsb(uint16_t instruction) {
@@ -1252,7 +1255,9 @@ void ThumbCPU::handle_thumb_bls(uint16_t instruction) {
 
 void ThumbCPU::handle_thumb_bge(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
-    if ((parentCPU.CPSR() & CPU::FLAG_N) == (parentCPU.CPSR() & CPU::FLAG_V)) { // Check Negative and Overflow flags
+    bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
+    bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
+    if (n_flag == v_flag) { // Check if Negative and Overflow flags have same value
         parentCPU.R()[15] += (offset << 1); // Branch to target address
         Debug::log::info("Executing Thumb BGE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
@@ -1260,7 +1265,9 @@ void ThumbCPU::handle_thumb_bge(uint16_t instruction) {
 
 void ThumbCPU::handle_thumb_blt(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
-    if ((parentCPU.CPSR() & CPU::FLAG_N) != (parentCPU.CPSR() & CPU::FLAG_V)) { // Check Negative and Overflow flags
+    bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
+    bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
+    if (n_flag != v_flag) { // Check if Negative and Overflow flags have different values
         parentCPU.R()[15] += (offset << 1); // Branch to target address
         Debug::log::info("Executing Thumb BLT: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
@@ -1268,7 +1275,10 @@ void ThumbCPU::handle_thumb_blt(uint16_t instruction) {
 
 void ThumbCPU::handle_thumb_bgt(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
-    if (!(parentCPU.CPSR() & CPU::FLAG_Z) && ((parentCPU.CPSR() & CPU::FLAG_N) == (parentCPU.CPSR() & CPU::FLAG_V))) { // Check Zero, Negative, and Overflow flags
+    bool z_flag = (parentCPU.CPSR() & CPU::FLAG_Z) != 0;
+    bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
+    bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
+    if (!z_flag && (n_flag == v_flag)) { // Check Zero, Negative, and Overflow flags
         parentCPU.R()[15] += (offset << 1); // Branch to target address
         Debug::log::info("Executing Thumb BGT: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
@@ -1276,7 +1286,10 @@ void ThumbCPU::handle_thumb_bgt(uint16_t instruction) {
 
 void ThumbCPU::handle_thumb_ble(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
-    if ((parentCPU.CPSR() & CPU::FLAG_Z) || ((parentCPU.CPSR() & CPU::FLAG_N) != (parentCPU.CPSR() & CPU::FLAG_V))) { // Check Zero, Negative, and Overflow flags
+    bool z_flag = (parentCPU.CPSR() & CPU::FLAG_Z) != 0;
+    bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
+    bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
+    if (z_flag || (n_flag != v_flag)) { // Check Zero, Negative, and Overflow flags
         parentCPU.R()[15] += (offset << 1); // Branch to target address
         Debug::log::info("Executing Thumb BLE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
@@ -1298,17 +1311,35 @@ void ThumbCPU::handle_thumb_b(uint16_t instruction) {
 
     // Perform the branch operation
     parentCPU.R()[15] += (offset << 1); // Branch to target address
-    Debug::log::info("Executing Thumb B: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+    Debug::log::info("Executing Thumb B: Branch to 0x" + Debug::toHexString(parentCPU.R()[15], 8));
 }
 
 void ThumbCPU::handle_thumb_bl(uint16_t instruction) {
-    int16_t offset = instruction & 0x7FF; // Signed 11-bit offset (bits 0-10)
-    if (offset & 0x400) { // Sign-extend the offset
-        offset |= 0xF800;
+    // BL is a two-part instruction in Thumb mode
+    // First instruction (F000-F7FF): Sets up high part of target address
+    // Second instruction (F800-FFFF): Completes the branch with link
+    
+    if ((instruction & 0xF800) == 0xF000) {
+        // First part: BL prefix - store high part of offset in LR
+        int32_t high_offset = (instruction & 0x7FF); // Extract 11-bit value
+        if (high_offset & 0x400) { // Sign extend from bit 10
+            high_offset |= 0xFFFFF800; // Sign extend to 32 bits
+        }
+        high_offset <<= 12; // Shift to position (bits 12-22)
+        
+        // Store PC (of first instruction) + 4 + high_offset in LR
+        parentCPU.R()[14] = (parentCPU.R()[15] - 2) + 4 + high_offset; 
+        Debug::log::info("Executing Thumb BL (first part): Storing intermediate value");
+    } else if ((instruction & 0xF800) == 0xF800) {
+        // Second part: BL suffix - complete the branch
+        uint32_t low_offset = (instruction & 0x7FF) << 1; // Bits 0-10 shifted left by 1
+        uint32_t target = parentCPU.R()[14] + low_offset; // Add to stored value from first part
+        
+        // Set return address in LR (PC after this instruction) with Thumb bit set
+        parentCPU.R()[14] = parentCPU.R()[15] | 1; 
+        
+        // Branch to target
+        parentCPU.R()[15] = target & 0xFFFFFFFE; // Clear bit 0 for alignment
+        Debug::log::info("Executing Thumb BL (second part): Branch to 0x" + Debug::toHexString(parentCPU.R()[15], 8) + " with link, LR=0x" + Debug::toHexString(parentCPU.R()[14], 8));
     }
-
-    // Perform the branch with link operation
-    parentCPU.R()[14] = parentCPU.R()[15] + 2; // Save return address in LR
-    parentCPU.R()[15] += (offset << 1); // Branch to target address
-    Debug::log::info("Executing Thumb BL: Branch to 0x" + std::to_string(parentCPU.R()[15]) + " with link");
 }

@@ -184,9 +184,9 @@ void Memory::initializeGBARegions(const std::string& biosFilename, const std::st
 
 void Memory::initializeTestRegions() {
     regions = {
-        {0x00000000, 0x00000FFF, MEMORY_TYPE_RAM, 32, 0}, // Small RAM region for testing
+        {0x00000000, 0x00001FFF, MEMORY_TYPE_RAM, 32, 0}, // Expanded RAM region for testing (8KB instead of 4KB)
     };
-    Debug::log::info("Test regions initialized: Start = 0x00000000, End = 0x00000FFF, Type = RAM, Width = 32 bits");
+    Debug::log::info("Test regions initialized: Start = 0x00000000, End = 0x00001FFF, Type = RAM, Width = 32 bits");
 }
 
 uint32_t Memory::getSize() const {
