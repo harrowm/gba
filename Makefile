@@ -26,13 +26,9 @@ TARGET = gba_emulator
 # Test executable
 TEST_TARGET = test_cpu
 TEST_SRCS = $(wildcard tests/*.cpp)
-TEST_OBJS = $(patsubst tests/%.cpp,$(BUILD_DIR)/%.o,$(TEST_SRCS))
-
-# Include all source files for the test target
 TEST_SRCS += $(wildcard $(SRC_DIR)/*.cpp)
-
-# Exclude main.cpp from test builds
 TEST_SRCS := $(filter-out $(SRC_DIR)/main.cpp, $(TEST_SRCS))
+TEST_OBJS = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(notdir $(TEST_SRCS)))
 
 # Default rule
 all: $(TARGET) $(TEST_TARGET)
@@ -72,4 +68,7 @@ clean:
 	rm -rf $(BUILD_DIR) $(TARGET) $(TEST_TARGET)
 
 # Phony targets
-.PHONY: all clean
+.PHONY: all clean test
+
+test: $(TEST_TARGET)
+	./$(TEST_TARGET)
