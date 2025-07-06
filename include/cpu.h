@@ -71,8 +71,8 @@ public:
 
     constexpr void updateCFlagShiftLSL(uint32_t value, uint8_t shift_amount) {
         // For logical shifts, the carry flag is set to the last bit shifted out
-        if (shift_amount != 0) {  
-            cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+        if (shift_amount > 0) {  
+            cpsr = ((value >> (32 - shift_amount)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
         }
     }
 
