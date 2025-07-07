@@ -48,6 +48,7 @@ private:
     void handle_thumb_ldrh_imm(uint16_t instruction);
     void handle_thumb_str_sp_rel(uint16_t instruction);
     void handle_thumb_ldr_sp_rel(uint16_t instruction);
+    void handle_thumb_ldr_pc_rel(uint16_t instruction);
     void handle_thumb_ldr_address_pc(uint16_t instruction);
     void handle_thumb_ldr_address_sp(uint16_t instruction);
     void handle_thumb_add_sub_offset_to_stack_pointer(uint16_t instruction);
