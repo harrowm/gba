@@ -37,7 +37,7 @@ void validateUnchangedRegisters(const CPU& cpu, const std::string& beforeState, 
 #include "format02_add_sub.cpp"
 #include "format03_immediate.cpp"
 #include "format04_alu.cpp"
-#include "format05_hi_register.cpp"
+#include "format05_hi_register_ops_bx.cpp"
 #include "format06_pc_relative_load.cpp"
 #include "format07_load_store_reg.cpp"
 #include "format08_load_store_sign.cpp"
