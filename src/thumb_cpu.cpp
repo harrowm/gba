@@ -1033,12 +1033,12 @@ void ThumbCPU::handle_thumb_ldr_immediate_offset_byte(uint16_t instruction) {
 }
 
 void ThumbCPU::handle_thumb_strh_imm(uint16_t instruction) {
-    uint8_t rd = (instruction >> 8) & 0x07; // Source register (bits 8-10)
-    uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
-    uint8_t offset = instruction & 0x07; // Immediate offset (bits 0-2)
+    uint8_t rd = instruction & 0x07; // Source register (bits 2-0)
+    uint8_t rb = (instruction >> 3) & 0x07; // Base register (bits 5-3)
+    uint8_t offset5 = (instruction >> 6) & 0x1F; // Immediate offset (bits 10-6)
 
     // Calculate the address to store to
-    uint32_t address = parentCPU.R()[rn] + (offset << 1); // Offset scaled by 2 for halfword alignment
+    uint32_t address = parentCPU.R()[rb] + (offset5 << 1); // Offset scaled by 2 for halfword alignment
 
     // Perform the store operation using memory_write_16
     parentCPU.getMemory().write16(address, parentCPU.R()[rd] & 0xFFFF); // Store only the least significant halfword
@@ -1047,12 +1047,12 @@ void ThumbCPU::handle_thumb_strh_imm(uint16_t instruction) {
 }
 
 void ThumbCPU::handle_thumb_ldrh_imm(uint16_t instruction) {
-    uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
-    uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
-    uint8_t offset = instruction & 0x07; // Immediate offset (bits 0-2)
+    uint8_t rd = instruction & 0x07; // Destination register (bits 2-0)
+    uint8_t rb = (instruction >> 3) & 0x07; // Base register (bits 5-3)
+    uint8_t offset5 = (instruction >> 6) & 0x1F; // Immediate offset (bits 10-6)
 
     // Calculate the address to load from
-    uint32_t address = parentCPU.R()[rn] + (offset << 1); // Offset scaled by 2 for halfword alignment
+    uint32_t address = parentCPU.R()[rb] + (offset5 << 1); // Offset scaled by 2 for halfword alignment
 
     // Perform the load operation using memory_read_16
     parentCPU.R()[rd] = parentCPU.getMemory().read16(address);
