@@ -1,0 +1,401 @@
+#include "test_cpu_common.h"
+
+// ARM Thumb Format 5: Hi register operations/branch exchange
+// Encoding: 010001[Op][H1][H2][Rs/Hs][Rd/Hd]
+// Instructions: ADD, CMP, MOV for Hi registers, BX
+
+TEST(Format5, ADD_HI_REGISTERS) {
+    std::string beforeState;
+
+    // Test case 1: ADD R8, R0 (Hi register destination)
+    {
+        GBA gba(true); // Test mode
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[8] = 10;
+        registers[0] = 5;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4440); // ADD R8, R0 (H1=1, H2=0, Rs=0, Rd=0)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[8], static_cast<uint32_t>(15)); // 10 + 5 = 15
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(5)); // R0 unchanged
+        // ADD Hi doesn't set flags
+        validateUnchangedRegisters(cpu, beforeState, {8, 15});
+    }
+
+    // Test case 2: ADD R0, R9 (Hi register source)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[0] = 7;
+        registers[9] = 3;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4448); // ADD R0, R9 (H1=0, H2=1, Rs=1, Rd=0)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(10)); // 7 + 3 = 10
+        ASSERT_EQ(registers[9], static_cast<uint32_t>(3)); // R9 unchanged
+        validateUnchangedRegisters(cpu, beforeState, {0, 15});
+    }
+
+    // Test case 3: ADD R10, R11 (Both Hi registers)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[10] = 0x12345678;
+        registers[11] = 0x87654321;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x444A); // ADD R10, R11 (H1=1, H2=1, Rs=3, Rd=2)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[10], static_cast<uint32_t>(0x99999999)); // Sum with overflow
+        ASSERT_EQ(registers[11], static_cast<uint32_t>(0x87654321)); // R11 unchanged
+        validateUnchangedRegisters(cpu, beforeState, {10, 15});
+    }
+
+    // Test case 4: ADD R15, R0 (PC modification)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[15] = 0x1000;
+        registers[0] = 4;
+        
+        gba.getCPU().getMemory().write16(0x00001000, 0x4447); // ADD R15, R0 (H1=1, H2=0, Rs=0, Rd=7)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // When adding to PC, result should be word-aligned
+        ASSERT_EQ(registers[15] & ~1, static_cast<uint32_t>(0x1006)); // (0x1002 + 4) & ~1
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(4)); // R0 unchanged
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}
+
+TEST(Format5, CMP_HI_REGISTERS) {
+    std::string beforeState;
+
+    // Test case 1: CMP R8, R0 (Hi register first operand)
+    {
+        GBA gba(true); // Test mode
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[8] = 10;
+        registers[0] = 5;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4540); // CMP R8, R0
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // CMP doesn't modify registers, only sets flags
+        ASSERT_EQ(registers[8], static_cast<uint32_t>(10)); // Unchanged
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(5)); // Unchanged
+        ASSERT_FALSE(cpu.getFlag(CPU::FLAG_Z)); // 10 != 5
+        ASSERT_FALSE(cpu.getFlag(CPU::FLAG_N)); // 10 - 5 > 0
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_C)); // No borrow
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 2: CMP R0, R9 (Hi register second operand)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[0] = 3;
+        registers[9] = 7;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4548); // CMP R0, R9
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(3)); // Unchanged
+        ASSERT_EQ(registers[9], static_cast<uint32_t>(7)); // Unchanged
+        ASSERT_FALSE(cpu.getFlag(CPU::FLAG_Z)); // 3 != 7
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_N)); // 3 - 7 < 0
+        ASSERT_FALSE(cpu.getFlag(CPU::FLAG_C)); // Borrow occurred
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 3: CMP R12, R13 (Both Hi registers, equal values)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[12] = 0x12345678;
+        registers[13] = 0x12345678;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x454C); // CMP R12, R13
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[12], static_cast<uint32_t>(0x12345678)); // Unchanged
+        ASSERT_EQ(registers[13], static_cast<uint32_t>(0x12345678)); // Unchanged
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_Z)); // Equal values
+        ASSERT_FALSE(cpu.getFlag(CPU::FLAG_N));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_C)); // No borrow
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}
+
+TEST(Format5, MOV_HI_REGISTERS) {
+    std::string beforeState;
+
+    // Test case 1: MOV R8, R0 (Hi register destination)
+    {
+        GBA gba(true); // Test mode
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[8] = 0x12345678;
+        registers[0] = 0xDEADBEEF;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4640); // MOV R8, R0
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[8], static_cast<uint32_t>(0xDEADBEEF)); // R8 = R0
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(0xDEADBEEF)); // R0 unchanged
+        // MOV Hi doesn't set flags
+        validateUnchangedRegisters(cpu, beforeState, {8, 15});
+    }
+
+    // Test case 2: MOV R0, R9 (Hi register source)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[0] = 0x11111111;
+        registers[9] = 0x22222222;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4648); // MOV R0, R9
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(0x22222222)); // R0 = R9
+        ASSERT_EQ(registers[9], static_cast<uint32_t>(0x22222222)); // R9 unchanged
+        validateUnchangedRegisters(cpu, beforeState, {0, 15});
+    }
+
+    // Test case 3: MOV R14, R15 (Hi to Hi, LR = PC)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[14] = 0;
+        registers[15] = 0x1000;
+        
+        gba.getCPU().getMemory().write16(0x00001000, 0x464F); // MOV R14, R15
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // R14 should get the current PC value (PC+4 due to pipeline)
+        ASSERT_EQ(registers[14], static_cast<uint32_t>(0x1002)); // Current PC
+        validateUnchangedRegisters(cpu, beforeState, {14, 15});
+    }
+
+    // Test case 4: MOV R15, R0 (Move to PC - branch)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[15] = 0x1000;
+        registers[0] = 0x2000; // New PC value
+        
+        gba.getCPU().getMemory().write16(0x00001000, 0x4647); // MOV R15, R0
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // PC should be set to R0 value (word-aligned if needed)
+        ASSERT_EQ(registers[15] & ~1, static_cast<uint32_t>(0x2000 & ~1));
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(0x2000)); // R0 unchanged
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}
+
+TEST(Format5, BX_BRANCH_EXCHANGE) {
+    std::string beforeState;
+
+    // Test case 1: BX R0 (Branch to ARM mode)
+    {
+        GBA gba(true); // Test mode
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T; // Start in Thumb mode
+        registers.fill(0);
+        
+        registers[0] = 0x2000; // ARM address (bit 0 clear)
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4700); // BX R0
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // Should branch to ARM mode
+        ASSERT_EQ(registers[15] & ~3, static_cast<uint32_t>(0x2000)); // Word-aligned PC
+        ASSERT_FALSE(cpu.getFlag(CPU::FLAG_T)); // Should switch to ARM mode
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(0x2000)); // R0 unchanged
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 2: BX R1 (Stay in Thumb mode)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T; // Start in Thumb mode
+        registers.fill(0);
+        
+        registers[1] = 0x3001; // Thumb address (bit 0 set)
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4708); // BX R1
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // Should stay in Thumb mode
+        ASSERT_EQ(registers[15] & ~1, static_cast<uint32_t>(0x3000)); // Half-word aligned PC
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_T)); // Should stay in Thumb mode
+        ASSERT_EQ(registers[1], static_cast<uint32_t>(0x3001)); // R1 unchanged
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 3: BX R14 (Return from function call)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T; // Start in Thumb mode
+        registers.fill(0);
+        
+        registers[14] = 0x1001; // Return address in Thumb mode
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4770); // BX R14 (BX LR)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[15] & ~1, static_cast<uint32_t>(0x1000)); // Return address
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_T)); // Stay in Thumb mode
+        ASSERT_EQ(registers[14], static_cast<uint32_t>(0x1001)); // LR unchanged
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 4: BX with Hi register
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[10] = 0x4000; // ARM address in R10
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4750); // BX R10
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[15] & ~3, static_cast<uint32_t>(0x4000));
+        ASSERT_FALSE(cpu.getFlag(CPU::FLAG_T)); // Switch to ARM mode
+        ASSERT_EQ(registers[10], static_cast<uint32_t>(0x4000)); // R10 unchanged
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}
+
+TEST(Format5, EDGE_CASES) {
+    std::string beforeState;
+
+    // Test case 1: ADD to SP (R13)
+    {
+        GBA gba(true); // Test mode
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[13] = 0x8000; // Stack pointer
+        registers[0] = 0x100;   // Offset
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4445); // ADD R13, R0
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[13], static_cast<uint32_t>(0x8100)); // SP updated
+        ASSERT_EQ(registers[0], static_cast<uint32_t>(0x100)); // R0 unchanged
+        validateUnchangedRegisters(cpu, beforeState, {13, 15});
+    }
+
+    // Test case 2: MOV between same register (NOP-like)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[8] = 0x12345678;
+        
+        gba.getCPU().getMemory().write16(0x00000000, 0x4640); // MOV R8, R8 (via encoding)
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        ASSERT_EQ(registers[8], static_cast<uint32_t>(0x12345678)); // Should remain unchanged
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+
+    // Test case 3: CMP with PC (unusual but valid)
+    {
+        GBA gba(true);
+        auto& cpu = gba.getCPU();
+        auto& registers = cpu.R();
+        cpu.CPSR() = CPU::FLAG_T;
+        registers.fill(0);
+        
+        registers[15] = 0x1000;
+        registers[0] = 0x1002; // Current PC + 2
+        
+        gba.getCPU().getMemory().write16(0x00001000, 0x4547); // CMP R15, R0
+        beforeState = serializeCPUState(cpu);
+        cpu.execute(1);
+        
+        // Should compare PC+4 (pipeline) with R0
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_Z)); // Should be equal
+        ASSERT_FALSE(cpu.getFlag(CPU::FLAG_N));
+        ASSERT_TRUE(cpu.getFlag(CPU::FLAG_C)); // No borrow
+        validateUnchangedRegisters(cpu, beforeState, {15});
+    }
+}

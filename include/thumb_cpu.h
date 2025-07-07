@@ -8,8 +8,6 @@ class CPU; // Forward declaration
 class ThumbCPU {
 private:
     CPU& parentCPU; // Reference to the parent CPU
-    //  Array of function pointers for Thumb instruction handlers
-    void (ThumbCPU::*thumb_instruction_table[256])(uint16_t);
 
     // Instruction handlers
     void handle_thumb_lsl(uint16_t instruction);
@@ -107,7 +105,129 @@ private:
         &ThumbCPU::thumb_alu_mvn   // 0xF
     };
 
-    void initializeInstructionTable();
+    //  Static compile-time array of function pointers for Thumb instruction handlers
+    static constexpr void (ThumbCPU::*thumb_instruction_table[256])(uint16_t) = {
+        // 0x00-0x07: Format 1 - LSL
+        &ThumbCPU::handle_thumb_lsl, &ThumbCPU::handle_thumb_lsl, &ThumbCPU::handle_thumb_lsl, &ThumbCPU::handle_thumb_lsl,
+        &ThumbCPU::handle_thumb_lsl, &ThumbCPU::handle_thumb_lsl, &ThumbCPU::handle_thumb_lsl, &ThumbCPU::handle_thumb_lsl,
+        
+        // 0x08-0x0F: Format 1 - LSR  
+        &ThumbCPU::handle_thumb_lsr, &ThumbCPU::handle_thumb_lsr, &ThumbCPU::handle_thumb_lsr, &ThumbCPU::handle_thumb_lsr,
+        &ThumbCPU::handle_thumb_lsr, &ThumbCPU::handle_thumb_lsr, &ThumbCPU::handle_thumb_lsr, &ThumbCPU::handle_thumb_lsr,
+        
+        // 0x10-0x17: Format 1 - ASR
+        &ThumbCPU::handle_thumb_asr, &ThumbCPU::handle_thumb_asr, &ThumbCPU::handle_thumb_asr, &ThumbCPU::handle_thumb_asr,
+        &ThumbCPU::handle_thumb_asr, &ThumbCPU::handle_thumb_asr, &ThumbCPU::handle_thumb_asr, &ThumbCPU::handle_thumb_asr,
+        
+        // 0x18-0x1F: Format 2 - add/subtract
+        &ThumbCPU::handle_thumb_add_register, &ThumbCPU::handle_thumb_add_register, &ThumbCPU::handle_thumb_sub_register, &ThumbCPU::handle_thumb_sub_register,
+        &ThumbCPU::handle_thumb_add_offset, &ThumbCPU::handle_thumb_add_offset, &ThumbCPU::handle_thumb_sub_offset, &ThumbCPU::handle_thumb_sub_offset,
+        
+        // 0x20-0x27: Format 3 - MOV immediate
+        &ThumbCPU::handle_thumb_mov_imm, &ThumbCPU::handle_thumb_mov_imm, &ThumbCPU::handle_thumb_mov_imm, &ThumbCPU::handle_thumb_mov_imm,
+        &ThumbCPU::handle_thumb_mov_imm, &ThumbCPU::handle_thumb_mov_imm, &ThumbCPU::handle_thumb_mov_imm, &ThumbCPU::handle_thumb_mov_imm,
+        
+        // 0x28-0x2F: Format 3 - CMP immediate
+        &ThumbCPU::handle_thumb_cmp_imm, &ThumbCPU::handle_thumb_cmp_imm, &ThumbCPU::handle_thumb_cmp_imm, &ThumbCPU::handle_thumb_cmp_imm,
+        &ThumbCPU::handle_thumb_cmp_imm, &ThumbCPU::handle_thumb_cmp_imm, &ThumbCPU::handle_thumb_cmp_imm, &ThumbCPU::handle_thumb_cmp_imm,
+        
+        // 0x30-0x37: Format 3 - ADD immediate
+        &ThumbCPU::handle_thumb_add_imm, &ThumbCPU::handle_thumb_add_imm, &ThumbCPU::handle_thumb_add_imm, &ThumbCPU::handle_thumb_add_imm,
+        &ThumbCPU::handle_thumb_add_imm, &ThumbCPU::handle_thumb_add_imm, &ThumbCPU::handle_thumb_add_imm, &ThumbCPU::handle_thumb_add_imm,
+        
+        // 0x38-0x3F: Format 3 - SUB immediate
+        &ThumbCPU::handle_thumb_sub_imm, &ThumbCPU::handle_thumb_sub_imm, &ThumbCPU::handle_thumb_sub_imm, &ThumbCPU::handle_thumb_sub_imm,
+        &ThumbCPU::handle_thumb_sub_imm, &ThumbCPU::handle_thumb_sub_imm, &ThumbCPU::handle_thumb_sub_imm, &ThumbCPU::handle_thumb_sub_imm,
+        
+        // 0x40-0x43: Format 4 - ALU operations
+        &ThumbCPU::handle_thumb_alu_operations, &ThumbCPU::handle_thumb_alu_operations, &ThumbCPU::handle_thumb_alu_operations, &ThumbCPU::handle_thumb_alu_operations,
+        
+        // 0x44-0x47: Format 5 - Hi register operations/branch exchange
+        &ThumbCPU::handle_format5, &ThumbCPU::handle_format5, &ThumbCPU::handle_format5, &ThumbCPU::handle_format5,
+        
+        // 0x48-0x4F: Format 6 - PC relative load
+        &ThumbCPU::handle_thumb_ldr_pc_rel, &ThumbCPU::handle_thumb_ldr_pc_rel, &ThumbCPU::handle_thumb_ldr_pc_rel, &ThumbCPU::handle_thumb_ldr_pc_rel,
+        &ThumbCPU::handle_thumb_ldr_pc_rel, &ThumbCPU::handle_thumb_ldr_pc_rel, &ThumbCPU::handle_thumb_ldr_pc_rel, &ThumbCPU::handle_thumb_ldr_pc_rel,
+        
+        // 0x50-0x5F: Format 7 & 8 - load/store with register offset and sign-extended
+        &ThumbCPU::handle_thumb_str_word, &ThumbCPU::handle_thumb_str_word, &ThumbCPU::handle_thumb_strh, &ThumbCPU::handle_thumb_strh,
+        &ThumbCPU::handle_thumb_str_byte, &ThumbCPU::handle_thumb_str_byte, &ThumbCPU::handle_thumb_ldsb, &ThumbCPU::handle_thumb_ldsb,
+        &ThumbCPU::handle_thumb_ldr_word, &ThumbCPU::handle_thumb_ldr_word, &ThumbCPU::handle_thumb_ldrh, &ThumbCPU::handle_thumb_ldrh,
+        &ThumbCPU::handle_thumb_ldr_byte, &ThumbCPU::handle_thumb_ldr_byte, &ThumbCPU::handle_thumb_ldsh, &ThumbCPU::handle_thumb_ldsh,
+        
+        // 0x60-0x67: Format 9 - STR immediate offset
+        &ThumbCPU::handle_thumb_str_immediate_offset, &ThumbCPU::handle_thumb_str_immediate_offset, &ThumbCPU::handle_thumb_str_immediate_offset, &ThumbCPU::handle_thumb_str_immediate_offset,
+        &ThumbCPU::handle_thumb_str_immediate_offset, &ThumbCPU::handle_thumb_str_immediate_offset, &ThumbCPU::handle_thumb_str_immediate_offset, &ThumbCPU::handle_thumb_str_immediate_offset,
+        
+        // 0x68-0x6F: Format 9 - LDR immediate offset
+        &ThumbCPU::handle_thumb_ldr_immediate_offset, &ThumbCPU::handle_thumb_ldr_immediate_offset, &ThumbCPU::handle_thumb_ldr_immediate_offset, &ThumbCPU::handle_thumb_ldr_immediate_offset,
+        &ThumbCPU::handle_thumb_ldr_immediate_offset, &ThumbCPU::handle_thumb_ldr_immediate_offset, &ThumbCPU::handle_thumb_ldr_immediate_offset, &ThumbCPU::handle_thumb_ldr_immediate_offset,
+        
+        // 0x70-0x77: Format 9 - STRB immediate offset
+        &ThumbCPU::handle_thumb_str_immediate_offset_byte, &ThumbCPU::handle_thumb_str_immediate_offset_byte, &ThumbCPU::handle_thumb_str_immediate_offset_byte, &ThumbCPU::handle_thumb_str_immediate_offset_byte,
+        &ThumbCPU::handle_thumb_str_immediate_offset_byte, &ThumbCPU::handle_thumb_str_immediate_offset_byte, &ThumbCPU::handle_thumb_str_immediate_offset_byte, &ThumbCPU::handle_thumb_str_immediate_offset_byte,
+        
+        // 0x78-0x7F: Format 9 - LDRB immediate offset
+        &ThumbCPU::handle_thumb_ldr_immediate_offset_byte, &ThumbCPU::handle_thumb_ldr_immediate_offset_byte, &ThumbCPU::handle_thumb_ldr_immediate_offset_byte, &ThumbCPU::handle_thumb_ldr_immediate_offset_byte,
+        &ThumbCPU::handle_thumb_ldr_immediate_offset_byte, &ThumbCPU::handle_thumb_ldr_immediate_offset_byte, &ThumbCPU::handle_thumb_ldr_immediate_offset_byte, &ThumbCPU::handle_thumb_ldr_immediate_offset_byte,
+        
+        // 0x80-0x87: Format 10 - STRH immediate
+        &ThumbCPU::handle_thumb_strh_imm, &ThumbCPU::handle_thumb_strh_imm, &ThumbCPU::handle_thumb_strh_imm, &ThumbCPU::handle_thumb_strh_imm,
+        &ThumbCPU::handle_thumb_strh_imm, &ThumbCPU::handle_thumb_strh_imm, &ThumbCPU::handle_thumb_strh_imm, &ThumbCPU::handle_thumb_strh_imm,
+        
+        // 0x88-0x8F: Format 10 - LDRH immediate
+        &ThumbCPU::handle_thumb_ldrh_imm, &ThumbCPU::handle_thumb_ldrh_imm, &ThumbCPU::handle_thumb_ldrh_imm, &ThumbCPU::handle_thumb_ldrh_imm,
+        &ThumbCPU::handle_thumb_ldrh_imm, &ThumbCPU::handle_thumb_ldrh_imm, &ThumbCPU::handle_thumb_ldrh_imm, &ThumbCPU::handle_thumb_ldrh_imm,
+        
+        // 0x90-0x97: Format 11 - STR SP relative
+        &ThumbCPU::handle_thumb_str_sp_rel, &ThumbCPU::handle_thumb_str_sp_rel, &ThumbCPU::handle_thumb_str_sp_rel, &ThumbCPU::handle_thumb_str_sp_rel,
+        &ThumbCPU::handle_thumb_str_sp_rel, &ThumbCPU::handle_thumb_str_sp_rel, &ThumbCPU::handle_thumb_str_sp_rel, &ThumbCPU::handle_thumb_str_sp_rel,
+        
+        // 0x98-0x9F: Format 11 - LDR SP relative
+        &ThumbCPU::handle_thumb_ldr_sp_rel, &ThumbCPU::handle_thumb_ldr_sp_rel, &ThumbCPU::handle_thumb_ldr_sp_rel, &ThumbCPU::handle_thumb_ldr_sp_rel,
+        &ThumbCPU::handle_thumb_ldr_sp_rel, &ThumbCPU::handle_thumb_ldr_sp_rel, &ThumbCPU::handle_thumb_ldr_sp_rel, &ThumbCPU::handle_thumb_ldr_sp_rel,
+        
+        // 0xA0-0xA7: Format 12 - Load address PC
+        &ThumbCPU::handle_thumb_ldr_address_pc, &ThumbCPU::handle_thumb_ldr_address_pc, &ThumbCPU::handle_thumb_ldr_address_pc, &ThumbCPU::handle_thumb_ldr_address_pc,
+        &ThumbCPU::handle_thumb_ldr_address_pc, &ThumbCPU::handle_thumb_ldr_address_pc, &ThumbCPU::handle_thumb_ldr_address_pc, &ThumbCPU::handle_thumb_ldr_address_pc,
+        
+        // 0xA8-0xAF: Format 12 - Load address SP
+        &ThumbCPU::handle_thumb_ldr_address_sp, &ThumbCPU::handle_thumb_ldr_address_sp, &ThumbCPU::handle_thumb_ldr_address_sp, &ThumbCPU::handle_thumb_ldr_address_sp,
+        &ThumbCPU::handle_thumb_ldr_address_sp, &ThumbCPU::handle_thumb_ldr_address_sp, &ThumbCPU::handle_thumb_ldr_address_sp, &ThumbCPU::handle_thumb_ldr_address_sp,
+        
+        // 0xB0-0xBF: Format 13 & 14 - Stack operations
+        &ThumbCPU::handle_thumb_add_sub_offset_to_stack_pointer, nullptr, nullptr, nullptr,
+        &ThumbCPU::handle_thumb_push_registers, &ThumbCPU::handle_thumb_push_registers_and_lr, nullptr, nullptr,
+        nullptr, nullptr, nullptr, nullptr,
+        &ThumbCPU::handle_thumb_pop_registers, &ThumbCPU::handle_thumb_pop_registers_and_pc, nullptr, nullptr,
+        
+        // 0xC0-0xC7: Format 15 - STMIA
+        &ThumbCPU::handle_thumb_stmia, &ThumbCPU::handle_thumb_stmia, &ThumbCPU::handle_thumb_stmia, &ThumbCPU::handle_thumb_stmia,
+        &ThumbCPU::handle_thumb_stmia, &ThumbCPU::handle_thumb_stmia, &ThumbCPU::handle_thumb_stmia, &ThumbCPU::handle_thumb_stmia,
+        
+        // 0xC8-0xCF: Format 15 - LDMIA
+        &ThumbCPU::handle_thumb_ldmia, &ThumbCPU::handle_thumb_ldmia, &ThumbCPU::handle_thumb_ldmia, &ThumbCPU::handle_thumb_ldmia,
+        &ThumbCPU::handle_thumb_ldmia, &ThumbCPU::handle_thumb_ldmia, &ThumbCPU::handle_thumb_ldmia, &ThumbCPU::handle_thumb_ldmia,
+        
+        // 0xD0-0xDF: Format 16 & 17 - Conditional branch and SWI
+        &ThumbCPU::handle_thumb_beq, &ThumbCPU::handle_thumb_bne, &ThumbCPU::handle_thumb_bcs, &ThumbCPU::handle_thumb_bcc,
+        &ThumbCPU::handle_thumb_bmi, &ThumbCPU::handle_thumb_bpl, &ThumbCPU::handle_thumb_bvs, &ThumbCPU::handle_thumb_bvc,
+        &ThumbCPU::handle_thumb_bhi, &ThumbCPU::handle_thumb_bls, &ThumbCPU::handle_thumb_bge, &ThumbCPU::handle_thumb_blt,
+        &ThumbCPU::handle_thumb_bgt, &ThumbCPU::handle_thumb_ble, nullptr, &ThumbCPU::handle_thumb_swi,
+        
+        // 0xE0-0xE7: Format 18 - Unconditional branch
+        &ThumbCPU::handle_thumb_b, &ThumbCPU::handle_thumb_b, &ThumbCPU::handle_thumb_b, &ThumbCPU::handle_thumb_b,
+        &ThumbCPU::handle_thumb_b, &ThumbCPU::handle_thumb_b, &ThumbCPU::handle_thumb_b, &ThumbCPU::handle_thumb_b,
+        
+        // 0xE8-0xEF: Undefined
+        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+        
+        // 0xF0-0xFF: Format 19 - Long branch with link
+        &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl,
+        &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl,
+        &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl,
+        &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl, &ThumbCPU::handle_thumb_bl
+    };
 
     constexpr uint8_t bits10to8(uint16_t instruction) { return (uint8_t)((instruction >> 8) & 0x07); } 
     constexpr uint8_t bits7to0(uint16_t instruction) { return (uint8_t)(instruction & 0xFF); }
