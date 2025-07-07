@@ -3,8 +3,9 @@
 #include <sstream>
 #include <iomanip>
 
-// Define the static constexpr member
+// Define the static constexpr members
 constexpr void (ThumbCPU::*ThumbCPU::thumb_instruction_table[256])(uint16_t);
+constexpr void (ThumbCPU::*ThumbCPU::thumb_alu_operations_table[16])(uint8_t, uint8_t);
 
 ThumbCPU::ThumbCPU(CPU& cpu) : parentCPU(cpu) {
 Debug::log::info("Initializing ThumbCPU with parent CPU");
@@ -42,7 +43,7 @@ void ThumbCPU::execute(uint32_t cycles) {
 // Thumb instruction handlers
 
 // Stub handlers for undefined Thumb instruction functions
-void ThumbCPU::handle_thumb_lsl(uint16_t instruction) {
+void ThumbCPU::thumb_lsl(uint16_t instruction) {
     uint8_t rd = bits2to0(instruction);
     uint8_t rs = bits5to3(instruction);
     uint8_t shift_amount = bits10to6(instruction);
@@ -62,7 +63,7 @@ void ThumbCPU::handle_thumb_lsl(uint16_t instruction) {
     Debug::log::info("Executing Thumb LSL: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " << " + std::to_string(shift_amount));
 }
 
-void ThumbCPU::handle_thumb_lsr(uint16_t instruction) {
+void ThumbCPU::thumb_lsr(uint16_t instruction) {
     uint8_t rd = bits2to0(instruction);
     uint8_t rs = bits5to3(instruction);
     uint8_t shift_amount = bits10to6(instruction);
@@ -82,7 +83,7 @@ void ThumbCPU::handle_thumb_lsr(uint16_t instruction) {
     Debug::log::info("Executing Thumb LSR: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " >> " + std::to_string(shift_amount));
 }
 
-void ThumbCPU::handle_thumb_asr(uint16_t instruction) {
+void ThumbCPU::thumb_asr(uint16_t instruction) {
     uint8_t rd = bits2to0(instruction);
     uint8_t rs = bits5to3(instruction);
     uint8_t shift_amount = bits10to6(instruction);
@@ -105,7 +106,7 @@ void ThumbCPU::handle_thumb_asr(uint16_t instruction) {
     Debug::log::info("Executing Thumb ASR: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " >> " + std::to_string(shift_amount));
 }
 
-void ThumbCPU::handle_thumb_add_register(uint16_t instruction) {
+void ThumbCPU::thumb_add_register(uint16_t instruction) {
     uint8_t rd = bits2to0(instruction);
     uint8_t rs = bits5to3(instruction);
     uint8_t rn = bits8to6(instruction);
@@ -127,7 +128,7 @@ void ThumbCPU::handle_thumb_add_register(uint16_t instruction) {
     Debug::log::info("Executing Thumb ADD (register): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " + R" + std::to_string(rn));
 }
 
-void ThumbCPU::handle_thumb_add_offset(uint16_t instruction) {
+void ThumbCPU::thumb_add_offset(uint16_t instruction) {
     uint8_t rd = bits2to0(instruction);
     uint8_t rs = bits5to3(instruction);
     uint8_t offset = bits8to6(instruction);
@@ -147,7 +148,7 @@ void ThumbCPU::handle_thumb_add_offset(uint16_t instruction) {
     Debug::log::info("Executing Thumb ADD (offset): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " + " + std::to_string(offset));
 }
 
-void ThumbCPU::handle_thumb_sub_register(uint16_t instruction) {
+void ThumbCPU::thumb_sub_register(uint16_t instruction) {
     uint8_t rd = bits2to0(instruction);
     uint8_t rs = bits5to3(instruction);
     uint8_t rn = bits8to6(instruction);
@@ -168,7 +169,7 @@ void ThumbCPU::handle_thumb_sub_register(uint16_t instruction) {
     Debug::log::info("Executing Thumb SUB (register): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " - R" + std::to_string(rn));
 }
 
-void ThumbCPU::handle_thumb_sub_offset(uint16_t instruction) {
+void ThumbCPU::thumb_sub_offset(uint16_t instruction) {
     uint8_t rd = bits2to0(instruction);
     uint8_t rs = bits5to3(instruction);
     uint8_t offset = bits8to6(instruction);
@@ -188,7 +189,7 @@ void ThumbCPU::handle_thumb_sub_offset(uint16_t instruction) {
     Debug::log::info("Executing Thumb SUB (offset): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " - " + std::to_string(offset));
 }
 
-void ThumbCPU::handle_thumb_mov_imm(uint16_t instruction) {
+void ThumbCPU::thumb_mov_imm(uint16_t instruction) {
     uint8_t rd = bits10to8(instruction);
     uint8_t imm = bits7to0(instruction);
 
@@ -199,7 +200,7 @@ void ThumbCPU::handle_thumb_mov_imm(uint16_t instruction) {
     Debug::log::info("Executing Thumb MOV (immediate): R" + std::to_string(rd) + " = " + std::to_string(imm));
 }
 
-void ThumbCPU::handle_thumb_cmp_imm(uint16_t instruction) {
+void ThumbCPU::thumb_cmp_imm(uint16_t instruction) {
     uint8_t rd = bits10to8(instruction);
     uint8_t imm = bits7to0(instruction);
 
@@ -214,7 +215,7 @@ void ThumbCPU::handle_thumb_cmp_imm(uint16_t instruction) {
     Debug::log::info("CMP_IMM: R[" + std::to_string(rd) + "] = " + std::to_string(parentCPU.R()[rd]) + ", imm = " + std::to_string(imm));
 }
 
-void ThumbCPU::handle_thumb_add_imm(uint16_t instruction) {
+void ThumbCPU::thumb_add_imm(uint16_t instruction) {
     uint8_t rd = bits10to8(instruction);
     uint8_t imm = bits7to0(instruction);
 
@@ -230,7 +231,7 @@ void ThumbCPU::handle_thumb_add_imm(uint16_t instruction) {
     Debug::log::info("Executing Thumb ADD (immediate): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + " + std::to_string(imm));
 }
 
-void ThumbCPU::handle_thumb_sub_imm(uint16_t instruction) {
+void ThumbCPU::thumb_sub_imm(uint16_t instruction) {
     uint8_t rd = bits10to8(instruction);
     uint8_t imm = bits7to0(instruction);
 
@@ -246,7 +247,7 @@ void ThumbCPU::handle_thumb_sub_imm(uint16_t instruction) {
     Debug::log::info("Executing Thumb SUB (immediate): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " - " + std::to_string(imm));
 }
 
-void ThumbCPU::handle_thumb_alu_operations(uint16_t instruction) {
+void ThumbCPU::thumb_alu_operations(uint16_t instruction) {
     uint8_t sub_opcode = bits9to6(instruction);
     uint8_t rd = bits2to0(instruction);
     uint8_t rs = bits5to3(instruction);
@@ -510,7 +511,7 @@ void ThumbCPU::thumb_alu_mvn(uint8_t rd, uint8_t rs) {
     Debug::log::info("Executing Thumb MVN: R" + std::to_string(rd) + " = ~R" + std::to_string(rs));
 }
 
-void ThumbCPU::handle_format5(uint16_t instruction) {
+void ThumbCPU::thumb_format5(uint16_t instruction) {
     // Format 5: Hi register operations/branch exchange
     // Encoding: 010001[Op][H1][H2][Rs/Hs][Rd/Hd]
     
@@ -631,7 +632,7 @@ void ThumbCPU::handle_format5(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_ldr(uint16_t instruction) {
+void ThumbCPU::thumb_ldr(uint16_t instruction) {
     uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
     uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
 
@@ -644,7 +645,7 @@ void ThumbCPU::handle_thumb_ldr(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDR: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
-void ThumbCPU::handle_thumb_str_word(uint16_t instruction) {
+void ThumbCPU::thumb_str_word(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Source register (bits 0-2)
     uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
     uint8_t rm = (instruction >> 6) & 0x07; // Offset register (bits 6-8)
@@ -658,7 +659,7 @@ void ThumbCPU::handle_thumb_str_word(uint16_t instruction) {
     Debug::log::info("Executing Thumb STR (word): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
-void ThumbCPU::handle_thumb_ldr_word(uint16_t instruction) {
+void ThumbCPU::thumb_ldr_word(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
     uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
     uint8_t rm = (instruction >> 6) & 0x07; // Offset register (bits 6-8)
@@ -677,7 +678,7 @@ void ThumbCPU::handle_thumb_ldr_word(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDR (word): R" + std::to_string(rd) + " = [0x" + Debug::toHexString(address, 8) + "]");
 }
 
-void ThumbCPU::handle_thumb_ldr_byte(uint16_t instruction) {
+void ThumbCPU::thumb_ldr_byte(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
     uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
     uint8_t rm = (instruction >> 6) & 0x07; // Offset register (bits 6-8)
@@ -691,7 +692,7 @@ void ThumbCPU::handle_thumb_ldr_byte(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDR (byte): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
-void ThumbCPU::handle_thumb_str_byte(uint16_t instruction) {
+void ThumbCPU::thumb_str_byte(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Source register (bits 0-2)
     uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
     uint8_t rm = (instruction >> 6) & 0x07; // Offset register (bits 6-8)
@@ -708,7 +709,7 @@ void ThumbCPU::handle_thumb_str_byte(uint16_t instruction) {
         ", data=0x" + Debug::toHexString(parentCPU.R()[rd] & 0xFF, 2) + ")");
 }
 
-void ThumbCPU::handle_thumb_strh(uint16_t instruction) {
+void ThumbCPU::thumb_strh(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Source register (bits 0-2)
     uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
     uint8_t rm = (instruction >> 6) & 0x07; // Offset register (bits 6-8)
@@ -722,7 +723,7 @@ void ThumbCPU::handle_thumb_strh(uint16_t instruction) {
     Debug::log::info("Executing Thumb STRH: [0x" + Debug::toHexString(address, 8) + "] = R" + std::to_string(rd));
 }
 
-void ThumbCPU::handle_thumb_ldsb(uint16_t instruction) {
+void ThumbCPU::thumb_ldsb(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
     uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
     uint8_t rm = (instruction >> 6) & 0x07; // Offset register (bits 6-8)
@@ -737,7 +738,7 @@ void ThumbCPU::handle_thumb_ldsb(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDSB: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
-void ThumbCPU::handle_thumb_ldrh(uint16_t instruction) {
+void ThumbCPU::thumb_ldrh(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
     uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
     uint8_t rm = (instruction >> 6) & 0x07; // Offset register (bits 6-8)
@@ -751,7 +752,7 @@ void ThumbCPU::handle_thumb_ldrh(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDRH: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
-void ThumbCPU::handle_thumb_ldsh(uint16_t instruction) {
+void ThumbCPU::thumb_ldsh(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Destination register (bits 0-2)
     uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
     uint8_t rm = (instruction >> 6) & 0x07; // Offset register (bits 6-8)
@@ -772,7 +773,7 @@ void ThumbCPU::handle_thumb_ldsh(uint16_t instruction) {
     Debug::log::info(ss.str());
 }
 
-void ThumbCPU::handle_thumb_str_immediate_offset(uint16_t instruction) {
+void ThumbCPU::thumb_str_immediate_offset(uint16_t instruction) {
     uint8_t rd = instruction & 0x07;              // Source register (bits 2:0)
     uint8_t rb = (instruction >> 3) & 0x07;       // Base register (bits 5:3)
     uint8_t offset5 = (instruction >> 6) & 0x1F;  // Immediate offset (bits 10:6)
@@ -786,7 +787,7 @@ void ThumbCPU::handle_thumb_str_immediate_offset(uint16_t instruction) {
     Debug::log::info("Executing Thumb STR (immediate offset): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
-void ThumbCPU::handle_thumb_ldr_immediate_offset(uint16_t instruction) {
+void ThumbCPU::thumb_ldr_immediate_offset(uint16_t instruction) {
     uint8_t rd = instruction & 0x07;              // Destination register (bits 2:0)
     uint8_t rb = (instruction >> 3) & 0x07;       // Base register (bits 5:3)
     uint8_t offset5 = (instruction >> 6) & 0x1F;  // Immediate offset (bits 10:6)
@@ -800,7 +801,7 @@ void ThumbCPU::handle_thumb_ldr_immediate_offset(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDR (immediate offset): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
-void ThumbCPU::handle_thumb_str_immediate_offset_byte(uint16_t instruction) {
+void ThumbCPU::thumb_str_immediate_offset_byte(uint16_t instruction) {
     uint8_t rd = instruction & 0x07;              // Source register (bits 2:0)
     uint8_t rb = (instruction >> 3) & 0x07;       // Base register (bits 5:3)
     uint8_t offset5 = (instruction >> 6) & 0x1F;  // Immediate offset (bits 10:6)
@@ -814,7 +815,7 @@ void ThumbCPU::handle_thumb_str_immediate_offset_byte(uint16_t instruction) {
     Debug::log::info("Executing Thumb STR (immediate offset byte): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
-void ThumbCPU::handle_thumb_ldr_immediate_offset_byte(uint16_t instruction) {
+void ThumbCPU::thumb_ldr_immediate_offset_byte(uint16_t instruction) {
     uint8_t rd = instruction & 0x07;              // Destination register (bits 2:0)
     uint8_t rb = (instruction >> 3) & 0x07;       // Base register (bits 5:3)
     uint8_t offset5 = (instruction >> 6) & 0x1F;  // Immediate offset (bits 10:6)
@@ -828,7 +829,7 @@ void ThumbCPU::handle_thumb_ldr_immediate_offset_byte(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDR (immediate offset byte): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
-void ThumbCPU::handle_thumb_strh_imm(uint16_t instruction) {
+void ThumbCPU::thumb_strh_imm(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Source register (bits 2-0)
     uint8_t rb = (instruction >> 3) & 0x07; // Base register (bits 5-3)
     uint8_t offset5 = (instruction >> 6) & 0x1F; // Immediate offset (bits 10-6)
@@ -842,7 +843,7 @@ void ThumbCPU::handle_thumb_strh_imm(uint16_t instruction) {
     Debug::log::info("Executing Thumb STRH (immediate offset): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
-void ThumbCPU::handle_thumb_ldrh_imm(uint16_t instruction) {
+void ThumbCPU::thumb_ldrh_imm(uint16_t instruction) {
     uint8_t rd = instruction & 0x07; // Destination register (bits 2-0)
     uint8_t rb = (instruction >> 3) & 0x07; // Base register (bits 5-3)
     uint8_t offset5 = (instruction >> 6) & 0x1F; // Immediate offset (bits 10-6)
@@ -856,7 +857,7 @@ void ThumbCPU::handle_thumb_ldrh_imm(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDRH (immediate offset): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
-void ThumbCPU::handle_thumb_str_sp_rel(uint16_t instruction) {
+void ThumbCPU::thumb_str_sp_rel(uint16_t instruction) {
     uint8_t rd = (instruction >> 8) & 0x07; // Source register (bits 8-10)
     uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
 
@@ -869,7 +870,7 @@ void ThumbCPU::handle_thumb_str_sp_rel(uint16_t instruction) {
     Debug::log::info("Executing Thumb STR (SP-relative): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
-void ThumbCPU::handle_thumb_ldr_sp_rel(uint16_t instruction) {
+void ThumbCPU::thumb_ldr_sp_rel(uint16_t instruction) {
     uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
     uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
 
@@ -882,7 +883,7 @@ void ThumbCPU::handle_thumb_ldr_sp_rel(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDR (SP-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
-void ThumbCPU::handle_thumb_ldr_address_pc(uint16_t instruction) {
+void ThumbCPU::thumb_ldr_address_pc(uint16_t instruction) {
     uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
     uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
 
@@ -895,7 +896,7 @@ void ThumbCPU::handle_thumb_ldr_address_pc(uint16_t instruction) {
     Debug::log::info("Executing Thumb ADD (PC-relative): R" + std::to_string(rd) + " = 0x" + std::to_string(address));
 }
 
-void ThumbCPU::handle_thumb_ldr_address_sp(uint16_t instruction) {
+void ThumbCPU::thumb_ldr_address_sp(uint16_t instruction) {
     uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
     uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
 
@@ -908,7 +909,7 @@ void ThumbCPU::handle_thumb_ldr_address_sp(uint16_t instruction) {
     Debug::log::info("Executing Thumb ADD (SP-relative): R" + std::to_string(rd) + " = 0x" + std::to_string(address));
 }
 
-void ThumbCPU::handle_thumb_ldr_pc_rel(uint16_t instruction) {
+void ThumbCPU::thumb_ldr_pc_rel(uint16_t instruction) {
     uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
     uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
 
@@ -924,7 +925,7 @@ void ThumbCPU::handle_thumb_ldr_pc_rel(uint16_t instruction) {
     Debug::log::info("Executing Thumb LDR (PC-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
-void ThumbCPU::handle_thumb_add_sub_offset_to_stack_pointer(uint16_t instruction) {
+void ThumbCPU::thumb_add_sub_offset_to_stack_pointer(uint16_t instruction) {
     uint8_t sign = (instruction >> 7) & 0x01; // Sign bit (bit 7)
     uint16_t offset = instruction & 0x7F; // Immediate offset (bits 0-6)
 
@@ -938,7 +939,7 @@ void ThumbCPU::handle_thumb_add_sub_offset_to_stack_pointer(uint16_t instruction
     }
 }
 
-void ThumbCPU::handle_thumb_push_registers(uint16_t instruction) {
+void ThumbCPU::thumb_push_registers(uint16_t instruction) {
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
     // Count the number of registers to push
@@ -965,7 +966,7 @@ void ThumbCPU::handle_thumb_push_registers(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_push_registers_and_lr(uint16_t instruction) {
+void ThumbCPU::thumb_push_registers_and_lr(uint16_t instruction) {
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
     // Count the number of registers to push
@@ -998,7 +999,7 @@ void ThumbCPU::handle_thumb_push_registers_and_lr(uint16_t instruction) {
     Debug::log::info("Pushing LR onto stack: [0x" + std::to_string(lr_address) + "] = LR");
 }
 
-void ThumbCPU::handle_thumb_pop_registers(uint16_t instruction) {
+void ThumbCPU::thumb_pop_registers(uint16_t instruction) {
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
     // Pop registers from the stack
@@ -1011,7 +1012,7 @@ void ThumbCPU::handle_thumb_pop_registers(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_pop_registers_and_pc(uint16_t instruction) {
+void ThumbCPU::thumb_pop_registers_and_pc(uint16_t instruction) {
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
     // Pop registers from the stack
@@ -1029,7 +1030,7 @@ void ThumbCPU::handle_thumb_pop_registers_and_pc(uint16_t instruction) {
     parentCPU.R()[13] += 4; // Increment SP by 4
 }
 
-void ThumbCPU::handle_thumb_stmia(uint16_t instruction) {
+void ThumbCPU::thumb_stmia(uint16_t instruction) {
     uint8_t rn = (instruction >> 8) & 0x07; // Base register (bits 8-10)
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
@@ -1047,7 +1048,7 @@ void ThumbCPU::handle_thumb_stmia(uint16_t instruction) {
     parentCPU.R()[rn] = address;
 }
 
-void ThumbCPU::handle_thumb_ldmia(uint16_t instruction) {
+void ThumbCPU::thumb_ldmia(uint16_t instruction) {
     uint8_t rn = (instruction >> 8) & 0x07; // Base register (bits 8-10)
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
@@ -1068,7 +1069,7 @@ void ThumbCPU::handle_thumb_ldmia(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_beq(uint16_t instruction) {
+void ThumbCPU::thumb_beq(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_Z) { // Check Zero flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1076,7 +1077,7 @@ void ThumbCPU::handle_thumb_beq(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bne(uint16_t instruction) {
+void ThumbCPU::thumb_bne(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_Z)) { // Check Zero flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1084,7 +1085,7 @@ void ThumbCPU::handle_thumb_bne(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bcs(uint16_t instruction) {
+void ThumbCPU::thumb_bcs(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_C) { // Check Carry flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1092,7 +1093,7 @@ void ThumbCPU::handle_thumb_bcs(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bcc(uint16_t instruction) {
+void ThumbCPU::thumb_bcc(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_C)) { // Check Carry flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1100,7 +1101,7 @@ void ThumbCPU::handle_thumb_bcc(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bmi(uint16_t instruction) {
+void ThumbCPU::thumb_bmi(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_N) { // Check Negative flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1108,7 +1109,7 @@ void ThumbCPU::handle_thumb_bmi(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bpl(uint16_t instruction) {
+void ThumbCPU::thumb_bpl(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_N)) { // Check Negative flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1116,7 +1117,7 @@ void ThumbCPU::handle_thumb_bpl(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bvs(uint16_t instruction) {
+void ThumbCPU::thumb_bvs(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_V) { // Check Overflow flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1124,7 +1125,7 @@ void ThumbCPU::handle_thumb_bvs(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bvc(uint16_t instruction) {
+void ThumbCPU::thumb_bvc(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_V)) { // Check Overflow flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1132,7 +1133,7 @@ void ThumbCPU::handle_thumb_bvc(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bhi(uint16_t instruction) {
+void ThumbCPU::thumb_bhi(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if ((parentCPU.CPSR() & CPU::FLAG_C) && !(parentCPU.CPSR() & CPU::FLAG_Z)) { // Check Carry and Zero flags
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1140,7 +1141,7 @@ void ThumbCPU::handle_thumb_bhi(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bls(uint16_t instruction) {
+void ThumbCPU::thumb_bls(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_C) || (parentCPU.CPSR() & CPU::FLAG_Z)) { // Check Carry and Zero flags
         parentCPU.R()[15] += (offset << 1); // Branch to target address
@@ -1148,7 +1149,7 @@ void ThumbCPU::handle_thumb_bls(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bge(uint16_t instruction) {
+void ThumbCPU::thumb_bge(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
@@ -1158,7 +1159,7 @@ void ThumbCPU::handle_thumb_bge(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_blt(uint16_t instruction) {
+void ThumbCPU::thumb_blt(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
@@ -1168,7 +1169,7 @@ void ThumbCPU::handle_thumb_blt(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_bgt(uint16_t instruction) {
+void ThumbCPU::thumb_bgt(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     bool z_flag = (parentCPU.CPSR() & CPU::FLAG_Z) != 0;
    
@@ -1180,7 +1181,7 @@ void ThumbCPU::handle_thumb_bgt(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_ble(uint16_t instruction) {
+void ThumbCPU::thumb_ble(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     bool z_flag = (parentCPU.CPSR() & CPU::FLAG_Z) != 0;
     bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
@@ -1191,7 +1192,7 @@ void ThumbCPU::handle_thumb_ble(uint16_t instruction) {
     }
 }
 
-void ThumbCPU::handle_thumb_swi(uint16_t instruction) {
+void ThumbCPU::thumb_swi(uint16_t instruction) {
     uint8_t comment = instruction & 0xFF; // Software interrupt comment (bits 0-7)
 
     // Handle the software interrupt
@@ -1199,7 +1200,7 @@ void ThumbCPU::handle_thumb_swi(uint16_t instruction) {
     //handle_software_interrupt(comment); // Call the software interrupt handler
 }
 
-void ThumbCPU::handle_thumb_b(uint16_t instruction) {
+void ThumbCPU::thumb_b(uint16_t instruction) {
     int16_t offset = instruction & 0x7FF; // Signed 11-bit offset (bits 0-10)
     if (offset & 0x400) { // Sign-extend the offset
         offset |= 0xF800;
@@ -1210,7 +1211,7 @@ void ThumbCPU::handle_thumb_b(uint16_t instruction) {
     Debug::log::info("Executing Thumb B: Branch to 0x" + Debug::toHexString(parentCPU.R()[15], 8));
 }
 
-void ThumbCPU::handle_thumb_bl(uint16_t instruction) {
+void ThumbCPU::thumb_bl(uint16_t instruction) {
     // BL is a two-part instruction in Thumb mode
     // First instruction (F000-F7FF): Sets up high part of target address
     // Second instruction (F800-FFFF): Completes the branch with link
