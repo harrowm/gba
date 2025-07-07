@@ -103,7 +103,7 @@ void ThumbCPU::initializeInstructionTable() {
   
     // Format 6 - PC relative load
     for (int i = 0b01001000; i <= 0b01001111; i++) {
-        thumb_instruction_table[i] = &ThumbCPU::handle_thumb_ldr_address_pc; 
+        thumb_instruction_table[i] = &ThumbCPU::handle_thumb_ldr_pc_rel; 
     }
 
     // Format 7 - load/store with register offset
@@ -1039,26 +1039,42 @@ void ThumbCPU::handle_thumb_ldr_address_pc(uint16_t instruction) {
     uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
     uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
 
-    // Calculate the address to load from
+    // Calculate the address (ADD Rd, PC, #imm)
     uint32_t address = (parentCPU.R()[15] & ~0x3) + (offset << 2); // PC-relative addressing with word alignment
 
-    // Perform the load operation using memory_read_32
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
+    // Store the calculated address in the destination register
+    parentCPU.R()[rd] = address;
 
-    Debug::log::info("Executing Thumb LDR (PC-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    Debug::log::info("Executing Thumb ADD (PC-relative): R" + std::to_string(rd) + " = 0x" + std::to_string(address));
 }
 
 void ThumbCPU::handle_thumb_ldr_address_sp(uint16_t instruction) {
     uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
     uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
 
-    // Calculate the address to load from
+    // Calculate the address (ADD Rd, SP, #imm)
     uint32_t address = parentCPU.R()[13] + (offset << 2); // SP-relative addressing with word alignment
+
+    // Store the calculated address in the destination register
+    parentCPU.R()[rd] = address;
+
+    Debug::log::info("Executing Thumb ADD (SP-relative): R" + std::to_string(rd) + " = 0x" + std::to_string(address));
+}
+
+void ThumbCPU::handle_thumb_ldr_pc_rel(uint16_t instruction) {
+    uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
+    uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
+
+    // Calculate the address to load from (LDR Rd, [PC, #imm])
+    // PC value used is current instruction address word-aligned (without adding 4)
+    uint32_t instruction_address = parentCPU.R()[15] - 2; // Current PC - 2 to get instruction address
+    uint32_t pc_base = (instruction_address + 4) & ~0x3; // Pipeline PC: instruction address + 4, then word align
+    uint32_t address = pc_base + (offset << 2);
 
     // Perform the load operation using memory_read_32
     parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
 
-    Debug::log::info("Executing Thumb LDR (SP-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    Debug::log::info("Executing Thumb LDR (PC-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::handle_thumb_add_sub_offset_to_stack_pointer(uint16_t instruction) {
@@ -1078,12 +1094,26 @@ void ThumbCPU::handle_thumb_add_sub_offset_to_stack_pointer(uint16_t instruction
 void ThumbCPU::handle_thumb_push_registers(uint16_t instruction) {
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
-    // Push registers onto the stack
+    // Count the number of registers to push
+    int register_count = 0;
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
-            parentCPU.R()[13] -= 4; // Decrement SP by 4
-            parentCPU.getMemory().write32(parentCPU.R()[13], parentCPU.R()[i]); // Write register to memory
-            Debug::log::info("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(parentCPU.R()[13]) + "] = R" + std::to_string(i));
+            register_count++;
+        }
+    }
+
+    // Decrement SP by total amount first
+    parentCPU.R()[13] -= register_count * 4;
+    uint32_t base_address = parentCPU.R()[13];
+
+    // Push registers onto the stack in ascending order of addresses
+    int offset = 0;
+    for (int i = 0; i < 8; i++) {
+        if (register_list & (1 << i)) {
+            uint32_t address = base_address + (offset * 4);
+            parentCPU.getMemory().write32(address, parentCPU.R()[i]); // Write register to memory
+            Debug::log::info("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(address) + "] = R" + std::to_string(i));
+            offset++;
         }
     }
 }
@@ -1091,19 +1121,34 @@ void ThumbCPU::handle_thumb_push_registers(uint16_t instruction) {
 void ThumbCPU::handle_thumb_push_registers_and_lr(uint16_t instruction) {
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
-    // Push registers onto the stack
+    // Count the number of registers to push
+    int register_count = 0;
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
-            parentCPU.R()[13] -= 4; // Decrement SP by 4
-            parentCPU.getMemory().write32(parentCPU.R()[13], parentCPU.R()[i]); // Write register to memory
-            Debug::log::info("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(parentCPU.R()[13]) + "] = R" + std::to_string(i));
+            register_count++;
+        }
+    }
+    register_count++; // Add 1 for LR
+
+    // Decrement SP by total amount first
+    parentCPU.R()[13] -= register_count * 4;
+    uint32_t base_address = parentCPU.R()[13];
+
+    // Push registers onto the stack in ascending order of addresses
+    int offset = 0;
+    for (int i = 0; i < 8; i++) {
+        if (register_list & (1 << i)) {
+            uint32_t address = base_address + (offset * 4);
+            parentCPU.getMemory().write32(address, parentCPU.R()[i]); // Write register to memory
+            Debug::log::info("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(address) + "] = R" + std::to_string(i));
+            offset++;
         }
     }
 
-    // Push LR onto the stack
-    parentCPU.R()[13] -= 4; // Decrement SP by 4
-    parentCPU.getMemory().write32(parentCPU.R()[13], parentCPU.R()[14]); // Write LR to memory
-    Debug::log::info("Pushing LR onto stack: [0x" + std::to_string(parentCPU.R()[13]) + "] = LR");
+    // Push LR onto the stack (at the highest address)
+    uint32_t lr_address = base_address + (offset * 4);
+    parentCPU.getMemory().write32(lr_address, parentCPU.R()[14]); // Write LR to memory
+    Debug::log::info("Pushing LR onto stack: [0x" + std::to_string(lr_address) + "] = LR");
 }
 
 void ThumbCPU::handle_thumb_pop_registers(uint16_t instruction) {
