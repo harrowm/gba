@@ -8,7 +8,7 @@ class CPU; // Forward declaration
 class ARMCPU {
 private:
     CPU& parentCPU; // Reference to the parent CPU
-    void decodeAndExecute(uint32_t instruction);
+    bool decodeAndExecute(uint32_t instruction);
 
 public:
     explicit ARMCPU(CPU& cpu);

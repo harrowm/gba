@@ -27,10 +27,7 @@ private:
     void handle_thumb_add_imm(uint16_t instruction);
     void handle_thumb_sub_imm(uint16_t instruction);
     void handle_thumb_alu_operations(uint16_t instruction);
-    void handle_add_hi(uint16_t instruction);
-    void handle_cmp_hi(uint16_t instruction);
-    void handle_mov_hi(uint16_t instruction);
-    void handle_bx_hi(uint16_t instruction);
+    void handle_format5(uint16_t instruction);
     void handle_thumb_ldr(uint16_t instruction);
     void handle_thumb_str_word(uint16_t instruction);
     void handle_thumb_str_byte(uint16_t instruction);
