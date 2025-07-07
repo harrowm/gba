@@ -1,10 +1,10 @@
 #include "test_cpu_common.h"
 
-// ARM Thumb Format 17: Unconditional branch
+// ARM Thumb Format 18: Unconditional branch
 // Encoding: 11100[Offset11]
 // Instructions: B
 
-TEST(CPU, B) {
+TEST(Format18, B) {
     std::string beforeState;
 
     // Test case 1: Simple forward branch

@@ -1265,8 +1265,11 @@ void ThumbCPU::handle_thumb_ldmia(uint16_t instruction) {
         }
     }
 
-    // Update the base register
-    parentCPU.R()[rn] = address;
+    // Update the base register only if it's not in the register list
+    // If it's in the register list, it already got loaded with the memory value
+    if (!(register_list & (1 << rn))) {
+        parentCPU.R()[rn] = address;
+    }
 }
 
 void ThumbCPU::handle_thumb_beq(uint16_t instruction) {
