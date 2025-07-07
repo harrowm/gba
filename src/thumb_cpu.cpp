@@ -95,11 +95,10 @@ void ThumbCPU::initializeInstructionTable() {
     }
 
     // Format 5 - HI register operations/branch exchange
-    // These will have to be decoded further based on the specific operation
-    thumb_instruction_table[0b01000100] = &ThumbCPU::handle_add_hi;
-    thumb_instruction_table[0b01000101] = &ThumbCPU::handle_cmp_hi;
-    thumb_instruction_table[0b01000110] = &ThumbCPU::handle_mov_hi;
-    thumb_instruction_table[0b01000111] = &ThumbCPU::handle_bx_hi;
+    // These will be decoded in handle_format5 based on Op field
+    for (int i = 0b01000100; i <= 0b01000111; i++) {
+        thumb_instruction_table[i] = &ThumbCPU::handle_format5;
+    }
   
     // Format 6 - PC relative load
     for (int i = 0b01001000; i <= 0b01001111; i++) {
@@ -715,73 +714,125 @@ void ThumbCPU::thumb_alu_mvn(uint8_t rd, uint8_t rs) {
     Debug::log::info("Executing Thumb MVN: R" + std::to_string(rd) + " = ~R" + std::to_string(rs));
 }
 
-void ThumbCPU::handle_add_hi(uint16_t instruction) {
-    uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-
-    // Perform the addition operation
-    uint32_t op1 = parentCPU.R()[rd];
-    uint32_t op2 = parentCPU.R()[rs];
-    uint32_t result = op1 + op2;
-
-    // Update the destination register
-    parentCPU.R()[rd] = result;
-
-    // Update CPSR flags based on the result
-    parentCPU.updateZFlag(result);
-    parentCPU.updateNFlag(result);
-    parentCPU.updateCFlagAdd(op1, op2);
-    parentCPU.updateVFlag(op1, op2, result);
-
-    Debug::log::info("Executing Thumb ADD (HI register): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + R" + std::to_string(rs));
-}
-
-void ThumbCPU::handle_cmp_hi(uint16_t instruction) {
-    uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-
-    // Perform the comparison operation
-    uint32_t op1 = parentCPU.R()[rd];
-    uint32_t op2 = parentCPU.R()[rs];
-    uint32_t result = op1 - op2;
-
-    // Update CPSR flags based on the result
-    parentCPU.updateZFlag(result);
-    parentCPU.updateNFlag(result);
-    parentCPU.updateCFlagSub(op1, op2);
-    parentCPU.updateVFlagSub(op1, op2, result);
-
-    Debug::log::info("Executing Thumb CMP (HI register): R" + std::to_string(rd) + " - R" + std::to_string(rs));
-}
-
-void ThumbCPU::handle_mov_hi(uint16_t instruction) {
-    uint8_t rd = (instruction >> 8) & 0x07; // Destination register (bits 8-10)
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-
-    // Perform the move operation
-    uint32_t result = parentCPU.R()[rs];
-    parentCPU.R()[rd] = result;
-
-    parentCPU.updateZFlag(result);
-    parentCPU.updateNFlag(result);
-
-    Debug::log::info("Executing Thumb MOV (HI register): R" + std::to_string(rd) + " = R" + std::to_string(rs));
-}
-
-void ThumbCPU::handle_bx_hi(uint16_t instruction) {
-    uint8_t rs = (instruction >> 3) & 0x07; // Source register (bits 3-5)
-
-    // Perform the branch exchange operation
-    parentCPU.R()[15] = parentCPU.R()[rs] & ~1; // Update PC, clearing the least significant bit
-
-    // Update CPSR mode based on the least significant bit of the target address
-    if (parentCPU.R()[rs] & 1) {
-        parentCPU.CPSR() |= CPU::FLAG_T; // Set Thumb mode
-    } else {
-        parentCPU.CPSR() &= ~CPU::FLAG_T; // Clear Thumb mode
-    }
+void ThumbCPU::handle_format5(uint16_t instruction) {
+    // Format 5: Hi register operations/branch exchange
+    // Encoding: 010001[Op][H1][H2][Rs/Hs][Rd/Hd]
     
-    Debug::log::info("Executing Thumb BX (HI register): Branch to R" + std::to_string(rs) + ", mode: " + ((parentCPU.R()[rs] & 1) ? "Thumb" : "ARM"));
+    uint8_t op = (instruction >> 8) & 0x3;  // bits 9-8
+    uint8_t h1 = (instruction >> 7) & 0x1;  // bit 7
+    uint8_t h2 = (instruction >> 6) & 0x1;  // bit 6
+    uint8_t rs_field = (instruction >> 3) & 0x7;  // bits 5-3
+    uint8_t rd_field = instruction & 0x7;  // bits 2-0
+    
+    // Calculate actual register numbers
+    uint8_t rs = rs_field + (h2 ? 8 : 0);
+    uint8_t rd = rd_field + (h1 ? 8 : 0);
+    
+    switch (op) {
+        case 0b00: // ADD
+            {
+                uint32_t op1, op2;
+                
+                // Handle PC reads with pipeline offset
+                if (rd == 15) {
+                    op1 = parentCPU.R()[15] + 2; // PC read gives PC+4 (current instruction + 4)
+                } else {
+                    op1 = parentCPU.R()[rd];
+                }
+                
+                if (rs == 15) {
+                    op2 = parentCPU.R()[15] + 2; // PC read gives PC+4 (current instruction + 4)
+                } else {
+                    op2 = parentCPU.R()[rs];
+                }
+                
+                uint32_t result = op1 + op2;
+                
+                parentCPU.R()[rd] = result;
+                
+                // Special case: if destination is PC, handle branch
+                if (rd == 15) {
+                    parentCPU.R()[15] = result & ~1; // Clear bit 0 for ARM alignment
+                    // Note: PC writes in Thumb mode stay in Thumb mode
+                }
+                
+                // ADD with high registers does not affect flags
+            }
+            break;
+            
+        case 0b01: // CMP
+            {
+                uint32_t op1, op2;
+                
+                // Handle PC reads with pipeline offset
+                if (rd == 15) {
+                    op1 = parentCPU.R()[15] + 2; // PC read gives PC+4 (current instruction + 4)
+                } else {
+                    op1 = parentCPU.R()[rd];
+                }
+                
+                if (rs == 15) {
+                    op2 = parentCPU.R()[15] + 2; // PC read gives PC+4 (current instruction + 4)
+                } else {
+                    op2 = parentCPU.R()[rs];
+                }
+                
+                uint32_t result = op1 - op2;
+                
+                // CMP always updates flags
+                parentCPU.updateZFlag(result);
+                parentCPU.updateNFlag(result);
+                parentCPU.updateCFlagSub(op1, op2);
+                parentCPU.updateVFlagSub(op1, op2, result);
+            }
+            break;
+            
+        case 0b10: // MOV
+            {
+                uint32_t result;
+                
+                // Handle PC reads with pipeline offset
+                if (rs == 15) {
+                    result = parentCPU.R()[15] + 2; // PC read gives PC+4 (current instruction + 4)
+                } else {
+                    result = parentCPU.R()[rs];
+                }
+                
+                parentCPU.R()[rd] = result;
+                
+                // Special case: if destination is PC, handle branch
+                if (rd == 15) {
+                    parentCPU.R()[15] = result & ~1; // Clear bit 0 for ARM alignment
+                    // Note: PC writes in Thumb mode stay in Thumb mode
+                }
+                
+                // MOV with high registers does not affect flags
+            }
+            break;
+            
+        case 0b11: // BX
+            {
+                uint32_t target;
+                
+                // Handle PC reads with pipeline offset
+                if (rs == 15) {
+                    target = parentCPU.R()[15] + 2; // PC read gives PC+4 (current instruction + 4)
+                } else {
+                    target = parentCPU.R()[rs];
+                }
+                
+                // Set PC to target address with bit 0 cleared
+                parentCPU.R()[15] = target & ~1;
+                
+                // Update processor mode based on bit 0 of target
+                if (target & 1) {
+                    parentCPU.CPSR() |= CPU::FLAG_T; // Set Thumb mode
+                } else {
+                    parentCPU.CPSR() &= ~CPU::FLAG_T; // Clear Thumb mode (ARM)
+                }
+            }
+            break;
+    }
 }
 
 void ThumbCPU::handle_thumb_ldr(uint16_t instruction) {
