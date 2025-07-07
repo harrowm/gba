@@ -11,9 +11,6 @@ private:
     //  Array of function pointers for Thumb instruction handlers
     void (ThumbCPU::*thumb_instruction_table[256])(uint16_t);
 
-    // Array of function pointers for ALU operations
-    void (ThumbCPU::*thumb_alu_operations_table[16])(uint8_t rd, uint8_t rs);
-
     // Instruction handlers
     void handle_thumb_lsl(uint16_t instruction);
     void handle_thumb_lsr(uint16_t instruction);
@@ -90,8 +87,27 @@ private:
     void thumb_alu_bic(uint8_t rd, uint8_t rs);
     void thumb_alu_mvn(uint8_t rd, uint8_t rs);
 
+    // Static compile-time array of function pointers for ALU operations
+    static constexpr void (ThumbCPU::*thumb_alu_operations_table[16])(uint8_t rd, uint8_t rs) = {
+        &ThumbCPU::thumb_alu_and,  // 0x0
+        &ThumbCPU::thumb_alu_eor,  // 0x1
+        &ThumbCPU::thumb_alu_lsl,  // 0x2
+        &ThumbCPU::thumb_alu_lsr,  // 0x3
+        &ThumbCPU::thumb_alu_asr,  // 0x4
+        &ThumbCPU::thumb_alu_adc,  // 0x5
+        &ThumbCPU::thumb_alu_sbc,  // 0x6
+        &ThumbCPU::thumb_alu_ror,  // 0x7
+        &ThumbCPU::thumb_alu_tst,  // 0x8
+        &ThumbCPU::thumb_alu_neg,  // 0x9
+        &ThumbCPU::thumb_alu_cmp,  // 0xA
+        &ThumbCPU::thumb_alu_cmn,  // 0xB
+        &ThumbCPU::thumb_alu_orr,  // 0xC
+        &ThumbCPU::thumb_alu_mul,  // 0xD
+        &ThumbCPU::thumb_alu_bic,  // 0xE
+        &ThumbCPU::thumb_alu_mvn   // 0xF
+    };
+
     void initializeInstructionTable();
-    void thumb_init_alu_operations_table();
 
     constexpr uint8_t bits10to8(uint16_t instruction) { return (uint8_t)((instruction >> 8) & 0x07); } 
     constexpr uint8_t bits7to0(uint16_t instruction) { return (uint8_t)(instruction & 0xFF); }

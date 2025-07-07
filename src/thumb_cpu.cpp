@@ -9,32 +9,11 @@ Debug::log::info("Initializing ThumbCPU with parent CPU");
     // For example, you might want to set up instruction decoding tables or other structures
     initializeInstructionTable();
 
-    // Initialize the ALU operations table
-    thumb_init_alu_operations_table();
     Debug::log::info("ThumbCPU initialized. Preparing instruction and ALU tables for parent CPU.");
 }
 
 ThumbCPU::~ThumbCPU() {
     // Cleanup logic if necessary
-}
-
-void ThumbCPU::thumb_init_alu_operations_table() {
-    thumb_alu_operations_table[0x0] = &ThumbCPU::thumb_alu_and;
-    thumb_alu_operations_table[0x1] = &ThumbCPU::thumb_alu_eor;
-    thumb_alu_operations_table[0x2] = &ThumbCPU::thumb_alu_lsl;
-    thumb_alu_operations_table[0x3] = &ThumbCPU::thumb_alu_lsr;
-    thumb_alu_operations_table[0x4] = &ThumbCPU::thumb_alu_asr;
-    thumb_alu_operations_table[0x5] = &ThumbCPU::thumb_alu_adc;
-    thumb_alu_operations_table[0x6] = &ThumbCPU::thumb_alu_sbc;
-    thumb_alu_operations_table[0x7] = &ThumbCPU::thumb_alu_ror;
-    thumb_alu_operations_table[0x8] = &ThumbCPU::thumb_alu_tst;
-    thumb_alu_operations_table[0x9] = &ThumbCPU::thumb_alu_neg;
-    thumb_alu_operations_table[0xA] = &ThumbCPU::thumb_alu_cmp;
-    thumb_alu_operations_table[0xB] = &ThumbCPU::thumb_alu_cmn;
-    thumb_alu_operations_table[0xC] = &ThumbCPU::thumb_alu_orr;
-    thumb_alu_operations_table[0xD] = &ThumbCPU::thumb_alu_mul;
-    thumb_alu_operations_table[0xE] = &ThumbCPU::thumb_alu_bic;
-    thumb_alu_operations_table[0xF] = &ThumbCPU::thumb_alu_mvn;
 }
 
 void ThumbCPU::initializeInstructionTable() {
@@ -1375,6 +1354,7 @@ void ThumbCPU::handle_thumb_blt(uint16_t instruction) {
 void ThumbCPU::handle_thumb_bgt(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     bool z_flag = (parentCPU.CPSR() & CPU::FLAG_Z) != 0;
+   
     bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
     if (!z_flag && (n_flag == v_flag)) { // Check Zero, Negative, and Overflow flags
