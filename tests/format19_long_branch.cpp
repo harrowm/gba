@@ -1,10 +1,10 @@
 #include "test_cpu_common.h"
 
-// ARM Thumb Format 18: Long branch with link
+// ARM Thumb Format 19: Long branch with link
 // Encoding: 1111[H][Offset] (two-instruction sequence)
 // Instructions: BL
 
-TEST(CPU, BL) {
+TEST(Format19, BL) {
     std::string beforeState;
 
     // Test case 1: Simple forward BL

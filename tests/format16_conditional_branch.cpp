@@ -1,10 +1,10 @@
 #include "test_cpu_common.h"
 
-// ARM Thumb Format 15: Conditional branch
+// ARM Thumb Format 16: Conditional branch
 // Encoding: 1101[Cond][SOffset8]
 // Instructions: Bcc (conditional branch)
 
-TEST(CPU, B_COND) {
+TEST(Format16, B_COND) {
     std::string beforeState;
 
     // Test case 1: BEQ taken (Z flag set)
