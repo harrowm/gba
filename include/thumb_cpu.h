@@ -3,6 +3,9 @@
 
 #include <cstdint>
 #include "cpu.h"
+#include "timing.h"
+#include "thumb_timing.h"
+
 class CPU; // Forward declaration
 
 class ThumbCPU {
@@ -239,7 +242,9 @@ public:
     explicit ThumbCPU(CPU& cpu);
     ~ThumbCPU();
 
-    void execute(uint32_t cycles);    
+    void execute(uint32_t cycles);
+    void executeWithTiming(uint32_t cycles, TimingState* timing);  // New cycle-driven execution
+    uint32_t calculateInstructionCycles(uint16_t instruction);     // Calculate cycles for next instruction
 };
 
 #endif

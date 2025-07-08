@@ -6,6 +6,7 @@
 #include "debug.h"
 #include "thumb_cpu.h"
 #include "arm_cpu.h"
+#include "timing.h"
 #include <array>
 #include <cstdint>
 
@@ -25,6 +26,7 @@ private:
     InterruptController& interruptController;
     std::array<uint32_t, 16> registers; // Shared registers
     uint32_t cpsr; // Current Program Status Register
+    TimingState timing; // Timing state for cycle-driven execution
 
     ThumbCPU* thumbCPU; // Delegate for Thumb instructions
     ARMCPU* armCPU; // Delegate for ARM instructions
@@ -35,10 +37,12 @@ public:
     ~CPU();
 
     void execute(uint32_t cycles);
+    void executeWithTiming(uint32_t cycles); // New timing-aware execution
 
     std::array<uint32_t, 16>& R() { return registers; }
     uint32_t& CPSR() { return cpsr; }
     Memory& getMemory() { return memory; }
+    TimingState& getTiming() { return timing; } // Access to timing state
     
     InterruptController& getInterruptController() { return interruptController; }
 

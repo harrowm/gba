@@ -2,6 +2,7 @@
 #include "debug.h"
 #include "thumb_cpu.h" // Include complete definition
 #include "arm_cpu.h"   // Include complete definition
+#include "timing.h"
 
 CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptController(ic) {
     Debug::log::info("Initializing CPU with default CPSR value for ARM mode");
@@ -12,6 +13,10 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     std::fill(std::begin(registers), std::end(registers), 0); // Reset all registers to zero using std::fill
     Debug::log::info("Registers initialized to zero");
     cpsr = 0; // Sets us up in ARM mode and little endian by default
+    
+    // Initialize timing system
+    timing_init(&timing);
+    Debug::log::info("Timing system initialized");
 }
 
 void CPU::setFlag(uint32_t flag) {
@@ -54,6 +59,18 @@ void CPU::execute(uint32_t cycles) {
     } else {
         Debug::log::debug("Executing ARM instructions");
         armCPU->execute(cycles); // Use pointer
+    }
+}
+
+// New timing-aware execution method
+void CPU::executeWithTiming(uint32_t cycles) {
+    Debug::log::info("Executing CPU with timing for " + std::to_string(cycles) + " cycles");
+    if (getFlag(FLAG_T)) {
+        Debug::log::debug("Executing Thumb instructions with timing");
+        thumbCPU->executeWithTiming(cycles, &timing);
+    } else {
+        Debug::log::debug("Executing ARM instructions with timing");
+        armCPU->executeWithTiming(cycles, &timing);
     }
 }
 
