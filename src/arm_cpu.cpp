@@ -5,8 +5,6 @@
 
 ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu) {
     Debug::log::info("Initializing ARMCPU with parent CPU");
-    // Initialize any ARM-specific state or resources here
-    Debug::log::info("ARMCPU initialized with instruction table");
 }
 
 ARMCPU::~ARMCPU() {
@@ -18,6 +16,12 @@ void ARMCPU::execute(uint32_t cycles) {
     Debug::log::info("Parent CPU memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
     
     while (cycles > 0) {
+        // Check if we're still in ARM mode - if not, break out early
+        if (parentCPU.getFlag(CPU::FLAG_T)) {
+            Debug::log::info("Mode switched to Thumb during execution, breaking out of ARM execution");
+            break;
+        }
+        
         uint32_t pc = parentCPU.R()[15]; // Get current PC
         uint32_t instruction = parentCPU.getMemory().read32(pc); // Fetch instruction
         
@@ -41,6 +45,12 @@ void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
     Debug::log::info("Executing ARM instructions with timing for " + std::to_string(cycles) + " cycles");
     
     while (cycles > 0) {
+        // Check if we're still in ARM mode - if not, break out early
+        if (parentCPU.getFlag(CPU::FLAG_T)) {
+            Debug::log::info("Mode switched to Thumb during timing execution, breaking out of ARM execution");
+            break;
+        }
+        
         // Calculate cycles until next timing event
         uint32_t cycles_until_event = timing_cycles_until_next_event(timing);
         
@@ -109,6 +119,11 @@ bool ARMCPU::decodeAndExecute(uint32_t instruction) {
         arm_multiply(instruction);
         uint32_t rd = (instruction >> 16) & 0xF;
         pc_modified = (rd == 15);
+    }
+    // BX (Branch and Exchange) instruction (format 000 with specific bit pattern)
+    else if (format == 0 && (instruction & 0x0FFFFFF0) == 0x012FFF10) {
+        arm_bx(instruction);
+        pc_modified = true; // BX always modifies PC
     }
     // PSR transfer instructions (format 001 with specific bit pattern)
     else if (format == 1 && (instruction & 0x0FB00000) == 0x01000000) {
@@ -245,6 +260,7 @@ void ARMCPU::arm_eor(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags
 }
 
 void ARMCPU::arm_sub(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out) {
+    UNUSED(carry_out);
     uint64_t result64 = (uint64_t)parentCPU.R()[rn] - (uint64_t)operand2;
     uint32_t result = (uint32_t)result64;
     parentCPU.R()[rd] = result;
@@ -256,6 +272,7 @@ void ARMCPU::arm_sub(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags
 }
 
 void ARMCPU::arm_rsb(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out) {
+    UNUSED(carry_out);
     uint64_t result64 = (uint64_t)operand2 - (uint64_t)parentCPU.R()[rn];
     uint32_t result = (uint32_t)result64;
     parentCPU.R()[rd] = result;
@@ -267,6 +284,7 @@ void ARMCPU::arm_rsb(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags
 }
 
 void ARMCPU::arm_add(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out) {
+    UNUSED(carry_out);
     uint64_t result64 = (uint64_t)parentCPU.R()[rn] + (uint64_t)operand2;
     uint32_t result = (uint32_t)result64;
     parentCPU.R()[rd] = result;
@@ -278,6 +296,7 @@ void ARMCPU::arm_add(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags
 }
 
 void ARMCPU::arm_adc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out) {
+    UNUSED(carry_out);
     uint32_t carry_in = (parentCPU.CPSR() >> 29) & 1;
     uint64_t result64 = (uint64_t)parentCPU.R()[rn] + (uint64_t)operand2 + (uint64_t)carry_in;
     uint32_t result = (uint32_t)result64;
@@ -290,6 +309,7 @@ void ARMCPU::arm_adc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags
 }
 
 void ARMCPU::arm_sbc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out) {
+    UNUSED(carry_out);
     uint32_t carry_in = (parentCPU.CPSR() >> 29) & 1;
     uint64_t result64 = (uint64_t)parentCPU.R()[rn] - (uint64_t)operand2 - (uint64_t)(1 - carry_in);
     uint32_t result = (uint32_t)result64;
@@ -302,6 +322,7 @@ void ARMCPU::arm_sbc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags
 }
 
 void ARMCPU::arm_rsc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out) {
+    UNUSED(carry_out);
     uint32_t carry_in = (parentCPU.CPSR() >> 29) & 1;
     uint64_t result64 = (uint64_t)operand2 - (uint64_t)parentCPU.R()[rn] - (uint64_t)(1 - carry_in);
     uint32_t result = (uint32_t)result64;
@@ -324,6 +345,7 @@ void ARMCPU::arm_teq(uint32_t rn, uint32_t operand2, uint32_t carry_out) {
 }
 
 void ARMCPU::arm_cmp(uint32_t rn, uint32_t operand2, uint32_t carry_out) {
+    UNUSED(carry_out);
     uint64_t result64 = (uint64_t)parentCPU.R()[rn] - (uint64_t)operand2;
     uint32_t result = (uint32_t)result64;
     bool carry = (result64 <= 0xFFFFFFFF);
@@ -332,6 +354,7 @@ void ARMCPU::arm_cmp(uint32_t rn, uint32_t operand2, uint32_t carry_out) {
 }
 
 void ARMCPU::arm_cmn(uint32_t rn, uint32_t operand2, uint32_t carry_out) {
+    UNUSED(carry_out);
     uint64_t result64 = (uint64_t)parentCPU.R()[rn] + (uint64_t)operand2;
     uint32_t result = (uint32_t)result64;
     bool carry = (result64 > 0xFFFFFFFF);
@@ -812,6 +835,7 @@ void ARMCPU::switchToMode(uint32_t new_mode) {
 
 // Memory management utilities
 bool ARMCPU::checkMemoryAccess(uint32_t address, bool is_write, bool is_privileged) {
+    UNUSED(is_privileged);
     // Basic memory protection check
     // In a full implementation, this would check:
     // 1. Memory map regions
@@ -923,5 +947,25 @@ uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t s
             
         default:
             return value;
+    }
+}
+
+// BX (Branch and Exchange) instruction handler
+void ARMCPU::arm_bx(uint32_t instruction) {
+    uint32_t rm = instruction & 0xF; // Target register is in bits 3-0
+    uint32_t target = parentCPU.R()[rm];
+    
+    Debug::log::debug("ARM BX R" + std::to_string(rm) + " = 0x" + Debug::toHexString(target, 8));
+    
+    // Set PC to target address with bit 0 cleared
+    parentCPU.R()[15] = target & ~1;
+    
+    // Update processor mode based on bit 0 of target
+    if (target & 1) {
+        parentCPU.CPSR() |= CPU::FLAG_T; // Set Thumb mode
+        Debug::log::debug("ARM BX: Switching to Thumb mode");
+    } else {
+        parentCPU.CPSR() &= ~CPU::FLAG_T; // Clear Thumb mode (ARM)
+        Debug::log::debug("ARM BX: Staying in ARM mode");
     }
 }

@@ -3,15 +3,56 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Lookup table for common instruction patterns (indexed by bits 27-20)
+// This covers the most frequent instruction patterns to avoid conditional logic
+static const uint8_t arm_instruction_cycles_lut[256] = {
+    // 0x00-0x1F: Data processing with immediate operand 2
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    // 0x20-0x3F: Data processing with register operand 2  
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    // 0x40-0x7F: Single data transfer
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+    // 0x80-0x9F: Block data transfer
+    4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
+    // 0xA0-0xBF: Branch
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+    // 0xC0-0xEF: Coprocessor
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+    // 0xF0-0xFF: Software interrupt
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
+};
+
 // Calculate cycles for an ARM instruction before execution
 uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uint32_t* registers, uint32_t cpsr) {
-    // Check condition - if not met, instruction takes 1 cycle (fetch only)
+    UNUSED(pc);
+    // Fast-path optimization for ARM_COND_AL (always execute) - most common case
     ARMCondition condition = (ARMCondition)ARM_GET_CONDITION(instruction);
-    if (!arm_check_condition(condition, cpsr)) {
-        return 1; // Instruction not executed, just fetched
+    if (condition != ARM_COND_AL) {
+        // Check condition - if not met, instruction takes 1 cycle (fetch only)
+        if (!arm_check_condition(condition, cpsr)) {
+            return 1; // Instruction not executed, just fetched
+        }
     }
     
+    // Try lookup table first for common patterns
+    uint32_t lut_index = (instruction >> 20) & 0xFF; // Bits 27-20
+    uint32_t base_cycles = arm_instruction_cycles_lut[lut_index];
+    
+    // For simple cases, return the lookup table result
     uint32_t format = ARM_GET_FORMAT(instruction);
+    if (format == 0x5) { // Branch - simple case
+        return ARM_CYCLES_BRANCH;
+    }
+    if (format == 0x6 || format == 0x7) { // Coprocessor/SWI - check for SWI
+        if ((instruction & 0x0F000000) == 0x0F000000) {
+            return ARM_CYCLES_SWI;
+        }
+        return ARM_CYCLES_COPROCESSOR;
+    }
+    
+    // Complex cases that need detailed analysis
     uint32_t cycles = 0;
     
     // ARM instruction decoding based on bits 27-25 and secondary decoding
@@ -21,18 +62,18 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
             // Single Data Swap (SWP)
             cycles = ARM_CYCLES_SINGLE_TRANSFER + 1;
         } else if ((instruction & 0x0FC000F0) == 0x00000090) {
-            // Multiply instructions
+            // Multiply instructions - this requires register value lookup
             cycles = ARM_CYCLES_MULTIPLY_BASE;
             uint32_t rm = ARM_GET_RM(instruction);
             cycles += arm_get_multiply_cycles(registers[rm]);
         } else if ((instruction & 0x0E000000) == 0x00000000) {
-            // Data processing
+            // Data processing - start with base cycle count
             cycles = ARM_CYCLES_DATA_PROCESSING;
             // Add extra cycle if shift amount is specified by register
             if (!ARM_GET_IMMEDIATE_FLAG(instruction) && ARM_GET_REG_SHIFT_FLAG(instruction)) {
                 cycles += ARM_CYCLES_SHIFT_BY_REG;
             }
-            // Check for PC as destination
+            // Check for PC as destination - adds pipeline flush cycles
             uint32_t rd = ARM_GET_RD(instruction);
             if (rd == 15) {
                 cycles += 2; // Additional cycles for PC modification
@@ -41,29 +82,18 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
             cycles = 1; // Unknown, treat as 1 cycle
         }
     } else if (format == 0x2 || format == 0x3) {
-        // 01x: Single data transfer and undefined
+        // 01x: Single data transfer - memory access timing varies
         cycles = ARM_CYCLES_SINGLE_TRANSFER;
         bool is_byte = (instruction >> 22) & 1;
         cycles += is_byte ? 1 : 2; // Memory access timing
     } else if (format == 0x4) {
-        // 100: Block data transfer
+        // 100: Block data transfer - depends on register count
         uint16_t register_list = instruction & 0xFFFF;
         uint32_t num_registers = arm_count_registers(register_list);
         cycles = ARM_CYCLES_BLOCK_TRANSFER_BASE + (num_registers * ARM_CYCLES_TRANSFER_REG) + 1;
-    } else if (format == 0x5) {
-        // 101: Branch and branch with link
-        cycles = ARM_CYCLES_BRANCH;
-    } else if (format == 0x6 || format == 0x7) {
-        // 11x: Coprocessor and software interrupt
-        if ((instruction & 0x0F000000) == 0x0F000000) {
-            // Software interrupt
-            cycles = ARM_CYCLES_SWI;
-        } else {
-            // Coprocessor
-            cycles = ARM_CYCLES_COPROCESSOR;
-        }
     } else {
-        cycles = 1; // Unknown instruction
+        // Fallback to lookup table value for unknown cases
+        cycles = base_cycles;
     }
     
     return cycles;
@@ -71,12 +101,16 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
 
 // Check if ARM condition is satisfied
 bool arm_check_condition(ARMCondition condition, uint32_t cpsr) {
-    // Extract condition flags
+    // Fast path for most common conditions
+    if (condition == ARM_COND_AL) return true;  // Always - most common
+    
+    // Extract condition flags only when needed
     bool N = (cpsr >> 31) & 1;  // Negative
     bool Z = (cpsr >> 30) & 1;  // Zero
     bool C = (cpsr >> 29) & 1;  // Carry
     bool V = (cpsr >> 28) & 1;  // Overflow
     
+    // Order by frequency: EQ, NE, CS, CC are most common after AL
     switch (condition) {
         case ARM_COND_EQ: return Z;                    // Equal
         case ARM_COND_NE: return !Z;                   // Not equal
@@ -84,15 +118,14 @@ bool arm_check_condition(ARMCondition condition, uint32_t cpsr) {
         case ARM_COND_CC: return !C;                   // Carry clear
         case ARM_COND_MI: return N;                    // Minus
         case ARM_COND_PL: return !N;                   // Plus
-        case ARM_COND_VS: return V;                    // Overflow
-        case ARM_COND_VC: return !V;                   // No overflow
-        case ARM_COND_HI: return C && !Z;              // Higher
-        case ARM_COND_LS: return !C || Z;              // Lower or same
         case ARM_COND_GE: return N == V;               // Greater or equal
         case ARM_COND_LT: return N != V;               // Less than
         case ARM_COND_GT: return !Z && (N == V);       // Greater than
         case ARM_COND_LE: return Z || (N != V);        // Less than or equal
-        case ARM_COND_AL: return true;                 // Always
+        case ARM_COND_HI: return C && !Z;              // Higher
+        case ARM_COND_LS: return !C || Z;              // Lower or same
+        case ARM_COND_VS: return V;                    // Overflow
+        case ARM_COND_VC: return !V;                   // No overflow
         case ARM_COND_NV: return true;                 // Never (deprecated, treat as always)
         default: return false;
     }
@@ -108,13 +141,17 @@ uint32_t arm_get_multiply_cycles(uint32_t operand) {
 }
 
 // Count number of set bits in register list for LDM/STM
+// Uses Brian Kernighan's algorithm for efficient bit counting
 uint32_t arm_count_registers(uint16_t register_list) {
     uint32_t count = 0;
-    for (int i = 0; i < 16; i++) {
-        if (register_list & (1 << i)) {
-            count++;
-        }
+    uint32_t value = register_list;
+    
+    // Brian Kernighan's algorithm: n & (n-1) clears the lowest set bit
+    while (value) {
+        count++;
+        value &= value - 1;
     }
+    
     return count;
 }
 

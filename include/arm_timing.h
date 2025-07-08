@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "utility_macros.h" // Include for UNUSED macro
 
 // ARM instruction cycle timing based on GBA Technical Data
 // ARM instructions generally take more cycles than Thumb equivalents

@@ -9,7 +9,9 @@ CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -g -O2
 # Google Test paths (if available)
 GTEST_INCLUDE = /opt/homebrew/include
 GTEST_LIB = /opt/homebrew/lib
-GTEST_FLAGS = -I$(GTEST_INCLUDE) -L$(GTEST_LIB) -lgtest -lgtest_main
+GTEST_INCLUDE_FLAGS = -I$(GTEST_INCLUDE)
+GTEST_LINK_FLAGS = -L$(GTEST_LIB) -lgtest -lgtest_main
+GTEST_FLAGS = $(GTEST_INCLUDE_FLAGS) $(GTEST_LINK_FLAGS)
 
 # Directories
 SRC_DIR = src
@@ -37,11 +39,14 @@ TIMING_TEST_TARGET = test_timing
 THUMB_TEST_TARGET = test_thumb_timing
 DEMO_CYCLE_TARGET = demo_cycle_driven
 
+# Target for ARM execute phase 1 test
+ARM_EXECUTE_PHASE1_TEST = test_arm_execute_phase1
+
 # Default rule
 all: $(TARGET)
 
 # Build all tests and demos
-tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET)
+tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
 
 # Build main emulator
 $(TARGET): $(ALL_OBJS)
@@ -74,9 +79,14 @@ $(DEMO_CYCLE_TARGET): $(BUILD_DIR)/demo_cycle_driven.o $(C_OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
 
 # Build Google Test target (if available)
-$(TEST_TARGET): $(BUILD_DIR)/test_cpu_common.o $(BUILD_DIR)/format_test.o $(LIB_OBJS)
+$(TEST_TARGET): $(BUILD_DIR)/test_cpu.o $(LIB_OBJS)
 	@echo "Building Google Test target..."
 	$(CXX) $(CXXFLAGS) $(GTEST_FLAGS) -o $@ $^
+
+# Build ARM execute phase 1 test
+$(ARM_EXECUTE_PHASE1_TEST): $(BUILD_DIR)/test_arm_execute_phase1.o $(C_OBJS)
+	@echo "Building ARM execute phase 1 test..."
+	$(CC) $(CFLAGS) -o $@ $^
 
 # Compilation rules
 
@@ -97,7 +107,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 # Build test/demo object files from tests directory
 $(BUILD_DIR)/%.o: $(TESTS_DIR)/%.cpp | $(BUILD_DIR)
 	@echo "Compiling test/demo: $<"
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(GTEST_INCLUDE_FLAGS) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(TESTS_DIR)/%.c | $(BUILD_DIR)
 	@echo "Compiling test/demo: $<"
@@ -134,6 +144,11 @@ run-cycle-demo: $(DEMO_CYCLE_TARGET)
 run-test: $(TEST_TARGET)
 	@echo "Running Google Test suite..."
 	./$(TEST_TARGET)
+
+# Run ARM execute phase 1 test
+run-arm-execute-phase1: $(ARM_EXECUTE_PHASE1_TEST)
+	@echo "Running ARM execute phase 1 test..."
+	./$(ARM_EXECUTE_PHASE1_TEST)
 
 # Run all available tests
 run-all-tests: run-timing-test run-thumb-test run-arm-test run-cycle-demo

@@ -23,6 +23,12 @@ void ThumbCPU::execute(uint32_t cycles) {
     Debug::log::info("Executing Thumb instructions for " + std::to_string(cycles) + " cycles");
     Debug::log::info("Parent CPU memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
     while (cycles > 0) {
+        // Check if we're still in Thumb mode - if not, break out early
+        if (!parentCPU.getFlag(CPU::FLAG_T)) {
+            Debug::log::info("Mode switched to ARM during execution, breaking out of Thumb execution");
+            break;
+        }
+        
         // HACK - do we need to model the cpu pipeline?
         uint16_t instruction = parentCPU.getMemory().read16(parentCPU.R()[15]); // Fetch instruction
         uint8_t opcode = instruction >> 8;
@@ -46,6 +52,12 @@ void ThumbCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
     Debug::log::info("Executing Thumb instructions with timing for " + std::to_string(cycles) + " cycles");
     
     while (cycles > 0) {
+        // Check if we're still in Thumb mode - if not, break out early
+        if (!parentCPU.getFlag(CPU::FLAG_T)) {
+            Debug::log::info("Mode switched to ARM during timing execution, breaking out of Thumb execution");
+            break;
+        }
+        
         // Calculate cycles until next timing event
         uint32_t cycles_until_event = timing_cycles_until_next_event(timing);
         
