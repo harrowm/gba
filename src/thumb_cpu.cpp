@@ -1,5 +1,7 @@
 #include "thumb_cpu.h"
 #include "debug.h"
+#include "timing.h"
+#include "thumb_timing.h"
 #include <sstream>
 #include <iomanip>
 
@@ -39,6 +41,72 @@ void ThumbCPU::execute(uint32_t cycles) {
     }
 }
 
+// New cycle-driven execution method
+void ThumbCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
+    Debug::log::info("Executing Thumb instructions with timing for " + std::to_string(cycles) + " cycles");
+    
+    while (cycles > 0) {
+        // Calculate cycles until next timing event
+        uint32_t cycles_until_event = timing_cycles_until_next_event(timing);
+        
+        // Fetch next instruction to determine its cycle cost
+        uint16_t instruction = parentCPU.getMemory().read16(parentCPU.R()[15]);
+        uint32_t instruction_cycles = calculateInstructionCycles(instruction);
+        
+        Debug::log::debug("Next instruction: " + Debug::toHexString(instruction, 4) + 
+                         " at PC: " + Debug::toHexString(parentCPU.R()[15], 8) + 
+                         " will take " + std::to_string(instruction_cycles) + " cycles");
+        Debug::log::debug("Cycles until next event: " + std::to_string(cycles_until_event));
+        
+        // Check if instruction will complete before next timing event
+        if (instruction_cycles <= cycles_until_event) {
+            // Execute instruction normally
+            uint8_t opcode = instruction >> 8;
+            parentCPU.R()[15] += 2; // Increment PC for Thumb instructions
+            
+            if (thumb_instruction_table[opcode]) {
+                (this->*thumb_instruction_table[opcode])(instruction);
+            } else {
+                Debug::log::error("Unknown Thumb instruction");
+            }
+            
+            // Update timing
+            timing_advance(timing, instruction_cycles);
+            cycles -= instruction_cycles;
+            
+        } else {
+            // Process timing event first, then continue
+            Debug::log::debug("Processing timing event before instruction");
+            timing_advance(timing, cycles_until_event);
+            timing_process_timer_events(timing);
+            timing_process_video_events(timing);
+            cycles -= cycles_until_event;
+        }
+    }
+}
+
+// Calculate cycles for next instruction with branch prediction
+uint32_t ThumbCPU::calculateInstructionCycles(uint16_t instruction) {
+    // Convert CPU registers to array format for the C function
+    uint32_t registers[16];
+    for (int i = 0; i < 16; i++) {
+        registers[i] = parentCPU.R()[i];
+    }
+    
+    uint32_t pc = parentCPU.R()[15];
+    uint32_t base_cycles = thumb_calculate_instruction_cycles(instruction, pc, registers);
+    
+    // For conditional branches, check if branch will be taken
+    if ((instruction & THUMB_FORMAT_MASK_BRANCH_COND) == THUMB_FORMAT_VAL_BRANCH_COND) {
+        uint8_t condition = (instruction >> 8) & 0xF;
+        if (condition != 0xF) { // Not SWI
+            bool taken = thumb_is_branch_taken(instruction, parentCPU.CPSR());
+            return taken ? THUMB_CYCLES_BRANCH_TAKEN : THUMB_CYCLES_BRANCH_COND;
+        }
+    }
+    
+    return base_cycles;
+}
 
 // Thumb instruction handlers
 

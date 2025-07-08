@@ -5,7 +5,6 @@
 #include <string.h>
 #include <iostream>
 #include <unordered_map>
-#include <source_location>
 #include <iomanip>
 #include <sstream>
 
@@ -59,25 +58,25 @@ public:
 // Logging methods
 class log {
 public:
-    static void error(const std::string& message, const std::source_location& location = std::source_location::current()) {
-        std::cerr << COLOUR_RED << "[ERROR] " << location.file_name() << " " << location.function_name() << "():" << location.line() << ": " << message << COLOUR_RESET << std::endl;
+    static void error(const std::string& message, const char* file = __FILE__, int line = __LINE__) {
+        std::cerr << COLOUR_RED << "[ERROR] " << file << ":" << line << ": " << message << COLOUR_RESET << std::endl;
     }
 
-    static void info(const std::string& message, const std::source_location& location = std::source_location::current()) {
+    static void info(const std::string& message, const char* file = __FILE__, int line = __LINE__) {
         if (Config::debugLevel >= Level::Basic) {
-            std::cerr << COLOUR_GREEN << "[INFO]  " << location.file_name() << " " << location.function_name() << "():" << location.line() << ": " << message << COLOUR_RESET << std::endl;
+            std::cerr << COLOUR_GREEN << "[INFO]  " << file << ":" << line << ": " << message << COLOUR_RESET << std::endl;
         }
     }
 
-    static void debug(const std::string& message, const std::source_location& location = std::source_location::current()) {
+    static void debug(const std::string& message, const char* file = __FILE__, int line = __LINE__) {
         if (Config::debugLevel >= Level::Verbose) {
-            std::cerr << COLOUR_CYAN << "[DEBUG] " << location.file_name() << " " << location.function_name() << "():" << location.line() << ": " << message << COLOUR_RESET << std::endl;
+            std::cerr << COLOUR_CYAN << "[DEBUG] " << file << ":" << line << ": " << message << COLOUR_RESET << std::endl;
         }
     }
 
-    static void trace(const std::string& message, const std::source_location& location = std::source_location::current()) {
+    static void trace(const std::string& message, const char* file = __FILE__, int line = __LINE__) {
         if (Config::debugLevel >= Level::VeryVerbose) {
-            std::cerr << COLOUR_MAGENTA << "[TRACE] " << location.file_name() << " " << location.function_name() << "():" << location.line() << ": " << message << COLOUR_RESET << std::endl;
+            std::cerr << COLOUR_MAGENTA << "[TRACE] " << file << ":" << line << ": " << message << COLOUR_RESET << std::endl;
         }
     }
 };
