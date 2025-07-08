@@ -5,6 +5,7 @@
 #include "cpu.h"
 #include "timing.h"
 #include "arm_timing.h"
+#include "utility_macros.h"
 
 class CPU; // Forward declaration
 
@@ -18,6 +19,7 @@ private:
     // Instruction handlers by category
     void arm_data_processing(uint32_t instruction);
     void arm_multiply(uint32_t instruction);
+    void arm_bx(uint32_t instruction);
     void arm_single_data_transfer(uint32_t instruction);
     void arm_block_data_transfer(uint32_t instruction);
     void arm_branch(uint32_t instruction);
