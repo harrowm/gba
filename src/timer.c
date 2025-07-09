@@ -1,6 +1,11 @@
 #include "timer.h"
 #include <string.h>
 
+// Forward declarations for static functions
+static void timer_overflow(TimerController* controller, int timer_id);
+static uint32_t timer_get_increment_cycles(uint8_t prescaler);
+static void timer_reset(Timer* timer);
+
 // Initialize timer controller
 void timer_init(TimerController* controller) {
     if (!controller) return;
