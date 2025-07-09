@@ -858,6 +858,10 @@ void ARMCPU::arm_software_interrupt(uint32_t instruction) {
     DEBUG_INFO("ARM Software Interrupt: number=0x" + 
                debug_to_hex_string(swi_number, 6) + 
                " return_address=0x" + debug_to_hex_string(return_address, 8));
+    
+    // Use variables to avoid unused warnings in release builds
+    UNUSED(swi_number);
+    UNUSED(return_address);
 }
 
 void ARMCPU::arm_psr_transfer(uint32_t instruction) {
@@ -975,6 +979,10 @@ void ARMCPU::arm_undefined(uint32_t instruction) {
     
     // Switch to undefined instruction mode and handle the exception
     handleException(0x00000004, 0x1B, true, false);
+    
+    // Prevent unused variable warnings in release builds
+    UNUSED(instruction);
+    UNUSED(return_address);
 }
 
 // ARM instruction helper functions

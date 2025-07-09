@@ -46,9 +46,4 @@ void timer_write_reload(TimerController* controller, int timer_id, uint16_t valu
 uint16_t timer_read_counter(TimerController* controller, int timer_id);
 uint16_t timer_read_control(TimerController* controller, int timer_id);
 
-// Internal helper functions
-static void timer_overflow(TimerController* controller, int timer_id);
-static uint32_t timer_get_increment_cycles(uint8_t prescaler);
-static void timer_reset(Timer* timer);
-
 #endif // TIMER_H

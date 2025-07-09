@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include "thumb_timing.h"
 #include "timing.h"
+#include "utility_macros.h"
 
 // Simulated instruction sequence for demonstration
 uint16_t demo_program[] = {
@@ -26,12 +27,13 @@ void simulate_cycle_driven_execution() {
     uint32_t registers[16] = {0};
     uint32_t pc = 0x08000000;
     uint32_t cpsr = 0; // ARM mode, no flags set
+    UNUSED(cpsr);
     
     printf("Simulating instruction execution with timing events...\n");
     printf("Initial state: PC=0x%08X, Total cycles=%llu\n\n", pc, timing.total_cycles);
     
     // Simulate several instructions
-    for (int i = 0; i < 9 && i < sizeof(demo_program)/sizeof(demo_program[0]); i++) {
+    for (int i = 0; i < 9 && (size_t)i < sizeof(demo_program)/sizeof(demo_program[0]); i++) {
         uint16_t instruction = demo_program[i];
         uint32_t instruction_cycles = thumb_calculate_instruction_cycles(instruction, pc, registers);
         
@@ -97,6 +99,7 @@ void demonstrate_timer_integration() {
     while (cycles_run < total_cycles_to_run) {
         // Simulate fetching an instruction
         uint16_t instruction = 0x2010; // MOV R0, #16
+        UNUSED(instruction);
         uint32_t instruction_cycles = 1;
         
         uint32_t cycles_until_event = timing_cycles_until_next_event(&timing);

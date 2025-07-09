@@ -2,6 +2,7 @@
 #include "debug.h" // Use debug system
 #include "timing.h"
 #include "thumb_timing.h"
+#include "utility_macros.h"
 #include <sstream>
 #include <iomanip>
 
@@ -1285,6 +1286,9 @@ void ThumbCPU::thumb_swi(uint16_t instruction) {
     // Handle the software interrupt
     DEBUG_INFO("Executing Thumb SWI: Software interrupt with comment 0x" + std::to_string(comment));
     //handle_software_interrupt(comment); // Call the software interrupt handler
+    
+    // Prevent unused variable warning in release builds
+    UNUSED(comment);
 }
 
 void ThumbCPU::thumb_b(uint16_t instruction) {
