@@ -388,7 +388,7 @@ void ThumbCPU::thumb_alu_lsl(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // V flag is not affected by LSL
 
-    Debug::log::info("Executing Thumb LSL: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " << R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb LSL: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " << R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_lsr(uint8_t rd, uint8_t rs) {
@@ -404,7 +404,7 @@ void ThumbCPU::thumb_alu_lsr(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // No update to V flag for LSR operation
 
-    Debug::log::info("Executing Thumb LSR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " >> R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb LSR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " >> R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_asr(uint8_t rd, uint8_t rs) {
@@ -420,7 +420,7 @@ void ThumbCPU::thumb_alu_asr(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // No update to V flag for ASR operation
 
-    Debug::log::info("Executing Thumb ASR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " >> R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb ASR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " >> R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_adc(uint8_t rd, uint8_t rs) {
@@ -436,7 +436,7 @@ void ThumbCPU::thumb_alu_adc(uint8_t rd, uint8_t rs) {
     parentCPU.updateVFlag(op1, (op2 + carry_in), result);
     parentCPU.updateNFlag(result);
 
-    Debug::log::info("Executing Thumb ADC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + R" + std::to_string(rs) + " + Carry");
+    DEBUG_INFO("Executing Thumb ADC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + R" + std::to_string(rs) + " + Carry");
 }
 
 void ThumbCPU::thumb_alu_sbc(uint8_t rd, uint8_t rs) {
@@ -452,7 +452,7 @@ void ThumbCPU::thumb_alu_sbc(uint8_t rd, uint8_t rs) {
     parentCPU.updateVFlagSub(op1, op2 + borrow, result);
     parentCPU.updateNFlag(result);
 
-    Debug::log::info("Executing Thumb SBC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " - R" + std::to_string(rs) + " - Borrow");
+    DEBUG_INFO("Executing Thumb SBC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " - R" + std::to_string(rs) + " - Borrow");
 }
 
 void ThumbCPU::thumb_alu_ror(uint8_t rd, uint8_t rs) {
@@ -493,7 +493,7 @@ void ThumbCPU::thumb_alu_ror(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // V flag is not affected.
 
-    Debug::log::info("Executing Thumb ROR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " ROR R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb ROR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " ROR R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_tst(uint8_t rd, uint8_t rs) {
@@ -505,7 +505,7 @@ void ThumbCPU::thumb_alu_tst(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // No update to V and C flags for TST operation
 
-    Debug::log::info("Executing Thumb TST: R" + std::to_string(rd) + " & R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb TST: R" + std::to_string(rd) + " & R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_neg(uint8_t rd, uint8_t rs) {
@@ -519,7 +519,7 @@ void ThumbCPU::thumb_alu_neg(uint8_t rd, uint8_t rs) {
     parentCPU.updateCFlagSub(op1, op2);
     parentCPU.updateVFlagSub(op1, op2, result);
 
-    Debug::log::info("Executing Thumb NEG: R" + std::to_string(rd) + " = -R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb NEG: R" + std::to_string(rd) + " = -R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_cmp(uint8_t rd, uint8_t rs) {
@@ -532,7 +532,7 @@ void ThumbCPU::thumb_alu_cmp(uint8_t rd, uint8_t rs) {
     parentCPU.updateCFlagSub(op1, op2);
     parentCPU.updateVFlagSub(op1, op2, result);
 
-    Debug::log::info("Executing Thumb CMP: R" + std::to_string(rd) + " - R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb CMP: R" + std::to_string(rd) + " - R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_cmn(uint8_t rd, uint8_t rs) {
@@ -545,7 +545,7 @@ void ThumbCPU::thumb_alu_cmn(uint8_t rd, uint8_t rs) {
     parentCPU.updateCFlagAdd(op1, op2);
     parentCPU.updateVFlag(op1, op2, result);
 
-    Debug::log::info("Executing Thumb CMN: R" + std::to_string(rd) + " + R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb CMN: R" + std::to_string(rd) + " + R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_orr(uint8_t rd, uint8_t rs) {
@@ -558,7 +558,7 @@ void ThumbCPU::thumb_alu_orr(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // No update to V and C flags for ORR operation
 
-    Debug::log::info("Executing Thumb ORR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " | R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb ORR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " | R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_mul(uint8_t rd, uint8_t rs) {
@@ -571,7 +571,7 @@ void ThumbCPU::thumb_alu_mul(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // No update to V and C flags for MUL operation
 
-    Debug::log::info("Executing Thumb MUL: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " * R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb MUL: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " * R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_bic(uint8_t rd, uint8_t rs) {
@@ -584,7 +584,7 @@ void ThumbCPU::thumb_alu_bic(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // No update to V and C flags for BIC operation
 
-    Debug::log::info("Executing Thumb BIC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " & ~R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb BIC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " & ~R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_mvn(uint8_t rd, uint8_t rs) {
@@ -596,7 +596,7 @@ void ThumbCPU::thumb_alu_mvn(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // No update to V and C flags for MVN operation
 
-    Debug::log::info("Executing Thumb MVN: R" + std::to_string(rd) + " = ~R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb MVN: R" + std::to_string(rd) + " = ~R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_format5(uint16_t instruction) {
@@ -730,7 +730,7 @@ void ThumbCPU::thumb_ldr(uint16_t instruction) {
     // Perform the load operation
     parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
 
-    Debug::log::info("Executing Thumb LDR: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    DEBUG_INFO("Executing Thumb LDR: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_str_word(uint16_t instruction) {
@@ -744,7 +744,7 @@ void ThumbCPU::thumb_str_word(uint16_t instruction) {
     // Perform the store operation using memory_write_32
     parentCPU.getMemory().write32(address, parentCPU.R()[rd]);
 
-    Debug::log::info("Executing Thumb STR (word): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
+    DEBUG_INFO("Executing Thumb STR (word): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
 void ThumbCPU::thumb_ldr_word(uint16_t instruction) {
@@ -756,14 +756,14 @@ void ThumbCPU::thumb_ldr_word(uint16_t instruction) {
     uint32_t address = parentCPU.R()[rn] + parentCPU.R()[rm];
 
     // Debug register values
-    Debug::log::info("LDR_WORD: R" + std::to_string(rn) + "=0x" + Debug::toHexString(parentCPU.R()[rn], 8) + 
-                     ", R" + std::to_string(rm) + "=0x" + Debug::toHexString(parentCPU.R()[rm], 8) + 
-                     ", address=0x" + Debug::toHexString(address, 8));
+    DEBUG_INFO("LDR_WORD: R" + std::to_string(rn) + "=0x" + debug_to_hex_string(parentCPU.R()[rn], 8) + 
+                     ", R" + std::to_string(rm) + "=0x" + debug_to_hex_string(parentCPU.R()[rm], 8) + 
+                     ", address=0x" + debug_to_hex_string(address, 8));
 
     // Perform the load operation using memory_read_32
     parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
 
-    Debug::log::info("Executing Thumb LDR (word): R" + std::to_string(rd) + " = [0x" + Debug::toHexString(address, 8) + "]");
+    DEBUG_INFO("Executing Thumb LDR (word): R" + std::to_string(rd) + " = [0x" + debug_to_hex_string(address, 8) + "]");
 }
 
 void ThumbCPU::thumb_ldr_byte(uint16_t instruction) {
@@ -777,7 +777,7 @@ void ThumbCPU::thumb_ldr_byte(uint16_t instruction) {
     // Perform the load operation using memory_read_8
     parentCPU.R()[rd] = parentCPU.getMemory().read8(address);
 
-    Debug::log::info("Executing Thumb LDR (byte): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    DEBUG_INFO("Executing Thumb LDR (byte): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_str_byte(uint16_t instruction) {
@@ -791,10 +791,10 @@ void ThumbCPU::thumb_str_byte(uint16_t instruction) {
     // Perform the store operation using memory_write_8
     parentCPU.getMemory().write8(address, parentCPU.R()[rd] & 0xFF); // Store only the least significant byte
 
-    Debug::log::info("Executing Thumb STR (byte): [0x" + Debug::toHexString(address, 8) + "] = R" + std::to_string(rd) + 
-        " (R" + std::to_string(rn) + "=0x" + Debug::toHexString(parentCPU.R()[rn], 8) + 
-        " + R" + std::to_string(rm) + "=0x" + Debug::toHexString(parentCPU.R()[rm], 8) + 
-        ", data=0x" + Debug::toHexString(parentCPU.R()[rd] & 0xFF, 2) + ")");
+    DEBUG_INFO("Executing Thumb STR (byte): [0x" + debug_to_hex_string(address, 8) + "] = R" + std::to_string(rd) + 
+        " (R" + std::to_string(rn) + "=0x" + debug_to_hex_string(parentCPU.R()[rn], 8) + 
+        " + R" + std::to_string(rm) + "=0x" + debug_to_hex_string(parentCPU.R()[rm], 8) + 
+        ", data=0x" + debug_to_hex_string(parentCPU.R()[rd] & 0xFF, 2) + ")");
 }
 
 void ThumbCPU::thumb_strh(uint16_t instruction) {
@@ -808,7 +808,7 @@ void ThumbCPU::thumb_strh(uint16_t instruction) {
     // Perform the store operation using memory_write_16
     parentCPU.getMemory().write16(address, parentCPU.R()[rd] & 0xFFFF); // Store only the least significant halfword
 
-    Debug::log::info("Executing Thumb STRH: [0x" + Debug::toHexString(address, 8) + "] = R" + std::to_string(rd));
+    DEBUG_INFO("Executing Thumb STRH: [0x" + debug_to_hex_string(address, 8) + "] = R" + std::to_string(rd));
 }
 
 void ThumbCPU::thumb_ldsb(uint16_t instruction) {
@@ -823,7 +823,7 @@ void ThumbCPU::thumb_ldsb(uint16_t instruction) {
     int8_t value = (int8_t)parentCPU.getMemory().read8(address);
     parentCPU.R()[rd] = (int32_t)value;
 
-    Debug::log::info("Executing Thumb LDSB: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    DEBUG_INFO("Executing Thumb LDSB: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_ldrh(uint16_t instruction) {
@@ -837,7 +837,7 @@ void ThumbCPU::thumb_ldrh(uint16_t instruction) {
     // Perform the load operation using memory_read_16
     parentCPU.R()[rd] = parentCPU.getMemory().read16(address);
 
-    Debug::log::info("Executing Thumb LDRH: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    DEBUG_INFO("Executing Thumb LDRH: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_ldsh(uint16_t instruction) {
@@ -845,7 +845,7 @@ void ThumbCPU::thumb_ldsh(uint16_t instruction) {
     uint8_t rn = (instruction >> 3) & 0x07; // Base register (bits 3-5)
     uint8_t rm = (instruction >> 6) & 0x07; // Offset register (bits 6-8)
 
-    Debug::log::info("LDSH instruction decode: 0x" + std::to_string(instruction) + " -> rd=" + std::to_string(rd) + ", rn=" + std::to_string(rn) + ", rm=" + std::to_string(rm));
+    DEBUG_INFO("LDSH instruction decode: 0x" + std::to_string(instruction) + " -> rd=" + std::to_string(rd) + ", rn=" + std::to_string(rn) + ", rm=" + std::to_string(rm));
 
     // Calculate the address to load from
     uint32_t address = parentCPU.R()[rn] + parentCPU.R()[rm];
@@ -854,11 +854,10 @@ void ThumbCPU::thumb_ldsh(uint16_t instruction) {
     int16_t value = (int16_t)parentCPU.getMemory().read16(address);
     parentCPU.R()[rd] = (int32_t)value;
 
-    std::stringstream ss;
-    ss << "Executing Thumb LDSH: R" << rd << " = [R" << rn << "(0x" << std::hex << parentCPU.R()[rn] 
-       << ") + R" << rm << "(0x" << std::hex << parentCPU.R()[rm] << ")] = [0x" << std::hex << address 
-       << "] = 0x" << std::hex << (uint32_t)parentCPU.R()[rd];
-    Debug::log::info(ss.str());
+    DEBUG_INFO("Executing Thumb LDSH: R" + std::to_string(rd) + " = [R" + std::to_string(rn) + 
+       "(0x" + debug_to_hex_string(parentCPU.R()[rn], 8) + ") + R" + std::to_string(rm) + 
+       "(0x" + debug_to_hex_string(parentCPU.R()[rm], 8) + ")] = [0x" + debug_to_hex_string(address, 8) + 
+       "] = 0x" + debug_to_hex_string((uint32_t)parentCPU.R()[rd], 8));
 }
 
 void ThumbCPU::thumb_str_immediate_offset(uint16_t instruction) {
@@ -872,7 +871,7 @@ void ThumbCPU::thumb_str_immediate_offset(uint16_t instruction) {
     // Perform the store operation using memory_write_32
     parentCPU.getMemory().write32(address, parentCPU.R()[rd]);
 
-    Debug::log::info("Executing Thumb STR (immediate offset): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
+    DEBUG_INFO("Executing Thumb STR (immediate offset): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
 void ThumbCPU::thumb_ldr_immediate_offset(uint16_t instruction) {
@@ -886,7 +885,7 @@ void ThumbCPU::thumb_ldr_immediate_offset(uint16_t instruction) {
     // Perform the load operation using memory_read_32
     parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
 
-    Debug::log::info("Executing Thumb LDR (immediate offset): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    DEBUG_INFO("Executing Thumb LDR (immediate offset): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_str_immediate_offset_byte(uint16_t instruction) {
@@ -900,7 +899,7 @@ void ThumbCPU::thumb_str_immediate_offset_byte(uint16_t instruction) {
     // Perform the store operation using memory_write_8
     parentCPU.getMemory().write8(address, parentCPU.R()[rd] & 0xFF); // Store only the least significant byte
 
-    Debug::log::info("Executing Thumb STR (immediate offset byte): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
+    DEBUG_INFO("Executing Thumb STR (immediate offset byte): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
 void ThumbCPU::thumb_ldr_immediate_offset_byte(uint16_t instruction) {
@@ -914,7 +913,7 @@ void ThumbCPU::thumb_ldr_immediate_offset_byte(uint16_t instruction) {
     // Perform the load operation using memory_read_8
     parentCPU.R()[rd] = parentCPU.getMemory().read8(address);
 
-    Debug::log::info("Executing Thumb LDR (immediate offset byte): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    DEBUG_INFO("Executing Thumb LDR (immediate offset byte): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_strh_imm(uint16_t instruction) {
@@ -928,7 +927,7 @@ void ThumbCPU::thumb_strh_imm(uint16_t instruction) {
     // Perform the store operation using memory_write_16
     parentCPU.getMemory().write16(address, parentCPU.R()[rd] & 0xFFFF); // Store only the least significant halfword
 
-    Debug::log::info("Executing Thumb STRH (immediate offset): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
+    DEBUG_INFO("Executing Thumb STRH (immediate offset): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
 void ThumbCPU::thumb_ldrh_imm(uint16_t instruction) {
@@ -942,7 +941,7 @@ void ThumbCPU::thumb_ldrh_imm(uint16_t instruction) {
     // Perform the load operation using memory_read_16
     parentCPU.R()[rd] = parentCPU.getMemory().read16(address);
 
-    Debug::log::info("Executing Thumb LDRH (immediate offset): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    DEBUG_INFO("Executing Thumb LDRH (immediate offset): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_str_sp_rel(uint16_t instruction) {
@@ -955,7 +954,7 @@ void ThumbCPU::thumb_str_sp_rel(uint16_t instruction) {
     // Perform the store operation using memory_write_32
     parentCPU.getMemory().write32(address, parentCPU.R()[rd]);
 
-    Debug::log::info("Executing Thumb STR (SP-relative): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
+    DEBUG_INFO("Executing Thumb STR (SP-relative): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
 
 void ThumbCPU::thumb_ldr_sp_rel(uint16_t instruction) {
@@ -968,7 +967,7 @@ void ThumbCPU::thumb_ldr_sp_rel(uint16_t instruction) {
     // Perform the load operation using memory_read_32
     parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
 
-    Debug::log::info("Executing Thumb LDR (SP-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    DEBUG_INFO("Executing Thumb LDR (SP-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_ldr_address_pc(uint16_t instruction) {
@@ -981,7 +980,7 @@ void ThumbCPU::thumb_ldr_address_pc(uint16_t instruction) {
     // Store the calculated address in the destination register
     parentCPU.R()[rd] = address;
 
-    Debug::log::info("Executing Thumb ADD (PC-relative): R" + std::to_string(rd) + " = 0x" + std::to_string(address));
+    DEBUG_INFO("Executing Thumb ADD (PC-relative): R" + std::to_string(rd) + " = 0x" + std::to_string(address));
 }
 
 void ThumbCPU::thumb_ldr_address_sp(uint16_t instruction) {
@@ -994,7 +993,7 @@ void ThumbCPU::thumb_ldr_address_sp(uint16_t instruction) {
     // Store the calculated address in the destination register
     parentCPU.R()[rd] = address;
 
-    Debug::log::info("Executing Thumb ADD (SP-relative): R" + std::to_string(rd) + " = 0x" + std::to_string(address));
+    DEBUG_INFO("Executing Thumb ADD (SP-relative): R" + std::to_string(rd) + " = 0x" + std::to_string(address));
 }
 
 void ThumbCPU::thumb_ldr_pc_rel(uint16_t instruction) {
@@ -1010,7 +1009,7 @@ void ThumbCPU::thumb_ldr_pc_rel(uint16_t instruction) {
     // Perform the load operation using memory_read_32
     parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
 
-    Debug::log::info("Executing Thumb LDR (PC-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    DEBUG_INFO("Executing Thumb LDR (PC-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_add_sub_offset_to_stack_pointer(uint16_t instruction) {
@@ -1020,10 +1019,10 @@ void ThumbCPU::thumb_add_sub_offset_to_stack_pointer(uint16_t instruction) {
     // Perform the addition or subtraction operation
     if (sign == 0) {
         parentCPU.R()[13] += (offset << 2); // Add offset scaled by 4
-        Debug::log::info("Executing Thumb ADD offset to SP: SP = SP + " + std::to_string(offset << 2));
+        DEBUG_INFO("Executing Thumb ADD offset to SP: SP = SP + " + std::to_string(offset << 2));
     } else {
         parentCPU.R()[13] -= (offset << 2); // Subtract offset scaled by 4
-        Debug::log::info("Executing Thumb SUB offset from SP: SP = SP - " + std::to_string(offset << 2));
+        DEBUG_INFO("Executing Thumb SUB offset from SP: SP = SP - " + std::to_string(offset << 2));
     }
 }
 
@@ -1048,7 +1047,7 @@ void ThumbCPU::thumb_push_registers(uint16_t instruction) {
         if (register_list & (1 << i)) {
             uint32_t address = base_address + (offset * 4);
             parentCPU.getMemory().write32(address, parentCPU.R()[i]); // Write register to memory
-            Debug::log::info("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(address) + "] = R" + std::to_string(i));
+            DEBUG_INFO("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(address) + "] = R" + std::to_string(i));
             offset++;
         }
     }
@@ -1076,7 +1075,7 @@ void ThumbCPU::thumb_push_registers_and_lr(uint16_t instruction) {
         if (register_list & (1 << i)) {
             uint32_t address = base_address + (offset * 4);
             parentCPU.getMemory().write32(address, parentCPU.R()[i]); // Write register to memory
-            Debug::log::info("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(address) + "] = R" + std::to_string(i));
+            DEBUG_INFO("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(address) + "] = R" + std::to_string(i));
             offset++;
         }
     }
@@ -1084,7 +1083,7 @@ void ThumbCPU::thumb_push_registers_and_lr(uint16_t instruction) {
     // Push LR onto the stack (at the highest address)
     uint32_t lr_address = base_address + (offset * 4);
     parentCPU.getMemory().write32(lr_address, parentCPU.R()[14]); // Write LR to memory
-    Debug::log::info("Pushing LR onto stack: [0x" + std::to_string(lr_address) + "] = LR");
+    DEBUG_INFO("Pushing LR onto stack: [0x" + std::to_string(lr_address) + "] = LR");
 }
 
 void ThumbCPU::thumb_pop_registers(uint16_t instruction) {
@@ -1094,7 +1093,7 @@ void ThumbCPU::thumb_pop_registers(uint16_t instruction) {
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
             parentCPU.R()[i] = parentCPU.getMemory().read32(parentCPU.R()[13]); // Read register from memory
-            Debug::log::info("Popping R" + std::to_string(i) + " from stack: R" + std::to_string(i) + " = [0x" + std::to_string(parentCPU.R()[13]) + "]");
+            DEBUG_INFO("Popping R" + std::to_string(i) + " from stack: R" + std::to_string(i) + " = [0x" + std::to_string(parentCPU.R()[13]) + "]");
             parentCPU.R()[13] += 4; // Increment SP by 4
         }
     }
@@ -1107,14 +1106,14 @@ void ThumbCPU::thumb_pop_registers_and_pc(uint16_t instruction) {
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
             parentCPU.R()[i] = parentCPU.getMemory().read32(parentCPU.R()[13]); // Read register from memory
-            Debug::log::info("Popping R" + std::to_string(i) + " from stack: R" + std::to_string(i) + " = [0x" + std::to_string(parentCPU.R()[13]) + "]");
+            DEBUG_INFO("Popping R" + std::to_string(i) + " from stack: R" + std::to_string(i) + " = [0x" + std::to_string(parentCPU.R()[13]) + "]");
             parentCPU.R()[13] += 4; // Increment SP by 4
         }
     }
 
     // Pop PC from the stack
     parentCPU.R()[15] = parentCPU.getMemory().read32(parentCPU.R()[13]); // Read PC from memory
-    Debug::log::info("Popping PC from stack: PC = [0x" + std::to_string(parentCPU.R()[13]) + "]");
+    DEBUG_INFO("Popping PC from stack: PC = [0x" + std::to_string(parentCPU.R()[13]) + "]");
     parentCPU.R()[13] += 4; // Increment SP by 4
 }
 
@@ -1127,7 +1126,7 @@ void ThumbCPU::thumb_stmia(uint16_t instruction) {
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
             parentCPU.getMemory().write32(address, parentCPU.R()[i]); // Write register to memory
-            Debug::log::info("Storing R" + std::to_string(i) + " to [0x" + std::to_string(address) + "]");
+            DEBUG_INFO("Storing R" + std::to_string(i) + " to [0x" + std::to_string(address) + "]");
             address += 4; // Increment address by 4
         }
     }
@@ -1145,7 +1144,7 @@ void ThumbCPU::thumb_ldmia(uint16_t instruction) {
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
             parentCPU.R()[i] = parentCPU.getMemory().read32(address); // Read register from memory
-            Debug::log::info("Loading R" + std::to_string(i) + " from [0x" + std::to_string(address) + "]");
+            DEBUG_INFO("Loading R" + std::to_string(i) + " from [0x" + std::to_string(address) + "]");
             address += 4; // Increment address by 4
         }
     }
@@ -1161,7 +1160,7 @@ void ThumbCPU::thumb_beq(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_Z) { // Check Zero flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BEQ: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BEQ: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1169,7 +1168,7 @@ void ThumbCPU::thumb_bne(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_Z)) { // Check Zero flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BNE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BNE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1177,7 +1176,7 @@ void ThumbCPU::thumb_bcs(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_C) { // Check Carry flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BCS: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BCS: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1185,7 +1184,7 @@ void ThumbCPU::thumb_bcc(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_C)) { // Check Carry flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BCC: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BCC: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1193,7 +1192,7 @@ void ThumbCPU::thumb_bmi(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_N) { // Check Negative flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BMI: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BMI: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1201,7 +1200,7 @@ void ThumbCPU::thumb_bpl(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_N)) { // Check Negative flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BPL: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BPL: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1209,7 +1208,7 @@ void ThumbCPU::thumb_bvs(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_V) { // Check Overflow flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BVS: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BVS: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1217,7 +1216,7 @@ void ThumbCPU::thumb_bvc(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_V)) { // Check Overflow flag
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BVC: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BVC: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1225,7 +1224,7 @@ void ThumbCPU::thumb_bhi(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if ((parentCPU.CPSR() & CPU::FLAG_C) && !(parentCPU.CPSR() & CPU::FLAG_Z)) { // Check Carry and Zero flags
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BHI: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BHI: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1233,7 +1232,7 @@ void ThumbCPU::thumb_bls(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_C) || (parentCPU.CPSR() & CPU::FLAG_Z)) { // Check Carry and Zero flags
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BLS: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BLS: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1243,7 +1242,7 @@ void ThumbCPU::thumb_bge(uint16_t instruction) {
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
     if (n_flag == v_flag) { // Check if Negative and Overflow flags have same value
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BGE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BGE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1253,7 +1252,7 @@ void ThumbCPU::thumb_blt(uint16_t instruction) {
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
     if (n_flag != v_flag) { // Check if Negative and Overflow flags have different values
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BLT: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BLT: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1265,7 +1264,7 @@ void ThumbCPU::thumb_bgt(uint16_t instruction) {
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
     if (!z_flag && (n_flag == v_flag)) { // Check Zero, Negative, and Overflow flags
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BGT: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BGT: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1276,7 +1275,7 @@ void ThumbCPU::thumb_ble(uint16_t instruction) {
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
     if (z_flag || (n_flag != v_flag)) { // Check Zero, Negative, and Overflow flags
         parentCPU.R()[15] += (offset << 1); // Branch to target address
-        Debug::log::info("Executing Thumb BLE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
+        DEBUG_INFO("Executing Thumb BLE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
 
@@ -1284,7 +1283,7 @@ void ThumbCPU::thumb_swi(uint16_t instruction) {
     uint8_t comment = instruction & 0xFF; // Software interrupt comment (bits 0-7)
 
     // Handle the software interrupt
-    Debug::log::info("Executing Thumb SWI: Software interrupt with comment 0x" + std::to_string(comment));
+    DEBUG_INFO("Executing Thumb SWI: Software interrupt with comment 0x" + std::to_string(comment));
     //handle_software_interrupt(comment); // Call the software interrupt handler
 }
 
@@ -1296,7 +1295,7 @@ void ThumbCPU::thumb_b(uint16_t instruction) {
 
     // Perform the branch operation
     parentCPU.R()[15] += (offset << 1); // Branch to target address
-    Debug::log::info("Executing Thumb B: Branch to 0x" + Debug::toHexString(parentCPU.R()[15], 8));
+    DEBUG_INFO("Executing Thumb B: Branch to 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
 }
 
 void ThumbCPU::thumb_bl(uint16_t instruction) {
@@ -1314,7 +1313,7 @@ void ThumbCPU::thumb_bl(uint16_t instruction) {
         
         // Store PC (of first instruction) + 4 + high_offset in LR
         parentCPU.R()[14] = (parentCPU.R()[15] - 2) + 4 + high_offset; 
-        Debug::log::info("Executing Thumb BL (first part): Storing intermediate value");
+        DEBUG_INFO("Executing Thumb BL (first part): Storing intermediate value");
     } else if ((instruction & 0xF800) == 0xF800) {
         // Second part: BL suffix - complete the branch
         uint32_t low_offset = (instruction & 0x7FF) << 1; // Bits 0-10 shifted left by 1
@@ -1325,6 +1324,6 @@ void ThumbCPU::thumb_bl(uint16_t instruction) {
         
         // Branch to target
         parentCPU.R()[15] = target & 0xFFFFFFFE; // Clear bit 0 for alignment
-        Debug::log::info("Executing Thumb BL (second part): Branch to 0x" + Debug::toHexString(parentCPU.R()[15], 8) + " with link, LR=0x" + Debug::toHexString(parentCPU.R()[14], 8));
+        DEBUG_INFO("Executing Thumb BL (second part): Branch to 0x" + debug_to_hex_string(parentCPU.R()[15], 8) + " with link, LR=0x" + debug_to_hex_string(parentCPU.R()[14], 8));
     }
 }
