@@ -1,5 +1,5 @@
 #include "thumb_cpu.h"
-#include "debug_selector.h" // Use debug selector for automatic optimization
+#include "debug.h" // Use debug system
 #include "timing.h"
 #include "thumb_timing.h"
 #include <sstream>
@@ -10,9 +10,9 @@ constexpr void (ThumbCPU::*ThumbCPU::thumb_instruction_table[256])(uint16_t);
 constexpr void (ThumbCPU::*ThumbCPU::thumb_alu_operations_table[16])(uint8_t, uint8_t);
 
 ThumbCPU::ThumbCPU(CPU& cpu) : parentCPU(cpu) {
-    Debug::log::info("Initializing ThumbCPU with parent CPU");
+    DEBUG_INFO("Initializing ThumbCPU with parent CPU");
     // Initialize any Thumb-specific state or resources here
-    Debug::log::info("ThumbCPU initialized. Instruction table is compile-time constant.");
+    DEBUG_INFO("ThumbCPU initialized. Instruction table is compile-time constant.");
 }
 
 ThumbCPU::~ThumbCPU() {
@@ -20,44 +20,34 @@ ThumbCPU::~ThumbCPU() {
 }
 
 void ThumbCPU::execute(uint32_t cycles) {
-    // Use lazy evaluation for debug logs
-    DebugOpt::LazyLog::info([cycles]() {
-        return "Executing Thumb instructions for " + std::to_string(cycles) + " cycles";
-    });
+    // Use macro-based debug system
+    DEBUG_INFO("Executing Thumb instructions for " + std::to_string(cycles) + " cycles");
     
-    DebugOpt::LazyLog::info([this]() {
-        return "Parent CPU memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes";
-    });
+    DEBUG_INFO("Parent CPU memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
     
     while (cycles > 0) {
         // Check if we're still in Thumb mode - if not, break out early
         if (!parentCPU.getFlag(CPU::FLAG_T)) {
-            Debug::log::info("Mode switched to ARM during execution, breaking out of Thumb execution");
+            DEBUG_INFO("Mode switched to ARM during execution, breaking out of Thumb execution");
             break;
         }
         
         // HACK - do we need to model the cpu pipeline?
         uint16_t instruction = parentCPU.getMemory().read16(parentCPU.R()[15]); // Fetch instruction
-        uint8_t opcode = instruction >> 8;
-
-        // Use lazy evaluation for instruction fetch debug logs
-        DebugOpt::LazyLog::info([instruction, this]() {
-            return "Fetched Thumb instruction: " + Debug::toHexString(instruction, 4) + 
-                   " at PC: " + Debug::toHexString(parentCPU.R()[15], 8);
-        });
+        uint8_t opcode = instruction >> 8;        // Use debug macros for instruction fetch logging
+        DEBUG_INFO("Fetched Thumb instruction: " + debug_to_hex_string(instruction, 4) + 
+                   " at PC: " + debug_to_hex_string(parentCPU.R()[15], 8));
         
         parentCPU.R()[15] += 2; // Increment PC for Thumb instructions
         
-        // Use lazy evaluation for PC increment debug logs
-        DebugOpt::LazyLog::info([this]() {
-            return "Incremented PC to: " + Debug::toHexString(parentCPU.R()[15], 8);
-        });
+        // Use debug macros for PC increment logging
+        DEBUG_INFO("Incremented PC to: " + debug_to_hex_string(parentCPU.R()[15], 8));
         
         // Decode and execute the instruction
         if (thumb_instruction_table[opcode]) {
             (this->*thumb_instruction_table[opcode])(instruction);
         } else {
-            Debug::log::error("Unknown Thumb instruction");
+            DEBUG_ERROR("Unknown Thumb instruction");
         }
         cycles -= 1; // Placeholder for cycle deduction
     }
@@ -65,15 +55,13 @@ void ThumbCPU::execute(uint32_t cycles) {
 
 // New cycle-driven execution method
 void ThumbCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
-    // Use lazy evaluation for debug logs
-    DebugOpt::LazyLog::info([cycles]() {
-        return "Executing Thumb instructions with timing for " + std::to_string(cycles) + " cycles";
-    });
+    // Use macro-based debug system
+    DEBUG_INFO("Executing Thumb instructions with timing for " + std::to_string(cycles) + " cycles");
     
     while (cycles > 0) {
         // Check if we're still in Thumb mode - if not, break out early
         if (!parentCPU.getFlag(CPU::FLAG_T)) {
-            Debug::log::info("Mode switched to ARM during timing execution, breaking out of Thumb execution");
+            DEBUG_INFO("Mode switched to ARM during timing execution, breaking out of Thumb execution");
             break;
         }
         
@@ -83,17 +71,12 @@ void ThumbCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
         // Fetch next instruction to determine its cycle cost
         uint16_t instruction = parentCPU.getMemory().read16(parentCPU.R()[15]);
         uint32_t instruction_cycles = calculateInstructionCycles(instruction);
+         // Use debug macros for instruction logging
+        DEBUG_INFO("Next instruction: " + debug_to_hex_string(instruction, 4) +
+                   " at PC: " + debug_to_hex_string(parentCPU.R()[15], 8) +
+                   " will take " + std::to_string(instruction_cycles) + " cycles");
         
-        // Use lazy evaluation for detailed instruction debug logs
-        DebugOpt::LazyLog::debug([instruction, this, instruction_cycles]() {
-            return "Next instruction: " + Debug::toHexString(instruction, 4) + 
-                   " at PC: " + Debug::toHexString(parentCPU.R()[15], 8) + 
-                   " will take " + std::to_string(instruction_cycles) + " cycles";
-        });
-        
-        DebugOpt::LazyLog::debug([cycles_until_event]() {
-            return "Cycles until next event: " + std::to_string(cycles_until_event);
-        });
+        DEBUG_INFO("Cycles until next event: " + std::to_string(cycles_until_event));
         
         // Check if instruction will complete before next timing event
         if (instruction_cycles <= cycles_until_event) {
@@ -104,7 +87,7 @@ void ThumbCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
             if (thumb_instruction_table[opcode]) {
                 (this->*thumb_instruction_table[opcode])(instruction);
             } else {
-                Debug::log::error("Unknown Thumb instruction");
+                DEBUG_ERROR("Unknown Thumb instruction");
             }
             
             // Update timing
@@ -113,9 +96,7 @@ void ThumbCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
             
         } else {
             // Process timing event first, then continue
-            DebugOpt::LazyLog::debug([]() {
-                return "Processing timing event before instruction";
-            });
+            DEBUG_INFO("Processing timing event before instruction");
             timing_advance(timing, cycles_until_event);
             timing_process_timer_events(timing);
             timing_process_video_events(timing);
@@ -167,7 +148,7 @@ void ThumbCPU::thumb_lsl(uint16_t instruction) {
     parentCPU.updateNFlag(parentCPU.R()[rd]);
     // No effect on overflow flag
 
-    Debug::log::info("Executing Thumb LSL: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " << " + std::to_string(shift_amount));
+    DEBUG_INFO("Executing Thumb LSL: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " << " + std::to_string(shift_amount));
 }
 
 void ThumbCPU::thumb_lsr(uint16_t instruction) {
@@ -187,7 +168,7 @@ void ThumbCPU::thumb_lsr(uint16_t instruction) {
     parentCPU.updateZFlag(parentCPU.R()[rd]);
     parentCPU.clearFlag(CPU::FLAG_N);
 
-    Debug::log::info("Executing Thumb LSR: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " >> " + std::to_string(shift_amount));
+    DEBUG_INFO("Executing Thumb LSR: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " >> " + std::to_string(shift_amount));
 }
 
 void ThumbCPU::thumb_asr(uint16_t instruction) {
@@ -210,7 +191,7 @@ void ThumbCPU::thumb_asr(uint16_t instruction) {
     parentCPU.updateNFlag(parentCPU.R()[rd]);
     // No effect on overflow flag
 
-    Debug::log::info("Executing Thumb ASR: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " >> " + std::to_string(shift_amount));
+    DEBUG_INFO("Executing Thumb ASR: R" + std::to_string(rd) + " = R" + std::to_string(rs) + " >> " + std::to_string(shift_amount));
 }
 
 void ThumbCPU::thumb_add_register(uint16_t instruction) {
@@ -232,7 +213,7 @@ void ThumbCPU::thumb_add_register(uint16_t instruction) {
     parentCPU.updateCFlagAdd(op1, op2); // Carry flag
     parentCPU.updateVFlag(op1, op2, result); // Overflow flag
 
-    Debug::log::info("Executing Thumb ADD (register): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " + R" + std::to_string(rn));
+    DEBUG_INFO("Executing Thumb ADD (register): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " + R" + std::to_string(rn));
 }
 
 void ThumbCPU::thumb_add_offset(uint16_t instruction) {
@@ -252,7 +233,7 @@ void ThumbCPU::thumb_add_offset(uint16_t instruction) {
     parentCPU.updateCFlagAdd(op1, offset); // Carry flag
     parentCPU.updateVFlag(op1, offset, result); // Overflow flag
 
-    Debug::log::info("Executing Thumb ADD (offset): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " + " + std::to_string(offset));
+    DEBUG_INFO("Executing Thumb ADD (offset): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " + " + std::to_string(offset));
 }
 
 void ThumbCPU::thumb_sub_register(uint16_t instruction) {
@@ -273,7 +254,7 @@ void ThumbCPU::thumb_sub_register(uint16_t instruction) {
     parentCPU.updateCFlagSub(op1, op2); // Carry flag
     parentCPU.updateVFlagSub(op1, op2, result); // Overflow flag
 
-    Debug::log::info("Executing Thumb SUB (register): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " - R" + std::to_string(rn));
+    DEBUG_INFO("Executing Thumb SUB (register): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " - R" + std::to_string(rn));
 }
 
 void ThumbCPU::thumb_sub_offset(uint16_t instruction) {
@@ -293,7 +274,7 @@ void ThumbCPU::thumb_sub_offset(uint16_t instruction) {
     parentCPU.updateCFlagSub(op1, offset); // Carry flag
     parentCPU.updateVFlagSub(op1, offset, result); // Overflow flag
     
-    Debug::log::info("Executing Thumb SUB (offset): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " - " + std::to_string(offset));
+    DEBUG_INFO("Executing Thumb SUB (offset): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " - " + std::to_string(offset));
 }
 
 void ThumbCPU::thumb_mov_imm(uint16_t instruction) {
@@ -304,7 +285,7 @@ void ThumbCPU::thumb_mov_imm(uint16_t instruction) {
     parentCPU.updateZFlag(parentCPU.R()[rd]); // No negative, carry-out or overflow for MOV
     parentCPU.clearFlag(CPU::FLAG_N); // N flag is always cleared for this instruction as the 8bit immediate is always non-negative
 
-    Debug::log::info("Executing Thumb MOV (immediate): R" + std::to_string(rd) + " = " + std::to_string(imm));
+    DEBUG_INFO("Executing Thumb MOV (immediate): R" + std::to_string(rd) + " = " + std::to_string(imm));
 }
 
 void ThumbCPU::thumb_cmp_imm(uint16_t instruction) {
@@ -319,7 +300,7 @@ void ThumbCPU::thumb_cmp_imm(uint16_t instruction) {
     parentCPU.updateVFlagSub(op1, imm, result);
     parentCPU.updateNFlag(result);
 
-    Debug::log::info("CMP_IMM: R[" + std::to_string(rd) + "] = " + std::to_string(parentCPU.R()[rd]) + ", imm = " + std::to_string(imm));
+    DEBUG_INFO("CMP_IMM: R[" + std::to_string(rd) + "] = " + std::to_string(parentCPU.R()[rd]) + ", imm = " + std::to_string(imm));
 }
 
 void ThumbCPU::thumb_add_imm(uint16_t instruction) {
@@ -335,7 +316,7 @@ void ThumbCPU::thumb_add_imm(uint16_t instruction) {
     parentCPU.updateVFlag(op1, imm, result);
     parentCPU.updateNFlag(result);
     
-    Debug::log::info("Executing Thumb ADD (immediate): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + " + std::to_string(imm));
+    DEBUG_INFO("Executing Thumb ADD (immediate): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + " + std::to_string(imm));
 }
 
 void ThumbCPU::thumb_sub_imm(uint16_t instruction) {
@@ -351,7 +332,7 @@ void ThumbCPU::thumb_sub_imm(uint16_t instruction) {
     parentCPU.updateVFlagSub(op1, imm, result);
     parentCPU.updateNFlag(result);
 
-    Debug::log::info("Executing Thumb SUB (immediate): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " - " + std::to_string(imm));
+    DEBUG_INFO("Executing Thumb SUB (immediate): R" + std::to_string(rd) + " = R" + std::to_string(rd) + " - " + std::to_string(imm));
 }
 
 void ThumbCPU::thumb_alu_operations(uint16_t instruction) {
@@ -362,7 +343,7 @@ void ThumbCPU::thumb_alu_operations(uint16_t instruction) {
     if (thumb_alu_operations_table[sub_opcode] != NULL) {
          (this->*thumb_alu_operations_table[sub_opcode])(rd, rs);
     } else {
-        Debug::log::error("Undefined ALU operation: sub-opcode " + std::to_string(sub_opcode));
+        DEBUG_ERROR("Undefined ALU operation: sub-opcode " + std::to_string(sub_opcode));
     }
 }
 
@@ -377,7 +358,7 @@ void ThumbCPU::thumb_alu_and(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // No update to V and C flags for AND operation
 
-    Debug::log::info("Executing Thumb AND: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " & R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb AND: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " & R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_eor(uint8_t rd, uint8_t rs) {
@@ -390,7 +371,7 @@ void ThumbCPU::thumb_alu_eor(uint8_t rd, uint8_t rs) {
     parentCPU.updateNFlag(result);
     // No update to V and C flags for EOR operation
 
-    Debug::log::info("Executing Thumb EOR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " ^ R" + std::to_string(rs));
+    DEBUG_INFO("Executing Thumb EOR: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " ^ R" + std::to_string(rs));
 }
 
 void ThumbCPU::thumb_alu_lsl(uint8_t rd, uint8_t rs) {

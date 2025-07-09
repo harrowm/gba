@@ -15,6 +15,7 @@
  *   DEBUG_TRACE(msg)   - Prints trace messages (level >= VERY_VERBOSE, respects file mask)
  *   
  * Convenience Macros:
+ *   DEBUG_TO_HEX_STRING(value, width) - Convert value to hex string
  *   DEBUG_PRINT_HEX(name, value, width) - Print hex value with name
  *   DEBUG_PRINT_REG(name, value)        - Print register value (32-bit hex)
  *   DEBUG_ENTER_FUNCTION()              - Trace function entry
@@ -23,14 +24,6 @@
  * Configuration:
  *   - g_debug_level: Set runtime debug level (0-3)
  *   - g_debug_file_mask: Set which files to debug (bitwise OR of DEBUG_FILE_* flags)
- *   
- * Example:
- *   DEBUG_LOG("Processing instruction: " << std::hex << instruction);
- *   DEBUG_PRINT_REG("R0", cpu.registers[0]);
- *   
- * Build configuration:
- *   Debug:      -DDEBUG_BUILD
- *   Production: (no flags) or use debug_stripped.h
  */
 
 // Debug build configuration
@@ -39,7 +32,7 @@
 #ifdef DEBUG_BUILD
 
 #include <stdio.h>
-#include <string.h>
+#include <string>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -89,66 +82,37 @@ inline std::string debug_to_hex_string(uint32_t value, int width) {
 // Debug macros - these expand to actual code when DEBUG_BUILD is defined
 #define DEBUG_ERROR(msg) \
     do { \
-        std::cerr << DEBUG_COLOR_RED << "[ERROR] " << __FILE__ << ":" << __LINE__ << ": " \
-                  << (msg) << DEBUG_COLOR_RESET << std::endl; \
+        fprintf(stderr, "%s[ERROR] %s:%d: %s%s\n", \
+            DEBUG_COLOR_RED, __FILE__, __LINE__, msg, DEBUG_COLOR_RESET); \
     } while(0)
 
 #define DEBUG_INFO(msg) \
     do { \
         if (g_debug_level >= DEBUG_LEVEL_BASIC) { \
-            std::cerr << DEBUG_COLOR_GREEN << "[INFO]  " << __FILE__ << ":" << __LINE__ << ": " \
-                      << (msg) << DEBUG_COLOR_RESET << std::endl; \
+            fprintf(stderr, "%s[INFO]  %s:%d: %s%s\n", \
+                DEBUG_COLOR_GREEN, __FILE__, __LINE__, msg, DEBUG_COLOR_RESET); \
         } \
     } while(0)
 
 #define DEBUG_LOG(msg) \
     do { \
         if (g_debug_level >= DEBUG_LEVEL_VERBOSE && debug_is_file_enabled(__FILE__)) { \
-            std::cerr << DEBUG_COLOR_CYAN << "[DEBUG] " << __FILE__ << ":" << __LINE__ << ": " \
-                      << (msg) << DEBUG_COLOR_RESET << std::endl; \
+            fprintf(stderr, "%s[DEBUG] %s:%d: %s%s\n", \
+                DEBUG_COLOR_CYAN, __FILE__, __LINE__, msg, DEBUG_COLOR_RESET); \
         } \
     } while(0)
 
 #define DEBUG_TRACE(msg) \
     do { \
         if (g_debug_level >= DEBUG_LEVEL_VERY_VERBOSE && debug_is_file_enabled(__FILE__)) { \
-            std::cerr << DEBUG_COLOR_MAGENTA << "[TRACE] " << __FILE__ << ":" << __LINE__ << ": " \
-                      << (msg) << DEBUG_COLOR_RESET << std::endl; \
+            fprintf(stderr, "%s[TRACE] %s:%d: %s%s\n", \
+                DEBUG_COLOR_MAGENTA, __FILE__, __LINE__, msg, DEBUG_COLOR_RESET); \
         } \
     } while(0)
 
-// Convenience macros for common debug patterns
-#define DEBUG_PRINT_HEX(name, value, width) \
-    do { \
-        if (g_debug_level >= DEBUG_LEVEL_VERBOSE && debug_is_file_enabled(__FILE__)) { \
-            std::cerr << DEBUG_COLOR_CYAN << "[DEBUG] " << __FILE__ << ":" << __LINE__ << ": " \
-                      << (name) << ": 0x" << debug_to_hex_string(value, width) << DEBUG_COLOR_RESET << std::endl; \
-        } \
-    } while(0)
+// Define a macro to convert values to hex string
+#define DEBUG_TO_HEX_STRING(value, width) debug_to_hex_string(value, width)
 
-#define DEBUG_PRINT_REG(name, value) \
-    do { \
-        if (g_debug_level >= DEBUG_LEVEL_VERBOSE && debug_is_file_enabled(__FILE__)) { \
-            std::cerr << DEBUG_COLOR_CYAN << "[DEBUG] " << __FILE__ << ":" << __LINE__ << ": " \
-                      << (name) << ": 0x" << debug_to_hex_string(value, 8) << DEBUG_COLOR_RESET << std::endl; \
-        } \
-    } while(0)
-
-#define DEBUG_ENTER_FUNCTION() \
-    do { \
-        if (g_debug_level >= DEBUG_LEVEL_VERY_VERBOSE && debug_is_file_enabled(__FILE__)) { \
-            std::cerr << DEBUG_COLOR_MAGENTA << "[TRACE] " << __FILE__ << ":" << __LINE__ << ": " \
-                      << "Entering " << __FUNCTION__ << DEBUG_COLOR_RESET << std::endl; \
-        } \
-    } while(0)
-
-#define DEBUG_EXIT_FUNCTION() \
-    do { \
-        if (g_debug_level >= DEBUG_LEVEL_VERY_VERBOSE && debug_is_file_enabled(__FILE__)) { \
-            std::cerr << DEBUG_COLOR_MAGENTA << "[TRACE] " << __FILE__ << ":" << __LINE__ << ": " \
-                      << "Exiting " << __FUNCTION__ << DEBUG_COLOR_RESET << std::endl; \
-        } \
-    } while(0)
 
 #else // DEBUG_BUILD not defined - strip out all debug code
 
@@ -157,10 +121,11 @@ inline std::string debug_to_hex_string(uint32_t value, int width) {
 #define DEBUG_INFO(msg)                     do { } while(0)
 #define DEBUG_LOG(msg)                      do { } while(0)
 #define DEBUG_TRACE(msg)                    do { } while(0)
-#define DEBUG_PRINT_HEX(name, value, width) do { } while(0)
-#define DEBUG_PRINT_REG(name, value)        do { } while(0)
-#define DEBUG_ENTER_FUNCTION()              do { } while(0)
-#define DEBUG_EXIT_FUNCTION()               do { } while(0)
+#define DEBUG_TO_HEX_STRING(value, width)   ""
+// No lazy log macros in production builds
+
+// Provide a no-op implementation of debug_to_hex_string for production builds
+inline std::string debug_to_hex_string(uint32_t, int) { return ""; }
 
 #endif // DEBUG_BUILD
 
