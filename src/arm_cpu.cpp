@@ -1,10 +1,10 @@
 #include "arm_cpu.h"
-#include "debug_macros.h" // Use the macro-based debug system
+#include "debug.h"
 #include "timing.h"
 #include "arm_timing.h"
 
 ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu) {
-    DEBUG_LOG_INFO("Initializing ARMCPU with parent CPU");
+    DEBUG_INFO("Initializing ARMCPU with parent CPU");
 }
 
 ARMCPU::~ARMCPU() {
@@ -13,18 +13,12 @@ ARMCPU::~ARMCPU() {
 
 void ARMCPU::execute(uint32_t cycles) {
     // Use lazy evaluation for debug logs
-    DEBUG_LAZY_LOG_INFO([cycles]() {
-        return "Executing ARM instructions for " + std::to_string(cycles) + " cycles";
-    });
-    
-    DEBUG_LAZY_LOG_INFO([this]() {
-        return "Parent CPU memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes";
-    });
-    
+    DEBUG_INFO("Executing ARM instructions for " + std::toString(cycles) + " cycles. Memory size: " + std::toString(parentCPU.getMemory().getSize()) + " bytes");
+        
     while (cycles > 0) {
         // Check if we're still in ARM mode - if not, break out early
         if (parentCPU.getFlag(CPU::FLAG_T)) {
-            DEBUG_LOG_INFO("Mode switched to Thumb during execution, breaking out of ARM execution");
+            DEBUG_INFO("Mode switched to Thumb during execution, breaking out of ARM execution");
             break;
         }
         
@@ -32,10 +26,7 @@ void ARMCPU::execute(uint32_t cycles) {
         uint32_t instruction = parentCPU.getMemory().read32(pc); // Fetch instruction
         
         // Use lazy evaluation for instruction fetch debug logs
-        DEBUG_LAZY_LOG_INFO([instruction, pc]() {
-            return "Fetched ARM instruction: " + DEBUG_TO_HEX_STRING(instruction, 8) + 
-                   " at PC: " + DEBUG_TO_HEX_STRING(pc, 8);
-        });
+        DEBUG_INFO("Fetched ARM instruction: " + debug_to_hex_string(instruction, 8) + " at PC: " + debug_to_hex_string(pc, 8));
         
         bool pc_modified = decodeAndExecute(instruction);
         
@@ -43,10 +34,7 @@ void ARMCPU::execute(uint32_t cycles) {
         if (!pc_modified) {
             parentCPU.R()[15] = pc + 4;
             
-            // Use lazy evaluation for PC increment debug logs
-            DebugOpt::LazyLog::info([this]() {
-                return "Incremented PC to: " + Debug::toHexString(parentCPU.R()[15], 8);
-            });
+            DEBUG_INFO("Incremented PC to: 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
         }
         
         cycles -= 1; // Placeholder for cycle deduction
@@ -55,15 +43,13 @@ void ARMCPU::execute(uint32_t cycles) {
 
 // New timing-aware execution method
 void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
-    // Use lazy evaluation for debug logs
-    DebugOpt::LazyLog::info([cycles]() {
-        return "Executing ARM instructions with timing for " + std::to_string(cycles) + " cycles";
-    });
+    // Use macro-based debug system
+    DEBUG_INFO("Executing ARM instructions with timing for " + std::to_string(cycles) + " cycles");
     
     while (cycles > 0) {
         // Check if we're still in ARM mode - if not, break out early
         if (parentCPU.getFlag(CPU::FLAG_T)) {
-            Debug::log::info("Mode switched to Thumb during timing execution, breaking out of ARM execution");
+            DEBUG_INFO("Mode switched to Thumb during timing execution, breaking out of ARM execution");
             break;
         }
         
@@ -75,16 +61,11 @@ void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
         uint32_t instruction = parentCPU.getMemory().read32(pc);
         uint32_t instruction_cycles = calculateInstructionCycles(instruction);
         
-        // Use lazy evaluation for detailed instruction debug logs
-        DebugOpt::LazyLog::debug([instruction, pc, instruction_cycles]() {
-            return "Next ARM instruction: " + Debug::toHexString(instruction, 8) + 
-                   " at PC: " + Debug::toHexString(pc, 8) + 
-                   " will take " + std::to_string(instruction_cycles) + " cycles";
-        });
-        
-        DebugOpt::LazyLog::debug([cycles_until_event]() {
-            return "Cycles until next event: " + std::to_string(cycles_until_event);
-        });
+        // Use debug macros for detailed instruction logging
+        DEBUG_INFO("Next ARM instruction: 0x" + debug_to_hex_string(instruction, 8) 
+                  + " at PC: 0x" + debug_to_hex_string(pc, 8)
+                  + " will take " + std::to_string(instruction_cycles) + " cycles");
+        DEBUG_INFO("Cycles until next event: " + std::to_string(cycles_until_event)); 
         
         // Check if instruction will complete before next timing event
         if (instruction_cycles <= cycles_until_event) {
@@ -101,9 +82,7 @@ void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
             
         } else {
             // Process timing event first, then continue
-            DebugOpt::LazyLog::debug([]() {
-                return "Processing timing event before ARM instruction";
-            });
+            DEBUG_INFO("Processing timing event before executing instruction");
             timing_advance(timing, cycles_until_event);
             timing_process_timer_events(timing);
             timing_process_video_events(timing);
@@ -235,11 +214,11 @@ FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* 
 }
 
 bool ARMCPU::decodeAndExecute(uint32_t instruction) {
-    Debug::log::info("Decoding and executing ARM instruction: " + Debug::toHexString(instruction, 8));
+    DEBUG_INFO("Decoding and executing ARM instruction: " + debug_to_hex_string(instruction, 8));
     
     // Check condition first
     if (!checkCondition(instruction)) {
-        Debug::log::debug("ARM instruction condition not met, skipping");
+        DEBUG_INFO("ARM instruction condition not met, skipping");
         return false; // PC not modified
     }
     
@@ -327,7 +306,7 @@ bool ARMCPU::decodeAndExecute(uint32_t instruction) {
                 break;
         }
     } else {
-        Debug::log::error("Unknown ARM instruction format: " + std::to_string(format));
+        DEBUG_INFO("Unknown ARM instruction format: " + std::to_string(format));
         arm_undefined(instruction);
         pc_modified = true; // Undefined instruction changes PC
     }
@@ -366,12 +345,10 @@ void ARMCPU::arm_data_processing(uint32_t instruction) {
             }
             parentCPU.R()[rd] = imm;
             
-            // Only log in debug mode - will be completely eliminated in release builds
-            DebugOpt::LazyLog::debug([rd, imm, set_flags]() {
-                return "Fast MOV: rd=R" + std::to_string(rd) + 
-                       " imm=0x" + Debug::toHexString(imm, 8) + 
-                       " set_flags=" + std::to_string(set_flags);
-            });
+            // Log using debug macros
+            DEBUG_INFO("Fast MOV: rd=R" + std::to_string(rd) + 
+                      " imm=0x" + debug_to_hex_string(imm, 8) + 
+                      " set_flags=" + std::to_string(set_flags));
             return;
         }
     }
@@ -382,14 +359,11 @@ void ARMCPU::arm_data_processing(uint32_t instruction) {
         uint32_t op1 = parentCPU.R()[rn];
         uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
         
-        // Debug log - will be completely eliminated in release builds
-        DebugOpt::LazyLog::debug([opcode, rd, rn, rm, set_flags]() {
-            return "Fast ALU: opcode=" + std::to_string(opcode) + 
-                   " rd=R" + std::to_string(rd) + 
-                   " rn=R" + std::to_string(rn) + 
-                   " rm=R" + std::to_string(rm) + 
-                   " set_flags=" + std::to_string(set_flags);
-        });
+        DEBUG_INFO("Fast ALU: opcode=" + std::to_string(opcode) +
+                  " rd=R" + std::to_string(rd) +
+                  " rn=R" + std::to_string(rn) +
+                  " rm=R" + std::to_string(instruction & 0xF) +
+                  " set_flags=" + std::to_string(set_flags));
         
         // Handle most common ALU operations directly
         switch (opcode) {
@@ -456,16 +430,11 @@ void ARMCPU::arm_data_processing(uint32_t instruction) {
     uint32_t carry_out = 0;
     uint32_t operand2 = calculateOperand2(instruction, &carry_out);
     
-    // Only log in debug mode to avoid performance impact
-    if (Debug::Config::debugLevel >= Debug::Level::Verbose) {
-        DebugOpt::LazyLog::debug([opcode, rd, rn, operand2, set_flags]() {
-            return "ARM Data Processing: opcode=" + std::to_string(opcode) + 
-                   " rd=R" + std::to_string(rd) + 
-                   " rn=R" + std::to_string(rn) + 
-                   " operand2=0x" + Debug::toHexString(operand2, 8) + 
-                   " set_flags=" + std::to_string(set_flags);
-        });
-    }
+    DEBUG_INFO("ARM Data Processing: opcode=" + std::to_string(opcode) + 
+              " rd=R" + std::to_string(rd) + 
+              " rn=R" + std::to_string(rn) + 
+              " operand2=0x" + debug_to_hex_string(operand2, 8) + 
+              " set_flags=" + std::to_string(set_flags));
     
     // Use a static array of function pointers for opcode dispatch
     // This is faster than a switch statement for a fixed number of cases
@@ -701,12 +670,12 @@ void ARMCPU::arm_branch(uint32_t instruction) {
     // Update PC (R15)
     parentCPU.R()[15] = parentCPU.R()[15] + offset + 8;
     
-    // Debug logging
-    DebugOpt::LazyLog::debug([offset, link, this]() {
-        return "ARM Branch: offset=" + std::to_string(offset) + 
-               " link=" + std::to_string(link) +
-               " new PC=0x" + Debug::toHexString(parentCPU.R()[15], 8);
-    });
+
+    DEBUG_INFO("ARM Branch instruction executed: " + 
+               debug_to_hex_string(instruction, 8) + 
+               " with offset: " + std::to_string(offset) + 
+               " link: " + std::to_string(link) + 
+               " new PC: 0x" + debug_to_hex_string(parentCPU.R()[15], 8)); 
 }
 
 void ARMCPU::arm_single_data_transfer(uint32_t instruction) {
@@ -891,10 +860,9 @@ void ARMCPU::arm_software_interrupt(uint32_t instruction) {
     // Switch to supervisor mode and handle the software interrupt
     handleException(0x00000008, 0x13, true, false);
     
-    DebugOpt::LazyLog::debug([swi_number, return_address]() {
-        return "ARM Software Interrupt: number=0x" + Debug::toHexString(swi_number, 6) + 
-               " return_address=0x" + Debug::toHexString(return_address, 8);
-    });
+    DEBUG_INFO("ARM Software Interrupt: number=0x" + 
+               debug_to_hex_string(swi_number, 6) + 
+               " return_address=0x" + debug_to_hex_string(return_address, 8));
 }
 
 void ARMCPU::arm_psr_transfer(uint32_t instruction) {
@@ -908,9 +876,7 @@ void ARMCPU::arm_psr_transfer(uint32_t instruction) {
         if (psr_source) {
             // SPSR -> Rd (not supported in this implementation)
             // Use CPSR as fallback
-            DebugOpt::LazyLog::debug([]() {
-                return "SPSR access not supported, using CPSR instead";
-            });
+            DEBUG_INFO("MRS: SPSR access not supported, using CPSR instead");
             parentCPU.R()[rd] = parentCPU.CPSR();
         } else {
             // CPSR -> Rd
@@ -948,9 +914,7 @@ void ARMCPU::arm_psr_transfer(uint32_t instruction) {
         // Update the PSR
         if (psr_source) {
             // SPSR not supported, log warning
-            DebugOpt::LazyLog::debug([]() {
-                return "SPSR write not supported, operation ignored";
-            });
+            DEBUG_INFO("MSR: SPSR write not supported, operation ignored");
         } else {
             parentCPU.CPSR() = psr;
         }
@@ -975,17 +939,17 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
     parentCPU.CPSR() = new_cpsr;
     
     // In a real ARM CPU, we would save old_cpsr to SPSR, but it's not supported here
-    DebugOpt::LazyLog::debug([old_cpsr]() {
-        return "SPSR write not supported, old CPSR value 0x" + Debug::toHexString(old_cpsr, 8) + " not saved";
-    });
+    DEBUG_INFO("SPSR write not supported, old CPSR value 0x" + 
+               debug_to_hex_string(old_cpsr, 8) + " not saved");
     
     // Set the PC to the exception vector
     parentCPU.R()[15] = vector_address;
-    
-    DebugOpt::LazyLog::debug([vector_address, new_mode]() {
-        return "Exception: vector=0x" + Debug::toHexString(vector_address, 8) + 
-               " new mode=0x" + Debug::toHexString(new_mode, 2);
-    });
+
+    DEBUG_INFO("Handling exception: vector=0x" + 
+               debug_to_hex_string(vector_address, 8) + 
+               " new mode=0x" + debug_to_hex_string(new_mode, 2) + 
+               " disable_irq=" + std::to_string(disable_irq) + 
+               " disable_fiq=" + std::to_string(disable_fiq));
 }
 
 // Coprocessor functions
@@ -1005,16 +969,14 @@ void ARMCPU::arm_coprocessor_register(uint32_t instruction) {
 }
 
 void ARMCPU::arm_undefined(uint32_t instruction) {
-    DebugOpt::LazyLog::error([instruction]() {
-        return "Undefined instruction: 0x" + Debug::toHexString(instruction, 8);
-    });
+    DEBUG_INFO("Undefined instruction encountered: 0x" + 
+               debug_to_hex_string(instruction, 8));
     
     // Calculate the return address (PC+4)
     uint32_t return_address = parentCPU.R()[15] + 4;
-    
-    DebugOpt::LazyLog::debug([return_address]() {
-        return "Return address for undefined instruction: 0x" + Debug::toHexString(return_address, 8);
-    });
+
+    DEBUG_INFO("Return address for undefined instruction: 0x" + 
+               debug_to_hex_string(return_address, 8));
     
     // Switch to undefined instruction mode and handle the exception
     handleException(0x00000004, 0x1B, true, false);
