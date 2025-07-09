@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "__locale": "cpp",
+        "chrono": "cpp",
+        "functional": "cpp",
+        "coroutine": "cpp",
+        "*.old": "cpp",
+        "bitset": "cpp",
+        "temp_arm_cpu": "cpp"
+    }
+}

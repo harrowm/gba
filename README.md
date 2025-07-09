@@ -33,6 +33,7 @@ https://github.com/daniel5151/armv4t_emu/tree/master/tests
 
 The tests use Google Test, installed with:
 brew install googletest
+brew install gperftools
 
 
 SETTING THE C FLAG:

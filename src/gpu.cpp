@@ -1,14 +1,16 @@
 #include "gpu.h"
+#include "memory.h"
 #include "debug.h"
+#include <cstdint>
 
 GPU::GPU(Memory& mem) : memory(mem) {
     // Initialize GPU state
 }
 
 void GPU::renderScanline() {
-    Debug::log::info("Rendering scanline");
+    DEBUG_INFO("Rendering scanline");
     // Stub implementation for rendering a scanline
-    Debug::log::info("Accessing memory for rendering");
+    DEBUG_INFO("Accessing memory for rendering");
     uint8_t testValue = memory.read8(0x0); // Example memory access
-    Debug::log::info("Test value from memory: " + std::to_string(testValue));
+    DEBUG_INFO("Test value from memory: " << testValue);
 }

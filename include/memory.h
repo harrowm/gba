@@ -10,8 +10,19 @@
 #include <fstream>
 #include <iostream>
 
+// Memory type definitions
 #define MEMORY_TYPE_ROM 0
 #define MEMORY_TYPE_RAM 1
+
+// Memory safety options
+// Define DISABLE_MEMORY_BOUNDS_CHECK at compile time to disable memory bounds checking
+// For benchmark and optimized builds, this is set automatically in the Makefile
+// This eliminates bounds checking overhead in performance-critical code paths
+#ifndef DISABLE_MEMORY_BOUNDS_CHECK
+#define CHECK_MEMORY_BOUNDS 1
+#else
+#define CHECK_MEMORY_BOUNDS 0
+#endif
 
 class Memory {
 private:
