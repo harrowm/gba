@@ -6,6 +6,7 @@
         "coroutine": "cpp",
         "*.old": "cpp",
         "bitset": "cpp",
-        "temp_arm_cpu": "cpp"
+        "temp_arm_cpu": "cpp",
+        "string": "cpp"
     }
 }

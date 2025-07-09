@@ -3,8 +3,8 @@
 # Compiler and flags
 CXX = g++
 CC = gcc
-CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -g -O2
-CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -g -O2
+CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -g -O2 -DDEBUG_BUILD
+CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -g -O2 -DDEBUG_BUILD
 
 # Google Test paths (if available)
 GTEST_INCLUDE = /opt/homebrew/include
@@ -146,16 +146,16 @@ $(SIMPLE_BENCHMARK_TARGET): $(TESTS_DIR)/simple_benchmark.cpp $(INCLUDE_DIR)/*.h
 # 3 = Very Verbose (includes trace messages)
 
 # Standard debug build with assertions and basic debug output
-DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=1
-DEBUG_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=1
+DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=1 -DDEBUG_BUILD
+DEBUG_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=1 -DDEBUG_BUILD
 
 # Verbose debug build with full debug output
-VERBOSE_DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=2
-VERBOSE_DEBUG_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=2
+VERBOSE_DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=2 -DDEBUG_BUILD
+VERBOSE_DEBUG_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=2 -DDEBUG_BUILD
 
 # Very verbose debug build with all trace messages
-TRACE_DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=3
-TRACE_DEBUG_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=3
+TRACE_DEBUG_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=3 -DDEBUG_BUILD
+TRACE_DEBUG_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -g -O0 -DDEBUG_LEVEL=3 -DDEBUG_BUILD
 
 # Compilation rules
 
