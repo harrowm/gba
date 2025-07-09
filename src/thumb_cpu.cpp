@@ -208,11 +208,11 @@ void ThumbCPU::thumb_add_register(uint16_t instruction) {
     // Update the destination register
     parentCPU.R()[rd] = result;
 
-    // Update flags
-    parentCPU.updateZFlag(result); // Zero flag
-    parentCPU.updateNFlag(result); // Negative flag
-    parentCPU.updateCFlagAdd(op1, op2); // Carry flag
-    parentCPU.updateVFlag(op1, op2, result); // Overflow flag
+    // Update flags using the original CPU flag update methods
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    parentCPU.updateCFlagAdd(op1, op2);
+    parentCPU.updateVFlag(op1, op2, result);
 
     DEBUG_INFO("Executing Thumb ADD (register): R" + std::to_string(rd) + " = R" + std::to_string(rs) + " + R" + std::to_string(rn));
 }
@@ -341,6 +341,7 @@ void ThumbCPU::thumb_alu_operations(uint16_t instruction) {
     uint8_t rd = bits2to0(instruction);
     uint8_t rs = bits5to3(instruction);
     
+    // Use original implementation for all operations
     if (thumb_alu_operations_table[sub_opcode] != NULL) {
          (this->*thumb_alu_operations_table[sub_opcode])(rd, rs);
     } else {

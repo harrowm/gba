@@ -1,0 +1,46 @@
+
+=== Thumb Arithmetic Instruction Benchmark ===
+Instruction: ADD R1, R1, R2 (R1 = R1 + R2)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000      178571428
+       10000        1000000      194363459
+      100000       10000000      319447993
+
+=== Thumb Memory Access Instruction Benchmark ===
+Instructions: STR R1, [R0] / LDR R2, [R0] (alternating)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000      343642611
+       10000        1000000      352360817
+      100000       10000000      410391102
+
+=== Thumb ALU Operation Benchmark ===
+Instructions: AND R1, R2 / EOR R1, R2 / LSL R1, R2 (cycling)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000      452488687
+       10000        1000000      457456541
+      100000       10000000      472210416
+
+=== Thumb Branch Instruction Benchmark ===
+Instructions: B #2 (short forward branch)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000      261780104
+       10000        1000000      302663438
+      100000       10000000      313185092
+PROFILE: interrupts/evictions/bytes = 11/4/616
+
+=== Thumb Benchmark Complete ===
+This benchmark tested:
+  • Thumb arithmetic instructions (ADD)
+  • Thumb memory access instructions (STR/LDR)
+  • Thumb ALU operations (AND/EOR/LSL)
+  • Thumb branch instructions (B)
+
+Compare with ARM benchmark results to evaluate relative performance.
