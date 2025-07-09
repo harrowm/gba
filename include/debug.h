@@ -82,31 +82,35 @@ inline std::string debug_to_hex_string(uint32_t value, int width) {
 // Debug macros - these expand to actual code when DEBUG_BUILD is defined
 #define DEBUG_ERROR(msg) \
     do { \
+        std::string debug_msg = msg; \
         fprintf(stderr, "%s[ERROR] %s:%d: %s%s\n", \
-            DEBUG_COLOR_RED, __FILE__, __LINE__, msg, DEBUG_COLOR_RESET); \
+            DEBUG_COLOR_RED, __FILE__, __LINE__, debug_msg.c_str(), DEBUG_COLOR_RESET); \
     } while(0)
 
 #define DEBUG_INFO(msg) \
     do { \
         if (g_debug_level >= DEBUG_LEVEL_BASIC) { \
+            std::string debug_msg = msg; \
             fprintf(stderr, "%s[INFO]  %s:%d: %s%s\n", \
-                DEBUG_COLOR_GREEN, __FILE__, __LINE__, msg, DEBUG_COLOR_RESET); \
+                DEBUG_COLOR_GREEN, __FILE__, __LINE__, debug_msg.c_str(), DEBUG_COLOR_RESET); \
         } \
     } while(0)
 
 #define DEBUG_LOG(msg) \
     do { \
         if (g_debug_level >= DEBUG_LEVEL_VERBOSE && debug_is_file_enabled(__FILE__)) { \
+            std::string debug_msg = msg; \
             fprintf(stderr, "%s[DEBUG] %s:%d: %s%s\n", \
-                DEBUG_COLOR_CYAN, __FILE__, __LINE__, msg, DEBUG_COLOR_RESET); \
+                DEBUG_COLOR_CYAN, __FILE__, __LINE__, debug_msg.c_str(), DEBUG_COLOR_RESET); \
         } \
     } while(0)
 
 #define DEBUG_TRACE(msg) \
     do { \
         if (g_debug_level >= DEBUG_LEVEL_VERY_VERBOSE && debug_is_file_enabled(__FILE__)) { \
+            std::string debug_msg = msg; \
             fprintf(stderr, "%s[TRACE] %s:%d: %s%s\n", \
-                DEBUG_COLOR_MAGENTA, __FILE__, __LINE__, msg, DEBUG_COLOR_RESET); \
+                DEBUG_COLOR_MAGENTA, __FILE__, __LINE__, debug_msg.c_str(), DEBUG_COLOR_RESET); \
         } \
     } while(0)
 

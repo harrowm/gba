@@ -14,17 +14,17 @@ Memory::Memory(bool initializeTestMode) {
     // For optimized build, always use test mode for benchmarks
     #if defined(NDEBUG) || defined(BENCHMARK_MODE)
     (void)initializeTestMode; // Mark parameter as used to avoid warnings
-    Debug::log::info("Initializing memory regions for testing (optimized build).");
+    DEBUG_INFO("Initializing memory regions for testing (optimized build).");
     initializeTestRegions();
     #else
     // Volatile to prevent optimization in release builds
     volatile bool useTestMode = initializeTestMode;
     
     if (useTestMode) {
-        Debug::log::info("Initializing memory regions for testing.");
+        DEBUG_INFO("Initializing memory regions for testing.");
         initializeTestRegions();
     } else {
-        Debug::log::info("Initializing GBA memory regions with BIOS and GamePak ROM.");
+        DEBUG_INFO("Initializing GBA memory regions with BIOS and GamePak ROM.");
         initializeGBARegions("assets/bios.bin", "assets/roms/gamepak.bin");
     }
     #endif
@@ -36,19 +36,15 @@ Memory::Memory(bool initializeTestMode) {
     }
     data.resize(totalSize, 0);
 
-    // Use lazy evaluation for expensive string formatting
-    DebugOpt::LazyLog::info([totalSize]() {
-        return "Total memory size calculated: 0x" + Debug::toHexString(totalSize, 8) + " bytes.";
-    });
+    // Output debug info directly - no more lazy evaluation needed
+    DEBUG_INFO("Total memory size calculated: 0x" + debug_to_hex_string(totalSize, 8) + " bytes.");
 }
 
 Memory::~Memory() {}
 
 int Memory::mapAddress(uint32_t gbaAddress, bool isWrite /* = false */) const {
-    // This debug call will be completely eliminated in release builds
-    DebugOpt::LazyLog::info([gbaAddress]() {
-        return "Mapping address: 0x" + Debug::toHexString(gbaAddress, 8);
-    });
+    // Direct debug output - no more lazy evaluation
+    DEBUG_INFO("Mapping address: 0x" + debug_to_hex_string(gbaAddress, 8));
 
     // Check if the address is within the cached region
     if (lastRegion && gbaAddress >= lastRegion->start_address && gbaAddress <= lastRegion->end_address) {
@@ -75,10 +71,8 @@ int Memory::mapAddress(uint32_t gbaAddress, bool isWrite /* = false */) const {
         lastRegion = &(*it); // Update the cache
         lastRegionIndex = std::distance(regions.begin(), it);
         
-        // Use lazy evaluation for mapped address debug
-        DebugOpt::LazyLog::info([gbaAddress, it]() {
-            return "Mapped to address: 0x" + Debug::toHexString(gbaAddress - it->start_address + it->offsetInMemoryArray, 8);
-        });
+        // Direct debug output
+        DEBUG_INFO("Mapped to address: 0x" + debug_to_hex_string(gbaAddress - it->start_address + it->offsetInMemoryArray, 8));
         
         return gbaAddress - it->start_address + it->offsetInMemoryArray;
     }
@@ -90,7 +84,7 @@ uint8_t Memory::read8(uint32_t address) {
     int mappedIndex = mapAddress(address);
     if (mappedIndex == -1) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        Debug::log::error("Invalid memory access at address: " + std::to_string(address));
+        DEBUG_ERROR("Invalid memory access at address: " + std::to_string(address));
         #endif
         return 0; // Return default value
     }
@@ -107,7 +101,7 @@ uint16_t Memory::read16(uint32_t address, bool big_endian /* = false */) {
     int mappedIndex = mapAddress(address, false);
     if (mappedIndex == -1) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        Debug::log::error("Invalid memory access at address: " + std::to_string(address));
+        DEBUG_ERROR("Invalid memory access at address: " + std::to_string(address));
         #endif
         return 0; // Return default value
     }
@@ -134,7 +128,7 @@ uint32_t Memory::read32(uint32_t address, bool big_endian /* = false */) {
     // This error check will only be active when bounds checking is enabled
     if (mappedIndex == -1) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        Debug::log::error("Invalid memory access at address: " + std::to_string(address));
+        DEBUG_ERROR("Invalid memory access at address: " + std::to_string(address));
         #endif
         return 0; // Return default value
     }
@@ -163,16 +157,14 @@ void Memory::write8(uint32_t address, uint8_t value) {
     int mappedIndex = mapAddress(address, true);
     if (mappedIndex == -1) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        Debug::log::error("Invalid memory write at address: " + std::to_string(address));
+        DEBUG_ERROR("Invalid memory write at address: " + std::to_string(address));
         #endif
         return;
     }
     if (mappedIndex == -2) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        // Use lazy evaluation for ROM write attempts
-        DebugOpt::LazyLog::info([address]() {
-            return "Attempted write to ROM address: " + std::to_string(address) + ", write ignored.";
-        });
+        // Direct debug output for ROM write attempts
+        DEBUG_INFO("Attempted write to ROM address: " + std::to_string(address) + ", write ignored.");
         #endif
         return;
     }
@@ -189,16 +181,14 @@ void Memory::write16(uint32_t address, uint16_t value, bool big_endian /* = fals
     int mappedIndex = mapAddress(address, true);
     if (mappedIndex == -1) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        Debug::log::error("Invalid memory write at address: " + std::to_string(address));
+        DEBUG_ERROR("Invalid memory write at address: " + std::to_string(address));
         #endif
         return;
     }
     if (mappedIndex == -2) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        // Use lazy evaluation for ROM write attempts
-        DebugOpt::LazyLog::info([address]() {
-            return "Attempted write to ROM address: " + std::to_string(address) + ", write ignored.";
-        });
+        // Direct debug output for ROM write attempts
+        DEBUG_INFO("Attempted write to ROM address: " + std::to_string(address) + ", write ignored.");
         #endif
         return;
     }
@@ -226,16 +216,14 @@ void Memory::write32(uint32_t address, uint32_t value, bool big_endian /* = fals
     int mappedIndex = mapAddress(address, true);
     if (mappedIndex == -1) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        Debug::log::error("Invalid memory write at address: " + std::to_string(address));
+        DEBUG_ERROR("Invalid memory write at address: " + std::to_string(address));
         #endif
         return;
     }
     if (mappedIndex == -2) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        // Use lazy evaluation for ROM write attempts
-        DebugOpt::LazyLog::info([address]() {
-            return "Attempted write to ROM address: " + std::to_string(address) + ", write ignored.";
-        });
+        // Direct debug output for ROM write attempts
+        DEBUG_INFO("Attempted write to ROM address: " + std::to_string(address) + ", write ignored.");
         #endif
         return;
     }
@@ -281,10 +269,10 @@ void Memory::initializeGBARegions(const std::string& biosFilename, const std::st
 
     // The location to load the roms is hardcoded .. should probably soft code this
     // Load BIOS ROM
-    Debug::log::info("Initializing GBA memory regions with BIOS ROM.");
+    DEBUG_INFO("Initializing GBA memory regions with BIOS ROM.");
     std::ifstream biosFile(biosFilename, std::ios::binary);
     if (!biosFile.is_open()) {
-        Debug::log::error("Failed to load BIOS ROM from " + biosFilename);
+        DEBUG_ERROR("Failed to load BIOS ROM from " + biosFilename);
         return;
     }
 
@@ -293,10 +281,10 @@ void Memory::initializeGBARegions(const std::string& biosFilename, const std::st
 
     
     // Load Game Pak ROM
-    Debug::log::info("Initializing GBA memory regions with GamePak ROM.");
+    DEBUG_INFO("Initializing GBA memory regions with GamePak ROM.");
     std::ifstream gamePakFile(gamePakFilename, std::ios::binary);
     if (!gamePakFile.is_open()) {
-        Debug::log::error("Failed to load Game Pak ROM from " + gamePakFilename);
+        DEBUG_ERROR("Failed to load Game Pak ROM from " + gamePakFilename);
         return;
     }
     gamePakFile.read(reinterpret_cast<char*>(&data[0x64800]), 0x2000000); // Load up to 32MB Game Pak ROM
@@ -307,7 +295,7 @@ void Memory::initializeTestRegions() {
     regions = {
         {0x00000000, 0x00001FFF, MEMORY_TYPE_RAM, 32, 0}, // Expanded RAM region for testing (8KB instead of 4KB)
     };
-    Debug::log::info("Test regions initialized: Start = 0x00000000, End = 0x00001FFF, Type = RAM, Width = 32 bits");
+    DEBUG_INFO("Test regions initialized: Start = 0x00000000, End = 0x00001FFF, Type = RAM, Width = 32 bits");
 }
 
 uint32_t Memory::getSize() const {
