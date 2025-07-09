@@ -7,16 +7,16 @@
 CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptController(ic) {
     DEBUG_INFO("Initializing CPU with default CPSR value for ARM mode");
     thumbCPU = new ThumbCPU(*this); // Pass itself as the parent reference
-    DEBUG_INFO << "ThumbCPU instance created";
+    DEBUG_INFO("ThumbCPU instance created");
     armCPU = new ARMCPU(*this);     // Pass itself as the parent reference
-    DEBUG_INFO << "ARMCPU instance created";
+    DEBUG_INFO("ARMCPU instance created");
     std::fill(std::begin(registers), std::end(registers), 0); // Reset all registers to zero using std::fill
-    DEBUG_INFO << "Registers initialized to zero";
+    DEBUG_INFO("Registers initialized to zero");
     cpsr = 0; // Sets us up in ARM mode and little endian by default
     
     // Initialize timing system
     timing_init(&timing);
-    DEBUG_INFO << "Timing system initialized";
+    DEBUG_INFO("Timing system initialized");
 }
 
 void CPU::setFlag(uint32_t flag) {
@@ -33,7 +33,7 @@ bool CPU::getFlag(uint32_t flag) const {
 
 
 void CPU::setCPUState(const CPUState& state) {
-    DEBUG_INFO << "Setting CPU state";
+    DEBUG_INFO("Setting CPU state");
     for (int i = 0; i < 16; ++i) {
         registers[i] = state.registers[i];
     }
@@ -41,7 +41,7 @@ void CPU::setCPUState(const CPUState& state) {
 }
 
 CPU::CPUState CPU::getCPUState() const {
-    DEBUG_INFO << "Getting CPU state";
+    DEBUG_INFO("Getting CPU state");
     CPUState state;
     for (int i = 0; i < 16; ++i) {
         state.registers[i] = registers[i];
@@ -52,13 +52,13 @@ CPU::CPUState CPU::getCPUState() const {
 
 void CPU::execute(uint32_t cycles) {
     // Use macro-based debug system
-    DEBUG_INFO << "Executing CPU for " << cycles << " cycles";
+    DEBUG_INFO("Executing CPU for " + std::to_string(cycles) + " cycles");
 
     if (getFlag(FLAG_T)) {
-        DEBUG_LOG << "Executing Thumb instructions";
+        DEBUG_LOG("Executing Thumb instructions");
         thumbCPU->execute(cycles); // Use pointer
     } else {
-        DEBUG_LOG << "Executing ARM instructions";
+        DEBUG_LOG("Executing ARM instructions");
         armCPU->execute(cycles); // Use pointer
     }
 }
@@ -66,19 +66,19 @@ void CPU::execute(uint32_t cycles) {
 // New timing-aware execution method
 void CPU::executeWithTiming(uint32_t cycles) {
     // Use macro-based debug system
-    DEBUG_INFO << "Executing CPU with timing for " << cycles << " cycles";
+    DEBUG_INFO("Executing CPU with timing for " + std::to_string(cycles) + " cycles");
     
     if (getFlag(FLAG_T)) {
-        DEBUG_LOG << "Executing Thumb instructions with timing";
+        DEBUG_LOG("Executing Thumb instructions with timing");
         thumbCPU->executeWithTiming(cycles, &timing);
     } else {
-        DEBUG_LOG << "Executing ARM instructions with timing";
+        DEBUG_LOG("Executing ARM instructions with timing");
         armCPU->executeWithTiming(cycles, &timing);
     }
 }
 
 void CPU::printCPUState() const {
-    DEBUG_INFO << "Printing CPU state";
+    DEBUG_INFO("Printing CPU state");
 
     std::string stateStr = "\nCPU State:\n";
     for (int i = 0; i < 16; ++i) {
@@ -94,7 +94,7 @@ void CPU::printCPUState() const {
               " V:" + std::to_string(getFlag(FLAG_V)) + " C:" + std::to_string(getFlag(FLAG_C)) + 
               " T:" + std::to_string(getFlag(FLAG_T)) + " E:" + std::to_string(getFlag(FLAG_E)) + "\n";
 
-    DEBUG_INFO << stateStr;
+    DEBUG_INFO(stateStr);
 }
 
 // Destructor
