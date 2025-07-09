@@ -58,6 +58,14 @@ private:
     void arm_bic(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_mvn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     
+    // Fast-path ALU operations for function pointer dispatch optimization
+    FORCE_INLINE void fastALU_ADD(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    FORCE_INLINE void fastALU_SUB(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    FORCE_INLINE void fastALU_MOV(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    FORCE_INLINE void fastALU_ORR(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    FORCE_INLINE void fastALU_AND(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    FORCE_INLINE void fastALU_CMP(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    
     // Helper functions - critical ones marked as FORCE_INLINE for optimization
     FORCE_INLINE uint32_t calculateOperand2(uint32_t instruction, uint32_t* carry_out);
     uint32_t calculateOperand2Advanced(uint32_t instruction, uint32_t* carry_out, uint32_t* cycles);
