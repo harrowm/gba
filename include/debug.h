@@ -129,6 +129,8 @@ inline std::string debug_to_hex_string(uint32_t value, int width) {
 // No lazy log macros in production builds
 
 // Provide a no-op implementation of debug_to_hex_string for production builds
+#include <string>
+#include <cstdint>
 inline std::string debug_to_hex_string(uint32_t, int) { return ""; }
 
 #endif // DEBUG_BUILD
