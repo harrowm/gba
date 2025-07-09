@@ -169,7 +169,7 @@ FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* 
             }
         }
         
-        // Use optimized shift implementation based on type
+        // Use switch statement for shift operations (reverted from function pointer optimization)
         switch (shift_type) {
             case 0: // LSL
                 if (shift_amount >= 32) {
@@ -204,12 +204,9 @@ FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* 
                 shift_amount %= 32; // Normalize rotation amount
                 *carry_out = (rm >> (shift_amount - 1)) & 1;
                 return (rm >> shift_amount) | (rm << (32 - shift_amount));
-                
-            default:
-                // Should never happen
-                *carry_out = (parentCPU.CPSR() >> 29) & 1;
-                return rm;
         }
+        
+        return rm; // Should never reach here
     }
 }
 
@@ -317,7 +314,36 @@ bool ARMCPU::decodeAndExecute(uint32_t instruction) {
 // Check if instruction condition is satisfied
 bool ARMCPU::checkCondition(uint32_t instruction) {
     ARMCondition condition = (ARMCondition)ARM_GET_CONDITION(instruction);
-    return arm_check_condition(condition, parentCPU.CPSR());
+    
+    // Fast path for most common condition
+    if (condition == ARM_COND_AL) return true;  // Always - most common
+    
+    // Use switch statement for condition checking (reverted from function pointer optimization)
+    uint32_t cpsr = parentCPU.CPSR();
+    bool n = (cpsr >> 31) & 1;
+    bool z = (cpsr >> 30) & 1;
+    bool c = (cpsr >> 29) & 1;
+    bool v = (cpsr >> 28) & 1;
+    
+    switch (condition) {
+        case ARM_COND_EQ: return z;         // 0000 - EQ (Z set)
+        case ARM_COND_NE: return !z;        // 0001 - NE (Z clear)
+        case ARM_COND_CS: return c;         // 0010 - CS/HS (C set)
+        case ARM_COND_CC: return !c;        // 0011 - CC/LO (C clear)
+        case ARM_COND_MI: return n;         // 0100 - MI (N set)
+        case ARM_COND_PL: return !n;        // 0101 - PL (N clear)
+        case ARM_COND_VS: return v;         // 0110 - VS (V set)
+        case ARM_COND_VC: return !v;        // 0111 - VC (V clear)
+        case ARM_COND_HI: return c && !z;   // 1000 - HI (C set and Z clear)
+        case ARM_COND_LS: return !c || z;   // 1001 - LS (C clear or Z set)
+        case ARM_COND_GE: return n == v;    // 1010 - GE (N == V)
+        case ARM_COND_LT: return n != v;    // 1011 - LT (N != V)
+        case ARM_COND_GT: return !z && (n == v); // 1100 - GT (Z clear and N == V)
+        case ARM_COND_LE: return z || (n != v);  // 1101 - LE (Z set or N != V)
+        case ARM_COND_AL: return true;      // 1110 - AL (always)
+        case ARM_COND_NV: return true;      // 1111 - NV (never/deprecated, treat as always)
+        default: return false;
+    }
 }
 
 // Data processing instruction handler
@@ -365,64 +391,33 @@ void ARMCPU::arm_data_processing(uint32_t instruction) {
                   " rm=R" + std::to_string(instruction & 0xF) +
                   " set_flags=" + std::to_string(set_flags));
         
-        // Handle most common ALU operations directly
-        switch (opcode) {
-            case 0x4: // ADD
-                {
-                    uint32_t result = op1 + rm;
-                    parentCPU.R()[rd] = result;
-                    if (set_flags && rd != 15) {
-                        bool c = result < op1;
-                        bool v = ((op1 ^ result) & (rm ^ result) & 0x80000000) != 0;
-                        updateFlags(result, c, v);
-                    }
-                    return;
-                }
-            case 0x2: // SUB
-                {
-                    uint32_t result = op1 - rm;
-                    parentCPU.R()[rd] = result;
-                    if (set_flags && rd != 15) {
-                        bool c = op1 >= rm;
-                        bool v = ((op1 ^ rm) & (op1 ^ result) & 0x80000000) != 0;
-                        updateFlags(result, c, v);
-                    }
-                    return;
-                }
-            case 0xD: // MOV
-                {
-                    parentCPU.R()[rd] = rm;
-                    if (set_flags && rd != 15) {
-                        updateFlagsLogical(rm, carry);
-                    }
-                    return;
-                }
-            case 0xC: // ORR
-                {
-                    uint32_t result = op1 | rm;
-                    parentCPU.R()[rd] = result;
-                    if (set_flags && rd != 15) {
-                        updateFlagsLogical(result, carry);
-                    }
-                    return;
-                }
-            case 0x0: // AND
-                {
-                    uint32_t result = op1 & rm;
-                    parentCPU.R()[rd] = result;
-                    if (set_flags && rd != 15) {
-                        updateFlagsLogical(result, carry);
-                    }
-                    return;
-                }
-            case 0xA: // CMP
-                {
-                    uint32_t result = op1 - rm;
-                    bool c = op1 >= rm;
-                    bool v = ((op1 ^ rm) & (op1 ^ result) & 0x80000000) != 0;
-                    updateFlags(result, c, v);
-                    return;
-                }
+        // Fast-path dispatch table for common ALU operations
+        // Use function pointer table for branchless dispatch
+        typedef void (ARMCPU::*FastALUFunc)(uint32_t, uint32_t, uint32_t, uint32_t, bool, uint32_t);
+        static const FastALUFunc fastALUTable[16] = {
+            &ARMCPU::fastALU_AND, // 0x0 - AND
+            nullptr,              // 0x1 - EOR (not in fast path)
+            &ARMCPU::fastALU_SUB, // 0x2 - SUB
+            nullptr,              // 0x3 - RSB (not in fast path)
+            &ARMCPU::fastALU_ADD, // 0x4 - ADD
+            nullptr,              // 0x5 - ADC (not in fast path)
+            nullptr,              // 0x6 - SBC (not in fast path)
+            nullptr,              // 0x7 - RSC (not in fast path)
+            nullptr,              // 0x8 - TST (not in fast path)
+            nullptr,              // 0x9 - TEQ (not in fast path)
+            &ARMCPU::fastALU_CMP, // 0xA - CMP
+            nullptr,              // 0xB - CMN (not in fast path)
+            &ARMCPU::fastALU_ORR, // 0xC - ORR
+            &ARMCPU::fastALU_MOV, // 0xD - MOV
+            nullptr,              // 0xE - BIC (not in fast path)
+            nullptr               // 0xF - MVN (not in fast path)
+        };
+        
+        // Use function pointer table for branchless dispatch
+        FastALUFunc fastFunc = fastALUTable[opcode];
+        if (fastFunc) {
+            (this->*fastFunc)(rd, rn, op1, rm, set_flags, carry);
+            return;
         }
     }
     
@@ -984,86 +979,86 @@ void ARMCPU::arm_undefined(uint32_t instruction) {
 
 // ARM instruction helper functions
 uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t shift_amount, uint32_t* carry_out) {
-    uint32_t result = value;
-    
+    // Use switch statement for shift operations (reverted from function pointer optimization)
     switch (shift_type) {
-        case 0: // LSL - Logical Shift Left
+        case 0: // LSL
             if (shift_amount == 0) {
                 // No shift
-                result = value;
+                return value;
                 // Carry unchanged
             } else if (shift_amount < 32) {
                 // Set carry to the last bit shifted out
                 *carry_out = (value >> (32 - shift_amount)) & 1;
-                result = value << shift_amount;
+                return value << shift_amount;
             } else if (shift_amount == 32) {
                 *carry_out = value & 1;
-                result = 0;
+                return 0;
             } else {
                 *carry_out = 0;
-                result = 0;
+                return 0;
             }
-            break;
             
-        case 1: // LSR - Logical Shift Right
+        case 1: // LSR
             if (shift_amount == 0) {
                 // Special case: LSR #0 is interpreted as LSR #32
                 *carry_out = (value >> 31) & 1;
-                result = 0;
+                return 0;
             } else if (shift_amount < 32) {
                 *carry_out = (value >> (shift_amount - 1)) & 1;
-                result = value >> shift_amount;
+                return value >> shift_amount;
             } else {
                 *carry_out = 0;
-                result = 0;
+                return 0;
             }
-            break;
             
-        case 2: // ASR - Arithmetic Shift Right
+        case 2: // ASR
             if (shift_amount == 0) {
                 // Special case: ASR #0 is interpreted as ASR #32
                 if (value & 0x80000000) {
                     *carry_out = 1;
-                    result = 0xFFFFFFFF;
+                    return 0xFFFFFFFF;
                 } else {
                     *carry_out = 0;
-                    result = 0;
+                    return 0;
                 }
             } else if (shift_amount < 32) {
                 *carry_out = (value >> (shift_amount - 1)) & 1;
                 // Use arithmetic shift (sign extension)
                 if (value & 0x80000000) {
-                    result = (value >> shift_amount) | (~0U << (32 - shift_amount));
+                    return (value >> shift_amount) | (~0U << (32 - shift_amount));
                 } else {
-                    result = value >> shift_amount;
+                    return value >> shift_amount;
                 }
             } else {
                 if (value & 0x80000000) {
                     *carry_out = 1;
-                    result = 0xFFFFFFFF;
+                    return 0xFFFFFFFF;
                 } else {
                     *carry_out = 0;
-                    result = 0;
+                    return 0;
                 }
             }
-            break;
             
-        case 3: // ROR/RRX - Rotate Right / Rotate Right Extended
+        case 3: // ROR
             if (shift_amount == 0) {
-                // RRX - Rotate Right Extended
+                // Special case: ROR #0 is interpreted as RRX (rotate right with extend)
                 uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
                 *carry_out = value & 1;
-                result = (old_carry << 31) | (value >> 1);
+                return (value >> 1) | (old_carry << 31);
             } else {
-                // ROR - normal rotate right
                 shift_amount %= 32; // Normalize rotation amount
-                *carry_out = (value >> (shift_amount - 1)) & 1;
-                result = (value >> shift_amount) | (value << (32 - shift_amount));
+                if (shift_amount == 0) {
+                    // No rotation after normalization
+                    return value;
+                    // Carry unchanged
+                } else {
+                    *carry_out = (value >> (shift_amount - 1)) & 1;
+                    return (value >> shift_amount) | (value << (32 - shift_amount));
+                }
             }
-            break;
     }
     
-    return result;
+    return value; // Should never reach here
 }
 
 // Implementation of arm_mov with FORCE_INLINE
@@ -1132,4 +1127,69 @@ FORCE_INLINE void ARMCPU::arm_rsb(uint32_t rd, uint32_t rn, uint32_t operand2, b
         bool overflow = ((operand2 ^ op1) & (operand2 ^ result) & 0x80000000) != 0;
         updateFlags(result, carry, overflow);
     }
+}
+
+// Fast-path ALU operations for function pointer dispatch optimization
+FORCE_INLINE void ARMCPU::fastALU_ADD(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry) {
+    UNUSED(rn);
+    UNUSED(carry);
+    uint32_t result = op1 + rm;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        bool c = result < op1;
+        bool v = ((op1 ^ result) & (rm ^ result) & 0x80000000) != 0;
+        updateFlags(result, c, v);
+    }
+}
+
+FORCE_INLINE void ARMCPU::fastALU_SUB(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry) {
+    UNUSED(rn);
+    UNUSED(carry);
+    uint32_t result = op1 - rm;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        bool c = op1 >= rm;
+        bool v = ((op1 ^ rm) & (op1 ^ result) & 0x80000000) != 0;
+        updateFlags(result, c, v);
+    }
+}
+
+FORCE_INLINE void ARMCPU::fastALU_MOV(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry) {
+    UNUSED(rn);
+    UNUSED(op1);
+    parentCPU.R()[rd] = rm;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(rm, carry);
+    }
+}
+
+FORCE_INLINE void ARMCPU::fastALU_ORR(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry) {
+    UNUSED(rn);
+    UNUSED(carry);
+    uint32_t result = op1 | rm;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(result, carry);
+    }
+}
+
+FORCE_INLINE void ARMCPU::fastALU_AND(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry) {
+    UNUSED(rn);
+    UNUSED(carry);
+    uint32_t result = op1 & rm;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(result, carry);
+    }
+}
+
+FORCE_INLINE void ARMCPU::fastALU_CMP(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry) {
+    UNUSED(rd);
+    UNUSED(rn);
+    UNUSED(set_flags);
+    UNUSED(carry);
+    uint32_t result = op1 - rm;
+    bool c = op1 >= rm;
+    bool v = ((op1 ^ rm) & (op1 ^ result) & 0x80000000) != 0;
+    updateFlags(result, c, v);
 }
