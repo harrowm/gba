@@ -6,6 +6,6 @@ ThumbInstructionDecoder::ThumbInstructionDecoder() {
 }
 
 void ThumbInstructionDecoder::decode(uint16_t instruction) {
-    Debug::log::info("Decoding Thumb instruction: 0x" + std::to_string(instruction));
+    DEBUG_INFO("Decoding Thumb instruction: 0x" << std::hex << instruction);
     // Implement decoding logic here
 }

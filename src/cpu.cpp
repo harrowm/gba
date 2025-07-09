@@ -1,5 +1,5 @@
 #include "cpu.h"
-#include "debug.h"
+#include "debug_selector.h" // Use debug selector for automatic optimization
 #include "thumb_cpu.h" // Include complete definition
 #include "arm_cpu.h"   // Include complete definition
 #include "timing.h"
@@ -51,25 +51,40 @@ CPU::CPUState CPU::getCPUState() const {
 }
 
 void CPU::execute(uint32_t cycles) {
-    Debug::log::info("Executing CPU for " + std::to_string(cycles) + " cycles");
+    // Use lazy evaluation for debug logs
+    DebugOpt::LazyLog::info([cycles]() {
+        return "Executing CPU for " + std::to_string(cycles) + " cycles";
+    });
 
     if (getFlag(FLAG_T)) {
-        Debug::log::debug("Executing Thumb instructions");
+        DebugOpt::LazyLog::debug([]() {
+            return "Executing Thumb instructions";
+        });
         thumbCPU->execute(cycles); // Use pointer
     } else {
-        Debug::log::debug("Executing ARM instructions");
+        DebugOpt::LazyLog::debug([]() {
+            return "Executing ARM instructions";
+        });
         armCPU->execute(cycles); // Use pointer
     }
 }
 
 // New timing-aware execution method
 void CPU::executeWithTiming(uint32_t cycles) {
-    Debug::log::info("Executing CPU with timing for " + std::to_string(cycles) + " cycles");
+    // Use lazy evaluation for debug logs
+    DebugOpt::LazyLog::info([cycles]() {
+        return "Executing CPU with timing for " + std::to_string(cycles) + " cycles";
+    });
+    
     if (getFlag(FLAG_T)) {
-        Debug::log::debug("Executing Thumb instructions with timing");
+        DebugOpt::LazyLog::debug([]() {
+            return "Executing Thumb instructions with timing";
+        });
         thumbCPU->executeWithTiming(cycles, &timing);
     } else {
-        Debug::log::debug("Executing ARM instructions with timing");
+        DebugOpt::LazyLog::debug([]() {
+            return "Executing ARM instructions with timing";
+        });
         armCPU->executeWithTiming(cycles, &timing);
     }
 }
@@ -77,19 +92,24 @@ void CPU::executeWithTiming(uint32_t cycles) {
 void CPU::printCPUState() const {
     Debug::log::info("Printing CPU state");
 
-    std::string stateStr = "\nCPU State:\n";
-    for (int i = 0; i < 16; ++i) {
-        stateStr += "R" + std::to_string(i) + (i < 10 ? " : " : ": ") + Debug::toHexString(registers[i], 8) + "\t";
-        if ((i + 1) % 4 == 0) {
-            stateStr += "\n"; // New line every 4 registers
+    // Use lazy evaluation for detailed CPU state string building
+    DebugOpt::LazyLog::info([this]() {
+        std::string stateStr = "\nCPU State:\n";
+        for (int i = 0; i < 16; ++i) {
+            stateStr += "R" + std::to_string(i) + (i < 10 ? " : " : ": ") + Debug::toHexString(registers[i], 8) + "\t";
+            if ((i + 1) % 4 == 0) {
+                stateStr += "\n"; // New line every 4 registers
+            }
         }
-    }
 
-    stateStr += "CPSR: " + Debug::toHexString(cpsr, 8);
+        stateStr += "CPSR: " + Debug::toHexString(cpsr, 8);
 
-    stateStr += " Flags: Z:" + std::to_string(getFlag(FLAG_Z)) + " N:" + std::to_string(getFlag(FLAG_N)) + " V:" + std::to_string(getFlag(FLAG_V)) + " C:" + std::to_string(getFlag(FLAG_C)) + " T:" + std::to_string(getFlag(FLAG_T)) + " E:" + std::to_string(getFlag(FLAG_E)) + "\n";
+        stateStr += " Flags: Z:" + std::to_string(getFlag(FLAG_Z)) + " N:" + std::to_string(getFlag(FLAG_N)) + 
+                  " V:" + std::to_string(getFlag(FLAG_V)) + " C:" + std::to_string(getFlag(FLAG_C)) + 
+                  " T:" + std::to_string(getFlag(FLAG_T)) + " E:" + std::to_string(getFlag(FLAG_E)) + "\n";
 
-    Debug::log::info(stateStr);
+        return stateStr;
+    });
 }
 
 // Destructor

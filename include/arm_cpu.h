@@ -7,6 +7,16 @@
 #include "arm_timing.h"
 #include "utility_macros.h"
 
+/**
+ * ARM CPU Optimizations:
+ * - Function pointer table for fast opcode dispatch
+ * - Fast paths for common instructions (MOV, ADD, SUB, CMP)
+ * - FORCE_INLINE for critical functions
+ * - Optimized calculateOperand2 with fast paths for common cases
+ * - Optimized flag updates to minimize register reads/writes
+ * - Reduced debug overhead with lazy evaluation
+ */
+
 class CPU; // Forward declaration
 
 class ARMCPU {
@@ -30,30 +40,30 @@ private:
     void arm_coprocessor_register(uint32_t instruction);
     void arm_undefined(uint32_t instruction);
     
-    // Data processing operation handlers
+    // Data processing operation handlers - critical ones marked as FORCE_INLINE for optimization
     void arm_and(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_eor(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_sub(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    FORCE_INLINE void arm_sub(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_rsb(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_add(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    FORCE_INLINE void arm_add(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_adc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_sbc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_rsc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_tst(uint32_t rn, uint32_t operand2, uint32_t carry_out);
-    void arm_teq(uint32_t rn, uint32_t operand2, uint32_t carry_out);
-    void arm_cmp(uint32_t rn, uint32_t operand2, uint32_t carry_out);
-    void arm_cmn(uint32_t rn, uint32_t operand2, uint32_t carry_out);
+    void arm_tst(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    void arm_teq(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    FORCE_INLINE void arm_cmp(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    void arm_cmn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_orr(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_mov(uint32_t rd, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    FORCE_INLINE void arm_mov(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_bic(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_mvn(uint32_t rd, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    void arm_mvn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     
-    // Helper functions
-    uint32_t calculateOperand2(uint32_t instruction, uint32_t* carry_out);
+    // Helper functions - critical ones marked as FORCE_INLINE for optimization
+    FORCE_INLINE uint32_t calculateOperand2(uint32_t instruction, uint32_t* carry_out);
     uint32_t calculateOperand2Advanced(uint32_t instruction, uint32_t* carry_out, uint32_t* cycles);
     uint32_t arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t shift_amount, uint32_t* carry_out);
-    void updateFlags(uint32_t result, bool carry, bool overflow);
-    void updateFlagsLogical(uint32_t result, uint32_t carry_out);
+    FORCE_INLINE void updateFlags(uint32_t result, bool carry, bool overflow);
+    FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry_out);
     bool checkCondition(uint32_t instruction);
     
     // Exception and mode handling
