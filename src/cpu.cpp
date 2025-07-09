@@ -1,22 +1,22 @@
 #include "cpu.h"
-#include "debug_selector.h" // Use debug selector for automatic optimization
+#include "debug.h" // Use macro-based debug system
 #include "thumb_cpu.h" // Include complete definition
 #include "arm_cpu.h"   // Include complete definition
 #include "timing.h"
 
 CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptController(ic) {
-    Debug::log::info("Initializing CPU with default CPSR value for ARM mode");
+    DEBUG_INFO("Initializing CPU with default CPSR value for ARM mode");
     thumbCPU = new ThumbCPU(*this); // Pass itself as the parent reference
-    Debug::log::info("ThumbCPU instance created");
+    DEBUG_INFO << "ThumbCPU instance created";
     armCPU = new ARMCPU(*this);     // Pass itself as the parent reference
-    Debug::log::info("ARMCPU instance created");
+    DEBUG_INFO << "ARMCPU instance created";
     std::fill(std::begin(registers), std::end(registers), 0); // Reset all registers to zero using std::fill
-    Debug::log::info("Registers initialized to zero");
+    DEBUG_INFO << "Registers initialized to zero";
     cpsr = 0; // Sets us up in ARM mode and little endian by default
     
     // Initialize timing system
     timing_init(&timing);
-    Debug::log::info("Timing system initialized");
+    DEBUG_INFO << "Timing system initialized";
 }
 
 void CPU::setFlag(uint32_t flag) {
@@ -33,7 +33,7 @@ bool CPU::getFlag(uint32_t flag) const {
 
 
 void CPU::setCPUState(const CPUState& state) {
-    Debug::log::info("Setting CPU state");
+    DEBUG_INFO << "Setting CPU state";
     for (int i = 0; i < 16; ++i) {
         registers[i] = state.registers[i];
     }
@@ -41,7 +41,7 @@ void CPU::setCPUState(const CPUState& state) {
 }
 
 CPU::CPUState CPU::getCPUState() const {
-    Debug::log::info("Getting CPU state");
+    DEBUG_INFO << "Getting CPU state";
     CPUState state;
     for (int i = 0; i < 16; ++i) {
         state.registers[i] = registers[i];
@@ -51,65 +51,50 @@ CPU::CPUState CPU::getCPUState() const {
 }
 
 void CPU::execute(uint32_t cycles) {
-    // Use lazy evaluation for debug logs
-    DebugOpt::LazyLog::info([cycles]() {
-        return "Executing CPU for " + std::to_string(cycles) + " cycles";
-    });
+    // Use macro-based debug system
+    DEBUG_INFO << "Executing CPU for " << cycles << " cycles";
 
     if (getFlag(FLAG_T)) {
-        DebugOpt::LazyLog::debug([]() {
-            return "Executing Thumb instructions";
-        });
+        DEBUG_LOG << "Executing Thumb instructions";
         thumbCPU->execute(cycles); // Use pointer
     } else {
-        DebugOpt::LazyLog::debug([]() {
-            return "Executing ARM instructions";
-        });
+        DEBUG_LOG << "Executing ARM instructions";
         armCPU->execute(cycles); // Use pointer
     }
 }
 
 // New timing-aware execution method
 void CPU::executeWithTiming(uint32_t cycles) {
-    // Use lazy evaluation for debug logs
-    DebugOpt::LazyLog::info([cycles]() {
-        return "Executing CPU with timing for " + std::to_string(cycles) + " cycles";
-    });
+    // Use macro-based debug system
+    DEBUG_INFO << "Executing CPU with timing for " << cycles << " cycles";
     
     if (getFlag(FLAG_T)) {
-        DebugOpt::LazyLog::debug([]() {
-            return "Executing Thumb instructions with timing";
-        });
+        DEBUG_LOG << "Executing Thumb instructions with timing";
         thumbCPU->executeWithTiming(cycles, &timing);
     } else {
-        DebugOpt::LazyLog::debug([]() {
-            return "Executing ARM instructions with timing";
-        });
+        DEBUG_LOG << "Executing ARM instructions with timing";
         armCPU->executeWithTiming(cycles, &timing);
     }
 }
 
 void CPU::printCPUState() const {
-    Debug::log::info("Printing CPU state");
+    DEBUG_INFO << "Printing CPU state";
 
-    // Use lazy evaluation for detailed CPU state string building
-    DebugOpt::LazyLog::info([this]() {
-        std::string stateStr = "\nCPU State:\n";
-        for (int i = 0; i < 16; ++i) {
-            stateStr += "R" + std::to_string(i) + (i < 10 ? " : " : ": ") + Debug::toHexString(registers[i], 8) + "\t";
-            if ((i + 1) % 4 == 0) {
-                stateStr += "\n"; // New line every 4 registers
-            }
+    std::string stateStr = "\nCPU State:\n";
+    for (int i = 0; i < 16; ++i) {
+        stateStr += "R" + std::to_string(i) + (i < 10 ? " : " : ": ") + debug_to_hex_string(registers[i], 8) + "\t";
+        if ((i + 1) % 4 == 0) {
+            stateStr += "\n"; // New line every 4 registers
         }
+    }
 
-        stateStr += "CPSR: " + Debug::toHexString(cpsr, 8);
+    stateStr += "CPSR: " + debug_to_hex_string(cpsr, 8);
 
-        stateStr += " Flags: Z:" + std::to_string(getFlag(FLAG_Z)) + " N:" + std::to_string(getFlag(FLAG_N)) + 
-                  " V:" + std::to_string(getFlag(FLAG_V)) + " C:" + std::to_string(getFlag(FLAG_C)) + 
-                  " T:" + std::to_string(getFlag(FLAG_T)) + " E:" + std::to_string(getFlag(FLAG_E)) + "\n";
+    stateStr += " Flags: Z:" + std::to_string(getFlag(FLAG_Z)) + " N:" + std::to_string(getFlag(FLAG_N)) + 
+              " V:" + std::to_string(getFlag(FLAG_V)) + " C:" + std::to_string(getFlag(FLAG_C)) + 
+              " T:" + std::to_string(getFlag(FLAG_T)) + " E:" + std::to_string(getFlag(FLAG_E)) + "\n";
 
-        return stateStr;
-    });
+    DEBUG_INFO << stateStr;
 }
 
 // Destructor

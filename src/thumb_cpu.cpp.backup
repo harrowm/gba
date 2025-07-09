@@ -1,5 +1,5 @@
 #include "thumb_cpu.h"
-#include "debug_selector.h" // Use debug selector for automatic optimization
+#include "debug.h" // Use debug system
 #include "timing.h"
 #include "thumb_timing.h"
 #include <sstream>

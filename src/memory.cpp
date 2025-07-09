@@ -6,7 +6,7 @@
 // The Makefile automatically sets this flag for arm_benchmark_opt and arm_benchmark_ultra targets
 
 #include "memory.h"
-#include "debug_selector.h" // Use debug selector for automatic optimization
+#include "debug.h" // Use debug system
 #include <fstream>
 #include <iostream>
 
