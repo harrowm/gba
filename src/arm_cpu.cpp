@@ -13,7 +13,7 @@ ARMCPU::~ARMCPU() {
 
 void ARMCPU::execute(uint32_t cycles) {
     // Use lazy evaluation for debug logs
-    DEBUG_INFO("Executing ARM instructions for " + std::toString(cycles) + " cycles. Memory size: " + std::toString(parentCPU.getMemory().getSize()) + " bytes");
+    DEBUG_INFO("Executing ARM instructions for " + std::to_string(cycles) + " cycles. Memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
         
     while (cycles > 0) {
         // Check if we're still in ARM mode - if not, break out early
