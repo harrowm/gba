@@ -38,6 +38,8 @@ ARM_TEST_TARGET = test_arm_basic
 ARM_DEMO_TARGET = demo_arm_advanced
 ARM_BENCHMARK_TARGET = arm_benchmark
 ARM_BENCHMARK_PROF_TARGET = arm_benchmark_prof
+THUMB_BENCHMARK_TARGET = thumb_benchmark
+THUMB_BENCHMARK_PROF_TARGET = thumb_benchmark_prof
 TIMING_TEST_TARGET = test_timing
 THUMB_TEST_TARGET = test_thumb_timing
 DEMO_CYCLE_TARGET = demo_cycle_driven
@@ -58,7 +60,7 @@ PROFILING_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_LEVEL=0 -
 PROFILING_LDFLAGS = -L/opt/homebrew/lib -lprofiler
 
 # Build all tests and demos
-tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
+tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
 
 # Build main emulator
 $(TARGET): $(ALL_OBJS)
@@ -102,6 +104,36 @@ $(ARM_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/simple_benchmark.cpp
 	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/arm_benchmark_prof_timing.o
 	# Compile C++ sources and link everything together
 	$(CXX) $(PROFILING_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_prof_*.o $(PROFILING_LDFLAGS)
+
+# Build Thumb benchmark test (optimized)
+$(THUMB_BENCHMARK_TARGET): $(TESTS_DIR)/simple_thumb_benchmark.cpp
+	@echo "Building Thumb benchmark with optimizations (-O3 -flto)..."
+	mkdir -p $(BUILD_DIR)
+	# Compile C sources with C compiler
+	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/thumb_benchmark_arm_execute_optimizations.o
+	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/thumb_benchmark_arm_execute_phase1.o
+	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/thumb_benchmark_arm_timing.o
+	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/thumb_benchmark_thumb_timing.o
+	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/thumb_execute_optimizations.c -o $(BUILD_DIR)/thumb_benchmark_thumb_execute_optimizations.o
+	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/thumb_benchmark_timer.o
+	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/thumb_benchmark_timing.o
+	# Compile C++ sources and link everything together
+	$(CXX) $(OPTIMIZED_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_thumb_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/thumb_benchmark_*.o $(PROFILING_LDFLAGS)
+
+# Build profiling Thumb benchmark test
+$(THUMB_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/simple_thumb_benchmark.cpp 
+	@echo "Building Thumb benchmark with profiling enabled..."
+	mkdir -p $(BUILD_DIR)
+	# Compile C sources with C compiler
+	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/thumb_benchmark_prof_arm_execute_optimizations.o
+	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/thumb_benchmark_prof_arm_execute_phase1.o
+	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/thumb_benchmark_prof_arm_timing.o
+	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/thumb_benchmark_prof_thumb_timing.o
+	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/thumb_execute_optimizations.c -o $(BUILD_DIR)/thumb_benchmark_prof_thumb_execute_optimizations.o
+	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/thumb_benchmark_prof_timer.o
+	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/thumb_benchmark_prof_timing.o
+	# Compile C++ sources and link everything together
+	$(CXX) $(PROFILING_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_thumb_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/thumb_benchmark_prof_*.o $(PROFILING_LDFLAGS)
 
 # Build timing test (C)
 $(TIMING_TEST_TARGET): $(BUILD_DIR)/test_timing.o $(C_OBJS)
@@ -226,7 +258,7 @@ debug_system_test: debug_test_debug debug_test_release
 # Clean build files
 clean:
 	@echo "Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET) $(TEST_TARGET) $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(SIMPLE_BENCHMARK_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(EXAMPLES_DIR)/debug_examples $(EXAMPLES_DIR)/debug_examples_verbose $(EXAMPLES_DIR)/debug_examples_trace $(EXAMPLES_DIR)/debug_examples_release
+	rm -rf $(BUILD_DIR) $(TARGET) $(TEST_TARGET) $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(SIMPLE_BENCHMARK_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(EXAMPLES_DIR)/debug_examples $(EXAMPLES_DIR)/debug_examples_verbose $(EXAMPLES_DIR)/debug_examples_trace $(EXAMPLES_DIR)/debug_examples_release
 
 # Run individual tests and demos
 run-arm-test: $(ARM_TEST_TARGET)
@@ -247,6 +279,17 @@ run-arm-benchmark-prof: $(ARM_BENCHMARK_PROF_TARGET)
 	@echo "\nProfile data written to arm_benchmark.prof"
 	@echo "Analyze with: pprof --web $(ARM_BENCHMARK_PROF_TARGET) arm_benchmark.prof"
 	@echo "  or: pprof --pdf $(ARM_BENCHMARK_PROF_TARGET) arm_benchmark.prof > profile.pdf"
+
+run-thumb-benchmark: $(THUMB_BENCHMARK_TARGET)
+	@echo "Running Thumb benchmark test..."
+	./$(THUMB_BENCHMARK_TARGET)
+
+run-thumb-benchmark-prof: $(THUMB_BENCHMARK_PROF_TARGET)
+	@echo "Running profiling-enabled Thumb benchmark test..."
+	CPUPROFILE=thumb_benchmark.prof ./$(THUMB_BENCHMARK_PROF_TARGET)
+	@echo "\nProfile data written to thumb_benchmark.prof"
+	@echo "Analyze with: pprof --web $(THUMB_BENCHMARK_PROF_TARGET) thumb_benchmark.prof"
+	@echo "  or: pprof --pdf $(THUMB_BENCHMARK_PROF_TARGET) thumb_benchmark.prof > profile.pdf"
 
 run-timing-test: $(TIMING_TEST_TARGET)
 	@echo "Running timing test..."
@@ -321,6 +364,8 @@ help:
 	@echo "  $(ARM_DEMO_TARGET) - ARM CPU advanced demo"
 	@echo "  $(ARM_BENCHMARK_TARGET) - ARM CPU benchmark test (optimized)"
 	@echo "  $(ARM_BENCHMARK_PROF_TARGET) - ARM CPU benchmark test with profiling"
+	@echo "  $(THUMB_BENCHMARK_TARGET) - Thumb CPU benchmark test (optimized)"
+	@echo "  $(THUMB_BENCHMARK_PROF_TARGET) - Thumb CPU benchmark test with profiling"
 	@echo "  $(SIMPLE_BENCHMARK_TARGET) - Simple ARM CPU benchmark (no Google Test)"
 	@echo "  $(TIMING_TEST_TARGET)   - Core timing system tests"
 	@echo "  $(THUMB_TEST_TARGET) - Thumb instruction timing tests"
@@ -332,6 +377,8 @@ help:
 	@echo "  run-arm-demo     - Build and run ARM advanced demo"
 	@echo "  run-arm-benchmark - Build and run ARM benchmark test"
 	@echo "  run-arm-benchmark-prof - Build and run ARM benchmark test with profiling"
+	@echo "  run-thumb-benchmark - Build and run Thumb benchmark test"
+	@echo "  run-thumb-benchmark-prof - Build and run Thumb benchmark test with profiling"
 	@echo "  run-simple-benchmark - Build and run simple benchmark (no Google Test)"
 	@echo "  profile-simple-benchmark - Profile simple benchmark with gperftools"
 	@echo "  run-timing-test  - Build and run timing tests"
@@ -347,5 +394,5 @@ help:
 	@echo "  help             - Show this help message"
 
 # Phony targets  
-.PHONY: all tests clean run-arm-test run-arm-demo run-arm-benchmark run-arm-benchmark-prof run-timing-test run-thumb-test \
+.PHONY: all tests clean run-arm-test run-arm-demo run-arm-benchmark run-arm-benchmark-prof run-thumb-benchmark run-thumb-benchmark-prof run-timing-test run-thumb-test \
         run-cycle-demo run-test run-all-tests quick-test docs status help debug_examples verbose_debug_examples trace_debug_examples release_examples
