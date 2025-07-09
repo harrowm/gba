@@ -94,11 +94,11 @@ $(ARM_BENCHMARK_OPT_TARGET): $(TESTS_DIR)/arm_benchmark_fixed.cpp
 	$(CXX) $(OPTIMIZED_CXXFLAGS) $(GTEST_FLAGS) -DOUTPUT_BENCHMARK_RESULTS=1 -o $@ $(TESTS_DIR)/arm_benchmark_fixed.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(C_SRCS)
 
 # Build profiling ARM benchmark test
-$(ARM_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/arm_benchmark_fixed.cpp $(SRC_DIR)/debug_optimized.cpp
+$(ARM_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/arm_benchmark.cpp 
 	@echo "Building ARM benchmark with profiling enabled..."
 	mkdir -p $(BUILD_DIR)
 	# Use a simpler approach - compile and link in one command
-	$(CXX) $(PROFILING_CXXFLAGS) $(GTEST_FLAGS) -DOUTPUT_BENCHMARK_RESULTS=1 -o $@ $(TESTS_DIR)/arm_benchmark_fixed.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(C_SRCS) $(SRC_DIR)/debug_optimized.cpp $(PROFILING_LDFLAGS)
+	$(CXX) $(PROFILING_CXXFLAGS) $(GTEST_FLAGS) -DOUTPUT_BENCHMARK_RESULTS=1 -o $@ $(TESTS_DIR)/arm_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(C_SRCS)  $(PROFILING_LDFLAGS)
 
 # Build ultra-optimized ARM benchmark test with memory bounds checking disabled
 $(ARM_BENCHMARK_ULTRA_TARGET): $(TESTS_DIR)/arm_benchmark_fixed.cpp

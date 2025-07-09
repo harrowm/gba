@@ -9,8 +9,7 @@
 // Simple benchmark without Google Test to test optimized builds
 
 int main() {
-    // Disable debug output
-    Debug::Config::debugLevel = Debug::Level::Off;
+    // Note: Debug output automatically disabled in NDEBUG/BENCHMARK_MODE builds
     
     // Create GBA in test mode with minimal memory
     GBA gba(true); // Test mode
