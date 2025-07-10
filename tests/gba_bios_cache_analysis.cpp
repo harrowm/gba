@@ -133,6 +133,9 @@ int main() {
         // Reset cache statistics
         arm_cpu.resetInstructionCacheStats();
         
+        // Start timing for overall performance measurement
+        auto total_start_time = std::chrono::high_resolution_clock::now();
+        
         std::cout << "\n=== BIOS Startup Analysis ===\n";
         std::cout << "Executing BIOS code and monitoring for jump to Game Pak...\n\n";
         
@@ -153,9 +156,10 @@ int main() {
                   << std::setw(8) << "Hits"
                   << std::setw(8) << "Misses"
                   << std::setw(10) << "Hit Rate"
+                  << std::setw(12) << "IPS"
                   << std::setw(8) << "Mode"
                   << std::setw(12) << "Notes" << std::endl;
-        std::cout << std::string(80, '-') << std::endl;
+        std::cout << std::string(92, '-') << std::endl;
         
         for (uint32_t phase = 0; phase < MAX_PHASES && !reached_game_pak; phase++) {
             // Record initial state
@@ -224,7 +228,7 @@ int main() {
             // Performance metrics
             auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(exec_end - exec_start);
             double seconds = duration.count() / 1e9;
-            (void)seconds; // Performance timing for future analysis
+            uint64_t ips = seconds > 0 ? (uint64_t)(PHASE_SIZE / seconds) : 0;
             
             // Display phase results
             std::cout << std::setw(6) << phase
@@ -234,6 +238,7 @@ int main() {
                       << std::setw(8) << phase_hits
                       << std::setw(8) << phase_misses
                       << std::setw(9) << std::fixed << std::setprecision(1) << phase_hit_rate << "%"
+                      << std::setw(12) << ips
                       << std::setw(8) << (is_arm_mode ? "ARM" : "Thumb")
                       << std::setw(12) << notes << std::endl;
             
@@ -254,6 +259,9 @@ int main() {
             for (int gamepak_phase = 0; gamepak_phase < 10; gamepak_phase++) {
                 uint32_t pc_before = cpu.R()[15];
                 auto stats_before = arm_cpu.getInstructionCacheStats();
+                
+                // Time the execution
+                auto exec_start = std::chrono::high_resolution_clock::now();
                 
                 // For the first phase, show detailed instruction execution
                 if (gamepak_phase == 0) {
@@ -290,6 +298,8 @@ int main() {
                     cpu.execute(PHASE_SIZE);
                 }
                 
+                auto exec_end = std::chrono::high_resolution_clock::now();
+                
                 uint32_t pc_after = cpu.R()[15];
                 auto stats_after = arm_cpu.getInstructionCacheStats();
                 uint64_t phase_hits = stats_after.hits - stats_before.hits;
@@ -297,11 +307,17 @@ int main() {
                 uint64_t phase_total = phase_hits + phase_misses;
                 double phase_hit_rate = phase_total > 0 ? (double)phase_hits / phase_total * 100.0 : 0.0;
                 
+                // Calculate IPS for this phase
+                auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(exec_end - exec_start);
+                double seconds = duration.count() / 1e9;
+                uint64_t ips = seconds > 0 ? (uint64_t)(PHASE_SIZE / seconds) : 0;
+                
                 std::cout << "GamePak Phase " << gamepak_phase 
                           << ": PC 0x" << std::hex << pc_before << "→0x" << pc_after << std::dec
                           << ", Hits=" << phase_hits
                           << ", Misses=" << phase_misses
                           << ", Hit Rate=" << std::fixed << std::setprecision(1) << phase_hit_rate << "%"
+                          << ", IPS=" << ips
                           << std::endl;
                 
                 total_instructions += PHASE_SIZE;
@@ -325,11 +341,18 @@ int main() {
         std::cout << "\n=== BIOS Startup Cache Performance Summary ===\n";
         auto final_stats = arm_cpu.getInstructionCacheStats();
         
+        // Get total execution time for overall IPS calculation
+        auto total_end_time = std::chrono::high_resolution_clock::now();
+        auto total_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(total_end_time - total_start_time);
+        double total_seconds = total_duration.count() / 1e9;
+        uint64_t overall_ips = total_seconds > 0 ? (uint64_t)(total_instructions / total_seconds) : 0;
+        
         std::cout << "Total execution:\n";
         std::cout << "  Instructions executed: " << total_instructions << std::endl;
         std::cout << "  BIOS instructions: " << bios_instructions << std::endl;
         std::cout << "  Final PC: 0x" << std::hex << cpu.R()[15] << std::dec << std::endl;
         std::cout << "  Reached Game Pak: " << (reached_game_pak ? "Yes" : "No") << std::endl;
+        std::cout << "  Overall IPS: " << overall_ips << std::endl;
         
         std::cout << "\nCache performance:\n";
         std::cout << "  Total hits: " << final_stats.hits << std::endl;
