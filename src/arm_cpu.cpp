@@ -1454,7 +1454,118 @@ ARMCachedInstruction ARMCPU::decodeBlockDataTransfer(uint32_t pc, uint32_t instr
 
 // Placeholder cached execution functions (these would call the original implementations)
 void ARMCPU::executeCachedDataProcessing(const ARMCachedInstruction& cached) {
-    arm_data_processing(cached.instruction);
+    // Use pre-decoded cached values to avoid redundant bit extraction
+    const uint32_t opcode = static_cast<uint32_t>(cached.dp_op);
+    const uint32_t rd = cached.rd;
+    const uint32_t rn = cached.rn;
+    const bool set_flags = cached.set_flags;
+    
+    // Fast path for immediate operands (pre-computed during decode)
+    if (cached.immediate && cached.imm_valid) {
+        // Use pre-computed immediate value and carry from cache
+        const uint32_t operand2 = cached.imm_value;
+        const uint32_t carry_out = cached.imm_carry;
+        
+        // Super-optimized MOV immediate path (very common)
+        if (opcode == 0xD) {  // MOV
+            if (set_flags && rd != 15) {
+                uint32_t cpsr = parentCPU.CPSR();
+                cpsr &= ~(0x80000000 | 0x40000000); // Clear N, Z
+                if (operand2 == 0) cpsr |= 0x40000000;   // Set Z if zero
+                if (carry_out) cpsr |= 0x20000000;       // Set C from rotation
+                parentCPU.CPSR() = cpsr;
+            }
+            parentCPU.R()[rd] = operand2;
+            return;
+        }
+        
+        // Fast dispatch table for immediate operations
+        typedef void (ARMCPU::*DataProcessingFunc)(uint32_t, uint32_t, uint32_t, bool, uint32_t);
+        static const DataProcessingFunc funcTable[16] = {
+            &ARMCPU::arm_and,  // 0000 - AND
+            &ARMCPU::arm_eor,  // 0001 - EOR 
+            &ARMCPU::arm_sub,  // 0010 - SUB
+            &ARMCPU::arm_rsb,  // 0011 - RSB
+            &ARMCPU::arm_add,  // 0100 - ADD
+            &ARMCPU::arm_adc,  // 0101 - ADC
+            &ARMCPU::arm_sbc,  // 0110 - SBC
+            &ARMCPU::arm_rsc,  // 0111 - RSC
+            &ARMCPU::arm_tst,  // 1000 - TST
+            &ARMCPU::arm_teq,  // 1001 - TEQ
+            &ARMCPU::arm_cmp,  // 1010 - CMP
+            &ARMCPU::arm_cmn,  // 1011 - CMN
+            &ARMCPU::arm_orr,  // 1100 - ORR
+            &ARMCPU::arm_mov,  // 1101 - MOV
+            &ARMCPU::arm_bic,  // 1110 - BIC
+            &ARMCPU::arm_mvn   // 1111 - MVN
+        };
+        
+        // Direct function call with cached values
+        (this->*funcTable[opcode])(rd, rn, operand2, set_flags, carry_out);
+        return;
+    }
+    
+    // Register operand path - optimize for common no-shift case
+    if ((cached.instruction & 0x02000FF0) == 0) {  // Register operand with no shift
+        const uint32_t rm = parentCPU.R()[cached.rm];
+        const uint32_t op1 = parentCPU.R()[rn];
+        const uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
+        
+        // Fast-path dispatch table for common ALU operations
+        typedef void (ARMCPU::*FastALUFunc)(uint32_t, uint32_t, uint32_t, uint32_t, bool, uint32_t);
+        static const FastALUFunc fastALUTable[16] = {
+            &ARMCPU::fastALU_AND, // 0x0 - AND
+            nullptr,              // 0x1 - EOR (not in fast path)
+            &ARMCPU::fastALU_SUB, // 0x2 - SUB
+            nullptr,              // 0x3 - RSB (not in fast path)
+            &ARMCPU::fastALU_ADD, // 0x4 - ADD
+            nullptr,              // 0x5 - ADC (not in fast path)
+            nullptr,              // 0x6 - SBC (not in fast path)
+            nullptr,              // 0x7 - RSC (not in fast path)
+            nullptr,              // 0x8 - TST (not in fast path)
+            nullptr,              // 0x9 - TEQ (not in fast path)
+            &ARMCPU::fastALU_CMP, // 0xA - CMP
+            nullptr,              // 0xB - CMN (not in fast path)
+            &ARMCPU::fastALU_ORR, // 0xC - ORR
+            &ARMCPU::fastALU_MOV, // 0xD - MOV
+            nullptr,              // 0xE - BIC (not in fast path)
+            nullptr               // 0xF - MVN (not in fast path)
+        };
+        
+        // Use function pointer table for branchless dispatch
+        FastALUFunc fastFunc = fastALUTable[opcode];
+        if (fastFunc) {
+            (this->*fastFunc)(rd, rn, op1, rm, set_flags, carry);
+            return;
+        }
+    }
+    
+    // Fallback to standard path for complex cases
+    uint32_t carry_out = 0;
+    uint32_t operand2 = calculateOperand2(cached.instruction, &carry_out);
+    
+    // Use function dispatch table
+    typedef void (ARMCPU::*DataProcessingFunc)(uint32_t, uint32_t, uint32_t, bool, uint32_t);
+    static const DataProcessingFunc funcTable[16] = {
+        &ARMCPU::arm_and,  // 0000 - AND
+        &ARMCPU::arm_eor,  // 0001 - EOR 
+        &ARMCPU::arm_sub,  // 0010 - SUB
+        &ARMCPU::arm_rsb,  // 0011 - RSB
+        &ARMCPU::arm_add,  // 0100 - ADD
+        &ARMCPU::arm_adc,  // 0101 - ADC
+        &ARMCPU::arm_sbc,  // 0110 - SBC
+        &ARMCPU::arm_rsc,  // 0111 - RSC
+        &ARMCPU::arm_tst,  // 1000 - TST
+        &ARMCPU::arm_teq,  // 1001 - TEQ
+        &ARMCPU::arm_cmp,  // 1010 - CMP
+        &ARMCPU::arm_cmn,  // 1011 - CMN
+        &ARMCPU::arm_orr,  // 1100 - ORR
+        &ARMCPU::arm_mov,  // 1101 - MOV
+        &ARMCPU::arm_bic,  // 1110 - BIC
+        &ARMCPU::arm_mvn   // 1111 - MVN
+    };
+    
+    (this->*funcTable[opcode])(rd, rn, operand2, set_flags, carry_out);
 }
 
 void ARMCPU::executeCachedSingleDataTransfer(const ARMCachedInstruction& cached) {
