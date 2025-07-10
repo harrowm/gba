@@ -37,15 +37,9 @@ TEST_TARGET = test_cpu
 ARM_TEST_TARGET = test_arm_basic
 ARM_DEMO_TARGET = demo_arm_advanced
 ARM_BENCHMARK_TARGET = arm_benchmark
+ARM_BENCHMARK_OPT_TARGET = arm_benchmark_opt
 ARM_BENCHMARK_PROF_TARGET = arm_benchmark_prof
-ARM_BENCHMARK_CACHE_STATS = arm_benchmark_cache_stats
-GBA_BIOS_CACHE_ANALYSIS = gba_bios_cache_analysis
-ARM_BRANCH_DEBUG = arm_branch_debug
-GAMEPAK_CACHE_TEST = gamepak_cache_test
-ARM_CACHE_INVALIDATION_TEST = test_arm_cache_invalidation
-CACHE_STATS_TEST = test_cache_stats
-THUMB_BENCHMARK_TARGET = thumb_benchmark
-THUMB_BENCHMARK_PROF_TARGET = thumb_benchmark_prof
+ARM_BENCHMARK_ULTRA_TARGET = arm_benchmark_ultra
 TIMING_TEST_TARGET = test_timing
 THUMB_TEST_TARGET = test_thumb_timing
 DEMO_CYCLE_TARGET = demo_cycle_driven
@@ -65,12 +59,12 @@ PROFILING_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_LEVEL
 PROFILING_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_LEVEL=0 -DNDEBUG -DBENCHMARK_MODE -DDISABLE_MEMORY_BOUNDS_CHECK
 PROFILING_LDFLAGS = -L/opt/homebrew/lib -lprofiler
 
-# Special flags for GBA BIOS cache analysis - enable memory bounds checking and error logging
-BIOS_ANALYSIS_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_BUILD -DDEBUG_LEVEL=0 -DARM_CACHE_STATS=1
-BIOS_ANALYSIS_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_BUILD -DDEBUG_LEVEL=0 -DARM_CACHE_STATS=1
+# Ultra-optimized flags for fastest possible benchmarks
+ULTRA_CXXFLAGS = -std=c++17 -I$(INCLUDE_DIR) -Ofast -march=native -flto -fomit-frame-pointer -DDEBUG_LEVEL=0 -DNDEBUG -DBENCHMARK_MODE -DDISABLE_MEMORY_BOUNDS_CHECK
+ULTRA_CFLAGS = -std=c99 -I$(INCLUDE_DIR) -Ofast -march=native -flto -fomit-frame-pointer -DDEBUG_LEVEL=0 -DNDEBUG -DBENCHMARK_MODE -DDISABLE_MEMORY_BOUNDS_CHECK
 
 # Build all tests and demos
-tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(ARM_BENCHMARK_CACHE_STATS) $(GBA_BIOS_CACHE_ANALYSIS) $(ARM_BRANCH_DEBUG) $(GAMEPAK_CACHE_TEST) $(ARM_CACHE_INVALIDATION_TEST) $(CACHE_STATS_TEST) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
+tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_OPT_TARGET) $(ARM_BENCHMARK_ULTRA_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
 
 # Build main emulator
 $(TARGET): $(ALL_OBJS)
@@ -87,101 +81,31 @@ $(ARM_DEMO_TARGET): $(BUILD_DIR)/demo_arm_advanced.o $(LIB_OBJS)
 	@echo "Building ARM advanced demo..."
 	$(CXX) $(CXXFLAGS) -o $@ $^ -DDEBUG_LEVEL=0
 
-# Build ARM cache invalidation test
-$(ARM_CACHE_INVALIDATION_TEST): $(TESTS_DIR)/test_arm_cache_invalidation.cpp $(LIB_OBJS)
-	@echo "Building ARM cache invalidation test..."
-	$(CXX) $(CXXFLAGS) -o $@ $^ -DDEBUG_LEVEL=0
+# Build ARM benchmark test (with memory bounds checking still enabled)
+$(ARM_BENCHMARK_TARGET): $(BUILD_DIR)/arm_benchmark_fixed.o $(LIB_OBJS)
+	@echo "Building ARM benchmark test with memory bounds checking enabled..."
+	$(CXX) $(CXXFLAGS) $(GTEST_FLAGS) -DOUTPUT_BENCHMARK_RESULTS=1 -o $@ $^
 
-# Build cache statistics test
-$(CACHE_STATS_TEST): $(TESTS_DIR)/test_cache_stats.cpp $(LIB_OBJS)
-	@echo "Building cache statistics test..."
-	$(CXX) $(CXXFLAGS) -o $@ $^ -DDEBUG_LEVEL=0
-
-# Build ARM benchmark test (optimized)
-$(ARM_BENCHMARK_TARGET): $(TESTS_DIR)/simple_arm_benchmark.cpp
-	@echo "Building ARM benchmark with optimizations (-O3 -flto)..."
+# Build optimized ARM benchmark test
+$(ARM_BENCHMARK_OPT_TARGET): $(TESTS_DIR)/arm_benchmark_fixed.cpp
+	@echo "Building optimized ARM benchmark with aggressive optimizations..."
 	mkdir -p $(BUILD_DIR)
-	# Compile C sources with C compiler
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/arm_benchmark_arm_execute_optimizations.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/arm_benchmark_arm_execute_phase1.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/arm_benchmark_arm_timing.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/arm_benchmark_thumb_timing.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/arm_benchmark_timer.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/arm_benchmark_timing.o
-	# Compile C++ sources and link everything together
-	$(CXX) $(OPTIMIZED_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_arm_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_*.o $(PROFILING_LDFLAGS)
+	# Use a simpler approach - compile and link in one command
+	$(CXX) $(OPTIMIZED_CXXFLAGS) $(GTEST_FLAGS) -DOUTPUT_BENCHMARK_RESULTS=1 -o $@ $(TESTS_DIR)/arm_benchmark_fixed.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(C_SRCS)
 
 # Build profiling ARM benchmark test
-$(ARM_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/simple_arm_benchmark.cpp 
+$(ARM_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/arm_benchmark.cpp 
 	@echo "Building ARM benchmark with profiling enabled..."
 	mkdir -p $(BUILD_DIR)
-	# Compile C sources with C compiler
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/arm_benchmark_prof_arm_execute_optimizations.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/arm_benchmark_prof_arm_execute_phase1.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/arm_benchmark_prof_arm_timing.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/arm_benchmark_prof_thumb_timing.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/arm_benchmark_prof_timer.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/arm_benchmark_prof_timing.o
-	# Compile C++ sources and link everything together
-	$(CXX) $(PROFILING_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_arm_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_prof_*.o $(PROFILING_LDFLAGS)
+	# Use a simpler approach - compile and link in one command
+	$(CXX) $(PROFILING_CXXFLAGS) $(GTEST_FLAGS) -DOUTPUT_BENCHMARK_RESULTS=1 -o $@ $(TESTS_DIR)/arm_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(C_SRCS)  $(PROFILING_LDFLAGS)
 
-# Build ARM benchmark test with cache statistics (optimized)
-$(ARM_BENCHMARK_CACHE_STATS): $(TESTS_DIR)/arm_benchmark_with_cache_stats.cpp
-	@echo "Building ARM benchmark with cache statistics enabled..."
+# Build ultra-optimized ARM benchmark test with memory bounds checking disabled
+$(ARM_BENCHMARK_ULTRA_TARGET): $(TESTS_DIR)/arm_benchmark_fixed.cpp
+	@echo "Building ultra-optimized ARM benchmark with memory bounds checking disabled..."
 	mkdir -p $(BUILD_DIR)
-	# Compile C sources with C compiler
-	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_arm_execute_optimizations.o
-	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_arm_execute_phase1.o
-	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_arm_timing.o
-	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_thumb_timing.o
-	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_timer.o
-	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_timing.o
-	# Compile C++ sources and link everything together
-	$(CXX) $(OPTIMIZED_CXXFLAGS) -DARM_CACHE_STATS=1 -o $@ $(TESTS_DIR)/arm_benchmark_with_cache_stats.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_cache_stats_*.o $(PROFILING_LDFLAGS)
-
-# Build GBA BIOS cache analysis test (with memory bounds checking and error logging)
-$(GBA_BIOS_CACHE_ANALYSIS): $(TESTS_DIR)/gba_bios_cache_analysis.cpp
-	@echo "Building GBA BIOS cache analysis with cache statistics and memory bounds checking enabled..."
-	mkdir -p $(BUILD_DIR)
-	# Compile C sources with C compiler
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/gba_bios_cache_analysis_arm_execute_optimizations.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/gba_bios_cache_analysis_arm_execute_phase1.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/gba_bios_cache_analysis_arm_timing.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/gba_bios_cache_analysis_thumb_timing.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/gba_bios_cache_analysis_timer.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/gba_bios_cache_analysis_timing.o
-	# Compile C++ sources and link everything together
-	$(CXX) $(BIOS_ANALYSIS_CXXFLAGS) -o $@ $(TESTS_DIR)/gba_bios_cache_analysis.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/gba_bios_cache_analysis_*.o
-
-# Build Thumb benchmark test (optimized)
-$(THUMB_BENCHMARK_TARGET): $(TESTS_DIR)/simple_thumb_benchmark.cpp
-	@echo "Building Thumb benchmark with optimizations (-O3 -flto)..."
-	mkdir -p $(BUILD_DIR)
-	# Compile C sources with C compiler
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/thumb_benchmark_arm_execute_optimizations.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/thumb_benchmark_arm_execute_phase1.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/thumb_benchmark_arm_timing.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/thumb_benchmark_thumb_timing.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/thumb_execute_optimizations.c -o $(BUILD_DIR)/thumb_benchmark_thumb_execute_optimizations.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/thumb_benchmark_timer.o
-	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/thumb_benchmark_timing.o
-	# Compile C++ sources and link everything together
-	$(CXX) $(OPTIMIZED_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_thumb_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/thumb_benchmark_*.o $(PROFILING_LDFLAGS)
-
-# Build profiling Thumb benchmark test
-$(THUMB_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/simple_thumb_benchmark.cpp 
-	@echo "Building Thumb benchmark with profiling enabled..."
-	mkdir -p $(BUILD_DIR)
-	# Compile C sources with C compiler
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/thumb_benchmark_prof_arm_execute_optimizations.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/thumb_benchmark_prof_arm_execute_phase1.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/thumb_benchmark_prof_arm_timing.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/thumb_benchmark_prof_thumb_timing.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/thumb_execute_optimizations.c -o $(BUILD_DIR)/thumb_benchmark_prof_thumb_execute_optimizations.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/thumb_benchmark_prof_timer.o
-	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/thumb_benchmark_prof_timing.o
-	# Compile C++ sources and link everything together
-	$(CXX) $(PROFILING_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_thumb_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/thumb_benchmark_prof_*.o $(PROFILING_LDFLAGS)
+	# Use a simpler approach - compile and link in one command
+	$(CXX) $(ULTRA_CXXFLAGS) $(GTEST_FLAGS) -DOUTPUT_BENCHMARK_RESULTS=1 -o $@ $(TESTS_DIR)/arm_benchmark_fixed.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(C_SRCS)
 
 # Build timing test (C)
 $(TIMING_TEST_TARGET): $(BUILD_DIR)/test_timing.o $(C_OBJS)
@@ -208,35 +132,12 @@ $(ARM_EXECUTE_PHASE1_TEST): $(BUILD_DIR)/test_arm_execute_phase1.o $(C_OBJS)
 	@echo "Building ARM execute phase 1 test..."
 	$(CC) $(CFLAGS) -o $@ $^
 
-# Build GamePak cache test
-$(GAMEPAK_CACHE_TEST): $(TESTS_DIR)/gamepak_cache_test.cpp
-	@echo "Building GamePak cache test with cache statistics enabled..."
-	mkdir -p $(BUILD_DIR)
-	# Compile C sources with C compiler
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/gamepak_cache_test_arm_execute_optimizations.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/gamepak_cache_test_arm_execute_phase1.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/gamepak_cache_test_arm_timing.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/gamepak_cache_test_thumb_timing.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/gamepak_cache_test_timer.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/gamepak_cache_test_timing.o
-	# Compile C++ sources and link everything together
-	$(CXX) $(BIOS_ANALYSIS_CXXFLAGS) -o $@ $(TESTS_DIR)/gamepak_cache_test.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/gamepak_cache_test_*.o
-
 # Build simple benchmark
 SIMPLE_BENCHMARK_TARGET = simple_benchmark
 $(SIMPLE_BENCHMARK_TARGET): $(TESTS_DIR)/simple_benchmark.cpp $(INCLUDE_DIR)/*.h
 	@echo "Building simple benchmark with aggressive optimizations (-O3 -flto)..."
 	mkdir -p $(BUILD_DIR)
 	$(CXX) $(OPTIMIZED_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(wildcard $(SRC_DIR)/*.cpp)) $(SRC_DIR)/*.c $(PROFILING_LDFLAGS)
-
-# Special compilation rules for benchmark object files with different optimization levels
-$(BUILD_DIR)/simple_benchmark_opt.o: $(TESTS_DIR)/simple_benchmark.cpp | $(BUILD_DIR)
-	@echo "Compiling optimized benchmark: $<"
-	$(CXX) $(OPTIMIZED_CXXFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/simple_benchmark_prof.o: $(TESTS_DIR)/simple_benchmark.cpp | $(BUILD_DIR)
-	@echo "Compiling profiling benchmark: $<"
-	$(CXX) $(PROFILING_CXXFLAGS) -c $< -o $@
 
 # Debug levels for different build types
 # 0 = Off (no debug output)
@@ -320,7 +221,7 @@ debug_system_test: debug_test_debug debug_test_release
 # Clean build files
 clean:
 	@echo "Cleaning build files..."
-	rm -rf $(BUILD_DIR) $(TARGET) $(TEST_TARGET) $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(SIMPLE_BENCHMARK_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(EXAMPLES_DIR)/debug_examples $(EXAMPLES_DIR)/debug_examples_verbose $(EXAMPLES_DIR)/debug_examples_trace $(EXAMPLES_DIR)/debug_examples_release
+	rm -rf $(BUILD_DIR) $(TARGET) $(TEST_TARGET) $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_OPT_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(SIMPLE_BENCHMARK_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(EXAMPLES_DIR)/debug_examples $(EXAMPLES_DIR)/debug_examples_verbose $(EXAMPLES_DIR)/debug_examples_trace $(EXAMPLES_DIR)/debug_examples_release
 
 # Run individual tests and demos
 run-arm-test: $(ARM_TEST_TARGET)
@@ -331,13 +232,13 @@ run-arm-demo: $(ARM_DEMO_TARGET)
 	@echo "Running ARM advanced demo..."
 	./$(ARM_DEMO_TARGET)
 
-run-arm-cache-test: $(ARM_CACHE_INVALIDATION_TEST)
-	@echo "Running ARM cache invalidation test..."
-	./$(ARM_CACHE_INVALIDATION_TEST)
-
 run-arm-benchmark: $(ARM_BENCHMARK_TARGET)
 	@echo "Running ARM benchmark test..."
 	./$(ARM_BENCHMARK_TARGET)
+
+run-arm-benchmark-opt: $(ARM_BENCHMARK_OPT_TARGET)
+	@echo "Running optimized ARM benchmark test..."
+	./$(ARM_BENCHMARK_OPT_TARGET)
 
 run-arm-benchmark-prof: $(ARM_BENCHMARK_PROF_TARGET)
 	@echo "Running profiling-enabled ARM benchmark test..."
@@ -345,29 +246,6 @@ run-arm-benchmark-prof: $(ARM_BENCHMARK_PROF_TARGET)
 	@echo "\nProfile data written to arm_benchmark.prof"
 	@echo "Analyze with: pprof --web $(ARM_BENCHMARK_PROF_TARGET) arm_benchmark.prof"
 	@echo "  or: pprof --pdf $(ARM_BENCHMARK_PROF_TARGET) arm_benchmark.prof > profile.pdf"
-
-run-arm-cache-invalidation: $(ARM_CACHE_INVALIDATION_TEST)
-	@echo "Running ARM cache invalidation test..."
-	./$(ARM_CACHE_INVALIDATION_TEST)
-
-run-gba-bios-cache-analysis: $(GBA_BIOS_CACHE_ANALYSIS)
-	@echo "Running GBA BIOS cache analysis..."
-	./$(GBA_BIOS_CACHE_ANALYSIS)
-
-run-gamepak-cache-test: $(GAMEPAK_CACHE_TEST)
-	@echo "Running GamePak cache test..."
-	./$(GAMEPAK_CACHE_TEST)
-
-run-thumb-benchmark: $(THUMB_BENCHMARK_TARGET)
-	@echo "Running Thumb benchmark test..."
-	./$(THUMB_BENCHMARK_TARGET)
-
-run-thumb-benchmark-prof: $(THUMB_BENCHMARK_PROF_TARGET)
-	@echo "Running profiling-enabled Thumb benchmark test..."
-	CPUPROFILE=thumb_benchmark.prof ./$(THUMB_BENCHMARK_PROF_TARGET)
-	@echo "\nProfile data written to thumb_benchmark.prof"
-	@echo "Analyze with: pprof --web $(THUMB_BENCHMARK_PROF_TARGET) thumb_benchmark.prof"
-	@echo "  or: pprof --pdf $(THUMB_BENCHMARK_PROF_TARGET) thumb_benchmark.prof > profile.pdf"
 
 run-timing-test: $(TIMING_TEST_TARGET)
 	@echo "Running timing test..."
@@ -405,22 +283,6 @@ profile-simple-benchmark: $(SIMPLE_BENCHMARK_TARGET)
 	@echo "To view the profile, run: pprof --web ./$(SIMPLE_BENCHMARK_TARGET) ./$(PROF_OUTPUT)"
 	@echo "or: pprof --text ./$(SIMPLE_BENCHMARK_TARGET) ./$(PROF_OUTPUT)"
 
-# Run comparison of ARM vs Thumb benchmarks
-run-benchmark-comparison: $(ARM_BENCHMARK_TARGET) $(THUMB_BENCHMARK_TARGET)
-	@echo "=== ARM vs Thumb Benchmark Comparison ==="
-	@echo ""
-	@echo "Running ARM benchmark..."
-	@echo ""
-	./$(ARM_BENCHMARK_TARGET)
-	@echo ""
-	@echo "Running Thumb benchmark..."
-	@echo ""
-	./$(THUMB_BENCHMARK_TARGET)
-	@echo ""
-	@echo "=== Comparison Complete ==="
-	@echo "Check performance_analysis.md for detailed analysis"
-	@echo ""
-
 # Run all available tests
 run-all-tests: run-timing-test run-thumb-test run-arm-test run-cycle-demo
 
@@ -456,11 +318,10 @@ help:
 	@echo "  $(TARGET)        - Main GBA emulator"
 	@echo "  $(ARM_TEST_TARGET) - ARM CPU basic tests"
 	@echo "  $(ARM_DEMO_TARGET) - ARM CPU advanced demo"
-	@echo "  $(ARM_BENCHMARK_TARGET) - ARM CPU benchmark test (optimized)"
-	@echo "  $(ARM_BENCHMARK_PROF_TARGET) - ARM CPU benchmark test with profiling"
-	@echo "  $(THUMB_BENCHMARK_TARGET) - Thumb CPU benchmark test (optimized)"
-	@echo "  $(THUMB_BENCHMARK_PROF_TARGET) - Thumb CPU benchmark test with profiling"
+	@echo "  $(ARM_BENCHMARK_TARGET) - ARM CPU benchmark test"
+	@echo "  $(ARM_BENCHMARK_OPT_TARGET) - ARM CPU optimized benchmark test (-O3 -flto)"
 	@echo "  $(SIMPLE_BENCHMARK_TARGET) - Simple ARM CPU benchmark (no Google Test)"
+	@echo "  $(ARM_BENCHMARK_PROF_TARGET) - ARM CPU benchmark test with profiling"
 	@echo "  $(TIMING_TEST_TARGET)   - Core timing system tests"
 	@echo "  $(THUMB_TEST_TARGET) - Thumb instruction timing tests"
 	@echo "  $(DEMO_CYCLE_TARGET) - Cycle-driven execution demo"
@@ -469,14 +330,11 @@ help:
 	@echo "Run targets:"
 	@echo "  run-arm-test     - Build and run ARM basic tests"
 	@echo "  run-arm-demo     - Build and run ARM advanced demo"
-	@echo "  run-arm-cache-test - Build and run ARM cache invalidation test"
 	@echo "  run-arm-benchmark - Build and run ARM benchmark test"
-	@echo "  run-arm-benchmark-prof - Build and run ARM benchmark test with profiling"
-	@echo "  run-thumb-benchmark - Build and run Thumb benchmark test"
-	@echo "  run-thumb-benchmark-prof - Build and run Thumb benchmark test with profiling"
-	@echo "  run-benchmark-comparison - Run both ARM and Thumb benchmarks for comparison"
+	@echo "  run-arm-benchmark-opt - Build and run optimized ARM benchmark test"
 	@echo "  run-simple-benchmark - Build and run simple benchmark (no Google Test)"
 	@echo "  profile-simple-benchmark - Profile simple benchmark with gperftools"
+	@echo "  run-arm-benchmark-prof - Build and run ARM benchmark test with profiling"
 	@echo "  run-timing-test  - Build and run timing tests"
 	@echo "  run-thumb-test   - Build and run Thumb timing tests"
 	@echo "  run-cycle-demo   - Build and run cycle-driven demo"
@@ -490,23 +348,5 @@ help:
 	@echo "  help             - Show this help message"
 
 # Phony targets  
-.PHONY: all tests clean run-arm-test run-arm-demo run-arm-cache-test run-arm-benchmark run-arm-benchmark-prof run-thumb-benchmark run-thumb-benchmark-prof run-benchmark-comparison run-timing-test run-thumb-test \
+.PHONY: all tests clean run-arm-test run-arm-demo run-arm-benchmark run-arm-benchmark-opt run-arm-benchmark-prof run-timing-test run-thumb-test \
         run-cycle-demo run-test run-all-tests quick-test docs status help debug_examples verbose_debug_examples trace_debug_examples release_examples
-
-# ARM Branch Debug Test - Investigate branch execution issues
-$(ARM_BRANCH_DEBUG): $(TESTS_DIR)/arm_branch_debug.cpp
-	@echo "Building ARM branch debug test with detailed instruction tracing..."
-	@mkdir -p $(BUILD_DIR)
-	# Compile C sources with C compiler
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/arm_branch_debug_arm_execute_optimizations.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/arm_branch_debug_arm_execute_phase1.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/arm_branch_debug_arm_timing.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/arm_branch_debug_thumb_timing.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/arm_branch_debug_timer.o
-	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/arm_branch_debug_timing.o
-	# Compile C++ sources and link everything together
-	$(CXX) $(BIOS_ANALYSIS_CXXFLAGS) -o $@ $(TESTS_DIR)/arm_branch_debug.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_branch_debug_*.o
-
-run-arm-branch-debug: $(ARM_BRANCH_DEBUG)
-	@echo "Running ARM branch execution debug test..."
-	./$(ARM_BRANCH_DEBUG)

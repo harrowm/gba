@@ -9,7 +9,7 @@
 // Define ARM_CACHE_STATS to enable cache statistics collection
 // This adds overhead but provides useful performance monitoring
 #ifndef ARM_CACHE_STATS
-#define ARM_CACHE_STATS 0
+#define ARM_CACHE_STATS 1
 #endif
 
 // Forward declaration

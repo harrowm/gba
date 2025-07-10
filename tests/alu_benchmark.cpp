@@ -1,14 +1,17 @@
 #include "gba.h"
 #include "cpu.h"
 #include "memory.h"
+#include "arm_instruction_cache.h"
 #include <chrono>
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <string>
+#include <cstring>
 
 // Focused ALU benchmark to test the optimization
 
-int main() {
+int main(int argc, char* argv[]) {
     // Create GBA in test mode
     GBA gba(true);
     auto& cpu = gba.getCPU();
@@ -67,6 +70,25 @@ int main() {
         std::cout << std::left << std::setw(15) << test.first
                   << std::right << std::setw(15) << std::fixed << std::setprecision(0) << ips
                   << " IPS" << std::endl;
+    }
+    
+    // Display cache statistics if command line argument --cache-stats is passed
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--cache-stats") == 0) {
+            auto& armCPU = cpu.getARMCPU();
+            auto stats = armCPU.getInstructionCacheStats();
+            
+            std::cout << "\n=== ARM Instruction Cache Statistics ===\n";
+#ifdef ARM_ICACHE_SIZE
+            std::cout << "Cache size: " << ARM_ICACHE_SIZE << " entries\n";
+#endif
+            std::cout << "Cache hits: " << stats.hits << "\n";
+            std::cout << "Cache misses: " << stats.misses << "\n";
+            std::cout << "Cache invalidations: " << stats.invalidations << "\n";
+            std::cout << "Cache hit rate: " << std::fixed << std::setprecision(2)
+                      << stats.hit_rate * 100.0 << "%\n";
+            break;
+        }
     }
     
     return 0;
