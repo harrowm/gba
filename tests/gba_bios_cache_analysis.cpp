@@ -16,34 +16,14 @@ int main() {
     g_debug_level = DEBUG_LEVEL_OFF;  // Only show errors, no info/debug messages
     #endif
 
-    // Check if we're running with profiling enabled
-    const char* cpuprofile = getenv("CPUPROFILE");
-    const int NUM_ITERATIONS = cpuprofile ? 10 : 1;  // Run 10x if profiling, 1x otherwise
-    
     std::cout << "=== GBA BIOS Startup Cache Analysis ===\n";
-    if (NUM_ITERATIONS > 1) {
-        std::cout << "PROFILING MODE: Running " << NUM_ITERATIONS << " iterations for better profiling data.\n";
-    }
     std::cout << "Loading real BIOS and analyzing cache performance during startup.\n";
     std::cout << "Memory bounds checking enabled - invalid accesses will be logged.\n";
     std::cout << "Target: Get BIOS to jump to GamePak code at 0x08000000.\n\n";
     
-    // Variables to accumulate results across iterations
-    uint64_t total_overall_ips = 0;
-    uint64_t total_cache_hits = 0;
-    uint64_t total_cache_misses = 0;
-    uint64_t total_instructions_all_runs = 0;
-    
     try {
-        for (int iteration = 0; iteration < NUM_ITERATIONS; iteration++) {
-            if (NUM_ITERATIONS > 1) {
-                std::cout << "\n" << std::string(60, '=') << "\n";
-                std::cout << "ITERATION " << (iteration + 1) << " of " << NUM_ITERATIONS << "\n";
-                std::cout << std::string(60, '=') << "\n";
-            }
-            
-            // Create GBA instance in production mode (loads BIOS and test game pak)
-            GBA gba(false); // Production mode - loads assets/bios.bin and assets/roms/gamepak.bin
+        // Create GBA instance in production mode (loads BIOS and test game pak)
+        GBA gba(false); // Production mode - loads assets/bios.bin and assets/roms/gamepak.bin
         auto& cpu = gba.getCPU();
         auto& memory = gba.getMemory();
         
@@ -399,42 +379,6 @@ int main() {
         
         std::cout << "\nThis test provides realistic cache performance data from actual BIOS code.\n";
         std::cout << "Compare these results with synthetic benchmarks to evaluate cache effectiveness.\n";
-        
-        // Accumulate results for averaging across iterations
-        total_overall_ips += overall_ips;
-        total_cache_hits += final_stats.hits;
-        total_cache_misses += final_stats.misses;
-        total_instructions_all_runs += total_instructions;
-        
-        } // End of iteration loop
-        
-        // Print averaged results if multiple iterations
-        if (NUM_ITERATIONS > 1) {
-            std::cout << "\n" << std::string(60, '=') << "\n";
-            std::cout << "AVERAGED RESULTS ACROSS " << NUM_ITERATIONS << " ITERATIONS\n";
-            std::cout << std::string(60, '=') << "\n";
-            
-            uint64_t avg_overall_ips = total_overall_ips / NUM_ITERATIONS;
-            uint64_t avg_cache_hits = total_cache_hits / NUM_ITERATIONS;
-            uint64_t avg_cache_misses = total_cache_misses / NUM_ITERATIONS;
-            uint64_t avg_instructions = total_instructions_all_runs / NUM_ITERATIONS;
-            uint64_t avg_total_accesses = avg_cache_hits + avg_cache_misses;
-            double avg_hit_rate = avg_total_accesses > 0 ? (double)avg_cache_hits / avg_total_accesses * 100.0 : 0.0;
-            
-            std::cout << "Averaged performance metrics:\n";
-            std::cout << "  Average instructions per run: " << avg_instructions << std::endl;
-            std::cout << "  Average overall IPS: " << avg_overall_ips << std::endl;
-            std::cout << "  Average cache hits: " << avg_cache_hits << std::endl;
-            std::cout << "  Average cache misses: " << avg_cache_misses << std::endl;
-            std::cout << "  Average hit rate: " << std::fixed << std::setprecision(2) << avg_hit_rate << "%" << std::endl;
-            std::cout << "  Total instructions (all runs): " << total_instructions_all_runs << std::endl;
-            std::cout << "  Total cache accesses (all runs): " << (total_cache_hits + total_cache_misses) << std::endl;
-            
-            std::cout << "\n=== PROFILING SUMMARY ===\n";
-            std::cout << "Successfully completed " << NUM_ITERATIONS << " iterations for profiling.\n";
-            std::cout << "Total execution time should provide sufficient samples for profiling analysis.\n";
-            std::cout << "Use 'go tool pprof gba_bios_profile.prof' to analyze the profile data.\n";
-        }
         
     } catch (const std::exception& e) {
         std::cerr << "Error during BIOS analysis: " << e.what() << std::endl;

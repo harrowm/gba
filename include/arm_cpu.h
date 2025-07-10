@@ -98,7 +98,7 @@ private:
     FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry_out);
     bool checkCondition(uint32_t instruction);
     FORCE_INLINE bool checkConditionCached(uint8_t condition);
-    void executeCachedInstruction(const ARMCachedInstruction& cached);
+    FORCE_INLINE void executeCachedInstruction(const ARMCachedInstruction& cached);
     
     // Exception and mode handling
     void handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq);
