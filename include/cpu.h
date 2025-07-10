@@ -45,6 +45,10 @@ public:
     TimingState& getTiming() { return timing; } // Access to timing state
     
     InterruptController& getInterruptController() { return interruptController; }
+    
+    // Access to CPU delegates
+    ARMCPU& getARMCPU() { return *armCPU; }
+    ThumbCPU& getThumbCPU() { return *thumbCPU; }
 
     // Update declarations for member functions to update CPSR flags
     // constexpr functions have to be declared in the same file as their definition

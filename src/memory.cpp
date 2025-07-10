@@ -174,6 +174,9 @@ void Memory::write8(uint32_t address, uint8_t value) {
     #endif
     
     data[mappedIndex] = value;
+    
+    // Notify instruction caches of potential code modification
+    notifyCacheInvalidation(address, 1);
 }
 
 void Memory::write16(uint32_t address, uint16_t value, bool big_endian /* = false */) {
@@ -209,6 +212,9 @@ void Memory::write16(uint32_t address, uint16_t value, bool big_endian /* = fals
     data[mappedIndex] = value & 0xFF;
     data[mappedIndex + 1] = (value >> 8) & 0xFF;
     #endif
+    
+    // Notify instruction caches of potential code modification
+    notifyCacheInvalidation(address, 2);
 }
 
 void Memory::write32(uint32_t address, uint32_t value, bool big_endian /* = false */) {
@@ -248,6 +254,9 @@ void Memory::write32(uint32_t address, uint32_t value, bool big_endian /* = fals
     data[mappedIndex + 2] = (value >> 16) & 0xFF;
     data[mappedIndex + 3] = (value >> 24) & 0xFF;
     #endif
+    
+    // Notify instruction caches of potential code modification
+    notifyCacheInvalidation(address, 4);
 }
 
 void Memory::initializeGBARegions(const std::string& biosFilename, const std::string& gamePakFilename) {
@@ -300,4 +309,21 @@ void Memory::initializeTestRegions() {
 
 uint32_t Memory::getSize() const {
     return data.size();
+}
+
+void Memory::registerCacheInvalidationCallback(std::function<void(uint32_t, uint32_t)> callback) {
+    cache_invalidation_callbacks.push_back(callback);
+}
+
+void Memory::notifyCacheInvalidation(uint32_t address, uint32_t size) const {
+    // Only notify if we have callbacks registered
+    if (cache_invalidation_callbacks.empty()) {
+        return;
+    }
+    
+    // Call all registered callbacks
+    uint32_t end_address = address + size - 1;
+    for (const auto& callback : cache_invalidation_callbacks) {
+        callback(address, end_address);
+    }
 }
