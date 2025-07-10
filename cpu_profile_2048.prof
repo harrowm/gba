@@ -1,0 +1,8 @@
+=== ALU Operation Focused Benchmark ===
+
+ADD R1, R1, R2       273470616 IPS
+SUB R1, R1, R2       272197724 IPS
+MOV R1, R2           290023202 IPS
+ORR R1, R1, R2       271768671 IPS
+AND R1, R1, R2       270943969 IPS
+CMP R1, R2           273104654 IPS

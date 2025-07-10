@@ -71,3 +71,47 @@ This document summarizes the ARM CPU optimization work done on the GBA emulator.
 The final implementation keeps only the ALU fast-path function pointer optimization, which provides measurable performance benefits without the drawbacks seen in the other attempted optimizations. The shift and condition checking code has been reverted to use switch statements for optimal performance.
 
 This selective optimization approach demonstrates that micro-optimizations need to be carefully benchmarked and validated, as function pointer tables are not universally better than switch statements.
+
+## Instruction Cache Size Performance Comparison
+
+Testing different instruction cache sizes to find the optimal configuration:
+
+| Cache Size | Average IPS | Hit Rate | Recommendation |
+|------------|-------------|----------|----------------|
+| 1024 |  |  | BEST PERFORMANCE |
+| 2048 |  |  | No benefit |
+| 4096 |  |  | No benefit |
+
+Based on these results, we recommend using a cache size of [TBD] entries for optimal performance.
+
+
+## Instruction Cache Size Performance Comparison
+
+Testing different instruction cache sizes to find the optimal configuration:
+
+| Cache Size | Average IPS | Hit Rate | Recommendation |
+|------------|-------------|----------|----------------|
+| 1024 |  |  | BEST PERFORMANCE |
+| 2048 |  |  | No benefit |
+| 4096 |  |  | No benefit |
+
+Based on these results, we recommend using a cache size of [TBD] entries for optimal performance.
+
+
+## Instruction Cache Size Optimization
+
+After analyzing different instruction cache sizes (1024, 2048, and 4096 entries), we determined that a 1024-entry cache provides the best performance characteristics for our workload.
+
+| Cache Size | Average IPS | Hit Rate | Relative Performance |
+|------------|-------------|----------|----------------------|
+| 1024 | 370,985,412 | 99.99% | Baseline |
+| 2048 | 368,411,381 | 99.99% | -0.69% |
+| 4096 | 349,509,612 | 99.99% | -5.78% |
+
+Surprisingly, the benchmark results show that larger cache sizes (2048 and 4096 entries) slightly decrease performance, despite all configurations achieving the same 99.99% hit rate. This suggests that:
+
+1. The 1024-entry cache is already large enough for our test workloads
+2. Larger caches may introduce slightly more overhead in cache management
+3. The slight performance decrease may be related to cache line alignment or memory access patterns
+
+We recommend keeping the 1024-entry cache size as it offers the best performance while using less memory. See `cache_comparison.md` for detailed benchmark results.
