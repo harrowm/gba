@@ -29,15 +29,8 @@ Memory::Memory(bool initializeTestMode) {
     }
     #endif
 
-    // Calculate total memory size based on regions
-    uint32_t totalSize = 0;
-    for (const auto& region : regions) {
-        totalSize += (region.end_address - region.start_address + 1);
-    }
-    data.resize(totalSize, 0);
-
-    // Output debug info directly - no more lazy evaluation needed
-    DEBUG_INFO("Total memory size calculated: 0x" + debug_to_hex_string(totalSize, 8) + " bytes.");
+    // Output debug info about allocated memory
+    DEBUG_INFO("Total memory size allocated: 0x" + debug_to_hex_string(data.size(), 8) + " bytes.");
 }
 
 Memory::~Memory() {}
@@ -113,13 +106,15 @@ uint16_t Memory::read16(uint32_t address, bool big_endian /* = false */) {
     #if defined(BENCHMARK_MODE) || defined(NDEBUG)
     // Fast path for benchmark/release mode - no mutex locking
     uint16_t value = (data[mappedIndex] | (data[mappedIndex + 1] << 8));
-    return big_endian ? __builtin_bswap16(value) : value;
+    value = big_endian ? __builtin_bswap16(value) : value;
     #else
     // Normal path with mutex protection for thread safety
     std::lock_guard<std::mutex> lock(memoryMutex);
     uint16_t value = (data[mappedIndex] | (data[mappedIndex + 1] << 8));
-    return big_endian ? __builtin_bswap16(value) : value;
+    value = big_endian ? __builtin_bswap16(value) : value;
     #endif
+    
+    return value;
 }
 
 uint32_t Memory::read32(uint32_t address, bool big_endian /* = false */) {
@@ -149,7 +144,9 @@ uint32_t Memory::read32(uint32_t address, bool big_endian /* = false */) {
                       (data[mappedIndex + 2] << 16) | (data[mappedIndex + 3] << 24));
     #endif
     
-    return big_endian ? __builtin_bswap32(value) : value;
+    uint32_t result = big_endian ? __builtin_bswap32(value) : value;
+    
+    return result;
 }
 
 void Memory::write8(uint32_t address, uint8_t value) {
@@ -264,11 +261,13 @@ void Memory::initializeGBARegions(const std::string& biosFilename, const std::st
         {0x00000000, 0x00003FFF, MEMORY_TYPE_ROM, 32, 0}, // BIOS
         {0x02000000, 0x0203FFFF, MEMORY_TYPE_RAM, 32, 0x4000}, // WRAM
         {0x03000000, 0x03007FFF, MEMORY_TYPE_RAM, 32, 0x44000}, // IWRAM
-        {0x05000000, 0x050003FF, MEMORY_TYPE_RAM, 16, 0x4C000}, // Palette RAM
-        {0x06000000, 0x06017FFF, MEMORY_TYPE_RAM, 16, 0x4C400}, // VRAM
-        {0x07000000, 0x070003FF, MEMORY_TYPE_RAM, 16, 0x64400}, // OAM
-        {0x08000000, 0x09FFFFFF, MEMORY_TYPE_ROM, 32, 0x64800}, // Game Pak ROM
-        {0x0E000000, 0x0E00FFFF, MEMORY_TYPE_RAM, 16, 0x264800}  // Game Pak SRAM
+        {0x03FFFFF0, 0x03FFFFFF, MEMORY_TYPE_RAM, 32, 0x4C000}, // Hardware detection area (includes 0x3FFFFFA)
+        {0x04000000, 0x040003FF, MEMORY_TYPE_RAM, 32, 0x4C020}, // I/O Registers
+        {0x05000000, 0x050003FF, MEMORY_TYPE_RAM, 16, 0x4C420}, // Palette RAM
+        {0x06000000, 0x06017FFF, MEMORY_TYPE_RAM, 16, 0x4C820}, // VRAM
+        {0x07000000, 0x070003FF, MEMORY_TYPE_RAM, 16, 0x64820}, // OAM
+        {0x08000000, 0x09FFFFFF, MEMORY_TYPE_ROM, 32, 0x64C20}, // Game Pak ROM
+        {0x0E000000, 0x0E00FFFF, MEMORY_TYPE_RAM, 16, 0x264C20}  // Game Pak SRAM
     };
 
     romRegions = {
@@ -276,7 +275,13 @@ void Memory::initializeGBARegions(const std::string& biosFilename, const std::st
         {0x08000000, 0x09FFFFFF}  // Game Pak ROM
     };
 
-    // The location to load the roms is hardcoded .. should probably soft code this
+    // Calculate total memory size based on regions and allocate data
+    uint32_t totalSize = 0;
+    for (const auto& region : regions) {
+        totalSize += (region.end_address - region.start_address + 1);
+    }
+    data.resize(totalSize, 0);
+
     // Load BIOS ROM
     DEBUG_INFO("Initializing GBA memory regions with BIOS ROM.");
     std::ifstream biosFile(biosFilename, std::ios::binary);
@@ -296,14 +301,36 @@ void Memory::initializeGBARegions(const std::string& biosFilename, const std::st
         DEBUG_ERROR("Failed to load Game Pak ROM from " + gamePakFilename);
         return;
     }
-    gamePakFile.read(reinterpret_cast<char*>(&data[0x64800]), 0x2000000); // Load up to 32MB Game Pak ROM
+    gamePakFile.read(reinterpret_cast<char*>(&data[0x64C20]), 0x2000000); // Load up to 32MB Game Pak ROM
     gamePakFile.close();
+    
+    // Initialize important I/O registers for BIOS compatibility
+    // POSTFLG (0x4000300) - Post Boot Flag - BIOS expects this to be 0x01
+    uint32_t postflg_offset = 0x4C020 + (0x4000300 - 0x4000000); // I/O base offset + register offset
+    if (postflg_offset < data.size()) {
+        data[postflg_offset] = 0x01; // Set "further boot" flag
+    }
+    
+    // Initialize hardware detection register at 0x3FFFFFA (6 bytes before I/O area)
+    // BIOS reads this to determine boot behavior: 0 = boot from ROM, non-zero = boot from EWRAM
+    uint32_t hw_detect_offset = 0x4C000 + (0x3FFFFFA - 0x03FFFFF0); // HW detect base + offset
+    if (hw_detect_offset < data.size()) {
+        data[hw_detect_offset] = 0x00; // Set to 0 to indicate boot from ROM/GamePak
+    }
 }
 
 void Memory::initializeTestRegions() {
     regions = {
         {0x00000000, 0x00001FFF, MEMORY_TYPE_RAM, 32, 0}, // Expanded RAM region for testing (8KB instead of 4KB)
     };
+    
+    // Calculate total memory size based on regions and allocate data
+    uint32_t totalSize = 0;
+    for (const auto& region : regions) {
+        totalSize += (region.end_address - region.start_address + 1);
+    }
+    data.resize(totalSize, 0);
+    
     DEBUG_INFO("Test regions initialized: Start = 0x00000000, End = 0x00001FFF, Type = RAM, Width = 32 bits");
 }
 

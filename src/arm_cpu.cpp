@@ -1365,6 +1365,7 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
 
 // Decode data processing instructions with optimizations
 ARMCachedInstruction ARMCPU::decodeDataProcessing(uint32_t pc, uint32_t instruction) {
+    (void)pc; // Parameter used for future extensions
     ARMCachedInstruction decoded;
     decoded.instruction = instruction;
     decoded.condition = (instruction >> 28) & 0xF;
@@ -1405,6 +1406,7 @@ ARMCachedInstruction ARMCPU::decodeDataProcessing(uint32_t pc, uint32_t instruct
 
 // Decode single data transfer instructions
 ARMCachedInstruction ARMCPU::decodeSingleDataTransfer(uint32_t pc, uint32_t instruction) {
+    (void)pc; // Parameter used for future extensions
     ARMCachedInstruction decoded;
     decoded.instruction = instruction;
     decoded.condition = (instruction >> 28) & 0xF;
@@ -1435,6 +1437,7 @@ ARMCachedInstruction ARMCPU::decodeSingleDataTransfer(uint32_t pc, uint32_t inst
 
 // Decode branch instructions
 ARMCachedInstruction ARMCPU::decodeBranch(uint32_t pc, uint32_t instruction) {
+    (void)pc; // Parameter used for future extensions
     ARMCachedInstruction decoded;
     decoded.instruction = instruction;
     decoded.condition = (instruction >> 28) & 0xF;
@@ -1457,6 +1460,7 @@ ARMCachedInstruction ARMCPU::decodeBranch(uint32_t pc, uint32_t instruction) {
 
 // Decode block data transfer instructions
 ARMCachedInstruction ARMCPU::decodeBlockDataTransfer(uint32_t pc, uint32_t instruction) {
+    (void)pc; // Parameter used for future extensions
     ARMCachedInstruction decoded;
     decoded.instruction = instruction;
     decoded.condition = (instruction >> 28) & 0xF;

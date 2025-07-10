@@ -71,6 +71,10 @@ public:
     // Register a callback for cache invalidation
     void registerCacheInvalidationCallback(std::function<void(uint32_t, uint32_t)> callback);
 
+    // Get direct access to raw memory data (for testing purposes)
+    std::vector<uint8_t>& getRawData() { return data; }
+    const std::vector<uint8_t>& getRawData() const { return data; }
+
 private:
     void initializeGBARegions(const std::string& biosFilename = "assets/bios.bin", const std::string& gamePakFilename = "assets/roms/gamepak.bin");
     void initializeTestRegions();
