@@ -30,7 +30,7 @@ private:
     void executeInstruction(uint32_t instruction);
     
     // Cached instruction execution functions - optimized for cache hits
-    void executeCachedDataProcessing(const ARMCachedInstruction& cached);
+    FORCE_INLINE void executeCachedDataProcessing(const ARMCachedInstruction& cached);
     void executeCachedSingleDataTransfer(const ARMCachedInstruction& cached);
     void executeCachedBranch(const ARMCachedInstruction& cached);
     FORCE_INLINE void executeCachedBlockDataTransfer(const ARMCachedInstruction& cached);
