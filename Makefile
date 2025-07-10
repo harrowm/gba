@@ -38,6 +38,7 @@ ARM_TEST_TARGET = test_arm_basic
 ARM_DEMO_TARGET = demo_arm_advanced
 ARM_BENCHMARK_TARGET = arm_benchmark
 ARM_BENCHMARK_PROF_TARGET = arm_benchmark_prof
+ARM_BENCHMARK_CACHE_STATS = arm_benchmark_cache_stats
 ARM_CACHE_INVALIDATION_TEST = test_arm_cache_invalidation
 CACHE_STATS_TEST = test_cache_stats
 THUMB_BENCHMARK_TARGET = thumb_benchmark
@@ -62,7 +63,7 @@ PROFILING_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_LEVEL=0 -
 PROFILING_LDFLAGS = -L/opt/homebrew/lib -lprofiler
 
 # Build all tests and demos
-tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(ARM_CACHE_INVALIDATION_TEST) $(CACHE_STATS_TEST) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
+tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(ARM_BENCHMARK_CACHE_STATS) $(ARM_CACHE_INVALIDATION_TEST) $(CACHE_STATS_TEST) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
 
 # Build main emulator
 $(TARGET): $(ALL_OBJS)
@@ -116,6 +117,20 @@ $(ARM_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/simple_arm_benchmark.cpp
 	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/arm_benchmark_prof_timing.o
 	# Compile C++ sources and link everything together
 	$(CXX) $(PROFILING_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_arm_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_prof_*.o $(PROFILING_LDFLAGS)
+
+# Build ARM benchmark test with cache statistics (optimized)
+$(ARM_BENCHMARK_CACHE_STATS): $(TESTS_DIR)/arm_benchmark_with_cache_stats.cpp
+	@echo "Building ARM benchmark with cache statistics enabled..."
+	mkdir -p $(BUILD_DIR)
+	# Compile C sources with C compiler
+	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_arm_execute_optimizations.o
+	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_arm_execute_phase1.o
+	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_arm_timing.o
+	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_thumb_timing.o
+	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_timer.o
+	$(CC) $(OPTIMIZED_CFLAGS) -DARM_CACHE_STATS=1 -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/arm_benchmark_cache_stats_timing.o
+	# Compile C++ sources and link everything together
+	$(CXX) $(OPTIMIZED_CXXFLAGS) -DARM_CACHE_STATS=1 -o $@ $(TESTS_DIR)/arm_benchmark_with_cache_stats.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_cache_stats_*.o $(PROFILING_LDFLAGS)
 
 # Build Thumb benchmark test (optimized)
 $(THUMB_BENCHMARK_TARGET): $(TESTS_DIR)/simple_thumb_benchmark.cpp

@@ -5,6 +5,13 @@
 #include <cstring>
 #include "utility_macros.h"
 
+// Cache statistics collection control
+// Define ARM_CACHE_STATS to enable cache statistics collection
+// This adds overhead but provides useful performance monitoring
+#ifndef ARM_CACHE_STATS
+#define ARM_CACHE_STATS 0
+#endif
+
 // Forward declaration
 class ARMCPU;
 
@@ -93,13 +100,19 @@ class ARMInstructionCache {
 private:
     ARMCachedInstruction cache[ARM_ICACHE_SIZE];
     
-    // Cache statistics for performance monitoring
+    // Cache statistics for performance monitoring (conditionally compiled)
+#if ARM_CACHE_STATS
     uint64_t hits;
     uint64_t misses;
     uint64_t invalidations;
+#endif
     
 public:
-    ARMInstructionCache() : hits(0), misses(0), invalidations(0) {
+    ARMInstructionCache() 
+#if ARM_CACHE_STATS
+        : hits(0), misses(0), invalidations(0) 
+#endif
+    {
         clear();
     }
     
@@ -118,11 +131,15 @@ public:
         ARMCachedInstruction* entry = &cache[index];
         
         if (entry->valid && entry->pc_tag == tag && entry->instruction == instruction) {
+#if ARM_CACHE_STATS
             hits++;
+#endif
             return entry;
         }
         
+#if ARM_CACHE_STATS
         misses++;
+#endif
         return nullptr;
     }
     
@@ -146,7 +163,9 @@ public:
             for (uint32_t i = start_index; i <= end_index; i++) {
                 if (cache[i].valid) {
                     cache[i].valid = false;
+#if ARM_CACHE_STATS
                     invalidations++;
+#endif
                 }
             }
         } else {
@@ -154,13 +173,17 @@ public:
             for (uint32_t i = start_index; i < ARM_ICACHE_SIZE; i++) {
                 if (cache[i].valid) {
                     cache[i].valid = false;
+#if ARM_CACHE_STATS
                     invalidations++;
+#endif
                 }
             }
             for (uint32_t i = 0; i <= end_index; i++) {
                 if (cache[i].valid) {
                     cache[i].valid = false;
+#if ARM_CACHE_STATS
                     invalidations++;
+#endif
                 }
             }
         }
@@ -176,17 +199,26 @@ public:
     
     CacheStats getStats() const {
         CacheStats stats;
+#if ARM_CACHE_STATS
         stats.hits = hits;
         stats.misses = misses;
         stats.invalidations = invalidations;
         uint64_t total = hits + misses;
         stats.hit_rate = total > 0 ? (double)hits / total : 0.0;
+#else
+        stats.hits = 0;
+        stats.misses = 0;
+        stats.invalidations = 0;
+        stats.hit_rate = 0.0;
+#endif
         return stats;
     }
     
     // Reset statistics
     void resetStats() {
+#if ARM_CACHE_STATS
         hits = misses = invalidations = 0;
+#endif
     }
 };
 
