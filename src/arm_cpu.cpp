@@ -29,7 +29,8 @@ void ARMCPU::execute(uint32_t cycles) {
         // Use lazy evaluation for instruction fetch debug logs
         DEBUG_INFO("Fetched ARM instruction: " + debug_to_hex_string(instruction, 8) + " at PC: " + debug_to_hex_string(pc, 8));
         
-        bool pc_modified = decodeAndExecute(instruction);
+        // Use cached execution path
+        bool pc_modified = executeWithCache(pc, instruction);
         
         // Only increment PC if instruction didn't modify it (e.g., not a branch)
         if (!pc_modified) {
@@ -70,8 +71,8 @@ void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
         
         // Check if instruction will complete before next timing event
         if (instruction_cycles <= cycles_until_event) {
-            // Execute instruction normally
-            bool pc_modified = decodeAndExecute(instruction);
+            // Execute instruction normally with cache
+            bool pc_modified = executeWithCache(pc, instruction);
             
             if (!pc_modified) {
                 parentCPU.R()[15] = pc + 4;
@@ -208,6 +209,22 @@ FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* 
         }
         
         return rm; // Should never reach here
+    }
+}
+
+bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
+    ARMCachedInstruction* cached = instruction_cache.lookup(pc, instruction);
+    
+    if (cached) {
+        if (!checkCondition(cached->condition)) return false;
+        executeCachedInstruction(*cached);
+        return cached->pc_modified;
+    } else {
+        if (!checkCondition(instruction)) return false;
+        ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
+        instruction_cache.insert(pc, decoded);
+        executeCachedInstruction(decoded);
+        return decoded.pc_modified;
     }
 }
 
@@ -1506,3 +1523,4 @@ void ARMCPU::executeCachedCoprocessor(const ARMCachedInstruction& cached) {
             break;
     }
 }
+

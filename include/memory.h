@@ -9,6 +9,8 @@
 #include <mutex>
 #include <fstream>
 #include <iostream>
+#include <functional>
+#include <functional>
 
 // Memory type definitions
 #define MEMORY_TYPE_ROM 0
@@ -44,6 +46,9 @@ private:
     mutable const MemoryRegion* lastRegion = nullptr;
     mutable uint32_t lastRegionIndex = 0;
 
+    // Cache invalidation callbacks
+    std::vector<std::function<void(uint32_t, uint32_t)>> cache_invalidation_callbacks;
+
 public:
     // Constructor with region initialization
     Memory(bool initializeGBAR = true); // Updated constructor signature
@@ -63,9 +68,15 @@ public:
     int mapAddress(uint32_t gbaAddress, bool isWrite = false) const; // Updated mapAddress method with default value
     uint32_t getSize() const;
 
+    // Register a callback for cache invalidation
+    void registerCacheInvalidationCallback(std::function<void(uint32_t, uint32_t)> callback);
+
 private:
     void initializeGBARegions(const std::string& biosFilename = "assets/bios.bin", const std::string& gamePakFilename = "assets/roms/gamepak.bin");
     void initializeTestRegions();
+
+    // Helper method to notify caches of memory writes
+    void notifyCacheInvalidation(uint32_t address, uint32_t size) const;
 };
 
 #endif

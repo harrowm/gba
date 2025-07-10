@@ -38,6 +38,8 @@ ARM_TEST_TARGET = test_arm_basic
 ARM_DEMO_TARGET = demo_arm_advanced
 ARM_BENCHMARK_TARGET = arm_benchmark
 ARM_BENCHMARK_PROF_TARGET = arm_benchmark_prof
+ARM_CACHE_INVALIDATION_TEST = test_arm_cache_invalidation
+CACHE_STATS_TEST = test_cache_stats
 THUMB_BENCHMARK_TARGET = thumb_benchmark
 THUMB_BENCHMARK_PROF_TARGET = thumb_benchmark_prof
 TIMING_TEST_TARGET = test_timing
@@ -60,7 +62,7 @@ PROFILING_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_LEVEL=0 -
 PROFILING_LDFLAGS = -L/opt/homebrew/lib -lprofiler
 
 # Build all tests and demos
-tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
+tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(ARM_CACHE_INVALIDATION_TEST) $(CACHE_STATS_TEST) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
 
 # Build main emulator
 $(TARGET): $(ALL_OBJS)
@@ -75,6 +77,16 @@ $(ARM_TEST_TARGET): $(BUILD_DIR)/test_arm_basic.o $(LIB_OBJS)
 # Build ARM advanced demo
 $(ARM_DEMO_TARGET): $(BUILD_DIR)/demo_arm_advanced.o $(LIB_OBJS)
 	@echo "Building ARM advanced demo..."
+	$(CXX) $(CXXFLAGS) -o $@ $^ -DDEBUG_LEVEL=0
+
+# Build ARM cache invalidation test
+$(ARM_CACHE_INVALIDATION_TEST): $(TESTS_DIR)/test_arm_cache_invalidation.cpp $(LIB_OBJS)
+	@echo "Building ARM cache invalidation test..."
+	$(CXX) $(CXXFLAGS) -o $@ $^ -DDEBUG_LEVEL=0
+
+# Build cache statistics test
+$(CACHE_STATS_TEST): $(TESTS_DIR)/test_cache_stats.cpp $(LIB_OBJS)
+	@echo "Building cache statistics test..."
 	$(CXX) $(CXXFLAGS) -o $@ $^ -DDEBUG_LEVEL=0
 
 # Build ARM benchmark test (optimized)
@@ -269,6 +281,10 @@ run-arm-demo: $(ARM_DEMO_TARGET)
 	@echo "Running ARM advanced demo..."
 	./$(ARM_DEMO_TARGET)
 
+run-arm-cache-test: $(ARM_CACHE_INVALIDATION_TEST)
+	@echo "Running ARM cache invalidation test..."
+	./$(ARM_CACHE_INVALIDATION_TEST)
+
 run-arm-benchmark: $(ARM_BENCHMARK_TARGET)
 	@echo "Running ARM benchmark test..."
 	./$(ARM_BENCHMARK_TARGET)
@@ -279,6 +295,10 @@ run-arm-benchmark-prof: $(ARM_BENCHMARK_PROF_TARGET)
 	@echo "\nProfile data written to arm_benchmark.prof"
 	@echo "Analyze with: pprof --web $(ARM_BENCHMARK_PROF_TARGET) arm_benchmark.prof"
 	@echo "  or: pprof --pdf $(ARM_BENCHMARK_PROF_TARGET) arm_benchmark.prof > profile.pdf"
+
+run-arm-cache-invalidation: $(ARM_CACHE_INVALIDATION_TEST)
+	@echo "Running ARM cache invalidation test..."
+	./$(ARM_CACHE_INVALIDATION_TEST)
 
 run-thumb-benchmark: $(THUMB_BENCHMARK_TARGET)
 	@echo "Running Thumb benchmark test..."
@@ -391,6 +411,7 @@ help:
 	@echo "Run targets:"
 	@echo "  run-arm-test     - Build and run ARM basic tests"
 	@echo "  run-arm-demo     - Build and run ARM advanced demo"
+	@echo "  run-arm-cache-test - Build and run ARM cache invalidation test"
 	@echo "  run-arm-benchmark - Build and run ARM benchmark test"
 	@echo "  run-arm-benchmark-prof - Build and run ARM benchmark test with profiling"
 	@echo "  run-thumb-benchmark - Build and run Thumb benchmark test"
@@ -411,5 +432,5 @@ help:
 	@echo "  help             - Show this help message"
 
 # Phony targets  
-.PHONY: all tests clean run-arm-test run-arm-demo run-arm-benchmark run-arm-benchmark-prof run-thumb-benchmark run-thumb-benchmark-prof run-benchmark-comparison run-timing-test run-thumb-test \
+.PHONY: all tests clean run-arm-test run-arm-demo run-arm-cache-test run-arm-benchmark run-arm-benchmark-prof run-thumb-benchmark run-thumb-benchmark-prof run-benchmark-comparison run-timing-test run-thumb-test \
         run-cycle-demo run-test run-all-tests quick-test docs status help debug_examples verbose_debug_examples trace_debug_examples release_examples

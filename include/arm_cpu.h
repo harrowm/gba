@@ -47,6 +47,9 @@ private:
     ARMCachedInstruction decodeBranch(uint32_t pc, uint32_t instruction);
     ARMCachedInstruction decodeBlockDataTransfer(uint32_t pc, uint32_t instruction);
     
+    // Cache-aware execution method
+    bool executeWithCache(uint32_t pc, uint32_t instruction);
+    
     // Instruction handlers by category
     void arm_data_processing(uint32_t instruction);
     void arm_multiply(uint32_t instruction);
@@ -129,6 +132,9 @@ public:
     // Cache management functions
     void invalidateInstructionCache() { instruction_cache.clear(); }
     void invalidateInstructionCacheRange(uint32_t start_addr, uint32_t end_addr) {
+        instruction_cache.invalidate_range(start_addr, end_addr);
+    }
+    void invalidateInstructionCache(uint32_t start_addr, uint32_t end_addr) {
         instruction_cache.invalidate_range(start_addr, end_addr);
     }
     ARMInstructionCache::CacheStats getInstructionCacheStats() const {
