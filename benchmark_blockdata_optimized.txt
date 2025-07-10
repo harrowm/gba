@@ -1,0 +1,66 @@
+
+=== ARM Arithmetic Instruction Benchmark ===
+Instruction: ADD R1, R1, R2 (R1 = R1 + R2)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000       95602294
+       10000        1000000      107043459
+      100000       10000000      232450023
+
+=== ARM Memory Access Instruction Benchmark ===
+Instructions: STR R1, [R0] / LDR R2, [R0] (alternating)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000      216450216
+       10000        1000000      223463687
+      100000       10000000      257347264
+
+=== ARM ALU Operation Benchmark ===
+Instructions: AND R1, R1, R2 / EOR R1, R1, R2 / LSL R1, R1, R2 (cycling)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000      359712230
+       10000        1000000      357015351
+      100000       10000000      359945288
+
+=== ARM Branch Instruction Benchmark ===
+Instructions: B #8 (forward branch)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000      316455696
+       10000        1000000      319590923
+      100000       10000000      316015674
+
+=== ARM Multiple Data Transfer Benchmark ===
+Instructions: LDMIA R0!, {R1-R4} / STMIA R0!, {R1-R4} (alternating)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000       94250706
+       10000        1000000       92157404
+      100000       10000000       94220513
+
+=== ARM Multiply Instruction Benchmark ===
+Instructions: MUL R1, R2, R3 / MLA R1, R2, R3, R4 (alternating)
+
+  Iterations   Instructions            IPS
+---------------------------------------------
+        1000         100000      490196078
+       10000        1000000      503271263
+      100000       10000000      505586733
+
+=== ARM Benchmark Complete ===
+This benchmark tested:
+  • ARM arithmetic instructions (ADD)
+  • ARM memory access instructions (STR/LDR)
+  • ARM ALU operations (AND/EOR/LSL)
+  • ARM branch instructions (B)
+  • ARM multiple data transfer (LDM/STM)
+  • ARM multiply instructions (MUL/MLA)
+
+Compare with Thumb benchmark results to evaluate relative performance.
+The ARM instruction cache should improve performance significantly.

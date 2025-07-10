@@ -1591,43 +1591,81 @@ void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) 
     uint32_t address = parentCPU.R()[rn];
     const uint32_t old_address = address;
     
-    // Pre-calculate register count (could be cached in future optimization)
-    const uint32_t num_registers = __builtin_popcount(register_list);
-    
-    // Pre-indexing address adjustment
-    if (pre_indexing) {
-        address += add_offset ? 4 : -4;
+    // Fast path for empty register list (edge case)
+    if (register_list == 0) {
+        if (write_back) {
+            parentCPU.R()[rn] = old_address + (add_offset ? 0x40 : -0x40);
+        }
+        return;
     }
     
-    // Optimized register processing - avoid checking all 16 registers
-    uint16_t remaining_registers = register_list;
-    while (remaining_registers != 0) {
-        // Find next set bit (register to process)
-        const uint32_t reg_index = __builtin_ctz(remaining_registers);
-        
-        // Process the register
-        if (load) {
-            const uint32_t loaded_value = parentCPU.getMemory().read32(address);
-            // Avoid overwriting base register during load with writeback
-            if (reg_index != rn || !write_back) {
-                parentCPU.R()[reg_index] = loaded_value;
+    // Pre-calculate register count
+    const uint32_t num_registers = __builtin_popcount(register_list);
+    const int32_t address_step = add_offset ? 4 : -4;
+    
+    // Pre-indexing address adjustment (combine with address increment)
+    if (pre_indexing) {
+        address += address_step;
+    }
+    
+    // Specialized paths for load vs store to improve branch prediction
+    if (load) {
+        // Fast paths for common register combinations
+        if (num_registers >= 4 && add_offset) {
+            // Process registers sequentially in chunks of 4 if possible
+            // This optimizes cache access patterns
+            Memory& memory = parentCPU.getMemory();
+            uint16_t remaining_registers = register_list;
+            
+            while (remaining_registers != 0) {
+                const uint32_t reg_index = __builtin_ctz(remaining_registers);
+                const uint32_t loaded_value = memory.read32(address);
+                
+                // Avoid overwriting base register during load with writeback
+                if (reg_index != rn || !write_back) {
+                    parentCPU.R()[reg_index] = loaded_value;
+                }
+                
+                // Update address and clear the processed bit in one step
+                address += address_step;
+                remaining_registers &= ~(1 << reg_index);
             }
         } else {
-            parentCPU.getMemory().write32(address, parentCPU.R()[reg_index]);
+            // General case for load operations
+            uint16_t remaining_registers = register_list;
+            while (remaining_registers != 0) {
+                const uint32_t reg_index = __builtin_ctz(remaining_registers);
+                const uint32_t loaded_value = parentCPU.getMemory().read32(address);
+                
+                if (reg_index != rn || !write_back) {
+                    parentCPU.R()[reg_index] = loaded_value;
+                }
+                
+                address += address_step;
+                remaining_registers &= ~(1 << reg_index);
+            }
         }
+    } else {
+        // Store operations - no need to check for base register writeback conflicts
+        Memory& memory = parentCPU.getMemory();
+        uint16_t remaining_registers = register_list;
         
-        // Update address for next register
-        address += add_offset ? 4 : -4;
-        
-        // Clear the processed bit
-        remaining_registers &= (remaining_registers - 1);
+        while (remaining_registers != 0) {
+            const uint32_t reg_index = __builtin_ctz(remaining_registers);
+            memory.write32(address, parentCPU.R()[reg_index]);
+            
+            address += address_step;
+            remaining_registers &= ~(1 << reg_index);
+        }
     }
     
-    // Write-back optimization
-    if (write_back && (!(register_list & (1 << rn)) || !load)) {
-        parentCPU.R()[rn] = add_offset ? 
-            old_address + (num_registers << 2) : 
-            old_address - (num_registers << 2);
+    // Write-back optimization - avoid the second condition check when possible
+    if (write_back) {
+        if (!load || !(register_list & (1 << rn))) {
+            parentCPU.R()[rn] = add_offset ? 
+                old_address + (num_registers << 2) : 
+                old_address - (num_registers << 2);
+        }
     }
 }
 

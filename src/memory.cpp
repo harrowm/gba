@@ -117,37 +117,7 @@ uint16_t Memory::read16(uint32_t address, bool big_endian /* = false */) {
     return value;
 }
 
-uint32_t Memory::read32(uint32_t address, bool big_endian /* = false */) {
-    #if CHECK_MEMORY_BOUNDS
-    int mappedIndex = mapAddress(address, false);
-    // This error check will only be active when bounds checking is enabled
-    if (mappedIndex == -1) {
-        #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        DEBUG_ERROR("Invalid memory access at address: " + std::to_string(address));
-        #endif
-        return 0; // Return default value
-    }
-    #else
-    // Ultra-fast path with no bounds checking - directly calculate offset 
-    // This assumes test memory mode in benchmarks (single region starting at 0)
-    int mappedIndex = address;
-    #endif
-    
-    #if defined(BENCHMARK_MODE) || defined(NDEBUG)
-    // Fast path for benchmark/release mode - no mutex locking
-    uint32_t value = (data[mappedIndex] | (data[mappedIndex + 1] << 8) |
-                      (data[mappedIndex + 2] << 16) | (data[mappedIndex + 3] << 24));
-    #else
-    // Normal path with mutex protection for thread safety
-    std::lock_guard<std::mutex> lock(memoryMutex);
-    uint32_t value = (data[mappedIndex] | (data[mappedIndex + 1] << 8) |
-                      (data[mappedIndex + 2] << 16) | (data[mappedIndex + 3] << 24));
-    #endif
-    
-    uint32_t result = big_endian ? __builtin_bswap32(value) : value;
-    
-    return result;
-}
+// Implementation moved to memory.h as inline function for performance optimization
 
 void Memory::write8(uint32_t address, uint8_t value) {
     #if CHECK_MEMORY_BOUNDS
@@ -214,47 +184,7 @@ void Memory::write16(uint32_t address, uint16_t value, bool big_endian /* = fals
     notifyCacheInvalidation(address, 2);
 }
 
-void Memory::write32(uint32_t address, uint32_t value, bool big_endian /* = false */) {
-    #if CHECK_MEMORY_BOUNDS
-    int mappedIndex = mapAddress(address, true);
-    if (mappedIndex == -1) {
-        #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        DEBUG_ERROR("Invalid memory write at address: " + std::to_string(address));
-        #endif
-        return;
-    }
-    if (mappedIndex == -2) {
-        #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        // Direct debug output for ROM write attempts
-        DEBUG_INFO("Attempted write to ROM address: " + std::to_string(address) + ", write ignored.");
-        #endif
-        return;
-    }
-    #else
-    // Ultra-fast path with no bounds checking
-    int mappedIndex = address;
-    #endif
-    
-    #if defined(BENCHMARK_MODE) || defined(NDEBUG)
-    // Fast path for benchmark mode - no mutex
-    if (big_endian) value = __builtin_bswap32(value);
-    data[mappedIndex] = value & 0xFF;
-    data[mappedIndex + 1] = (value >> 8) & 0xFF;
-    data[mappedIndex + 2] = (value >> 16) & 0xFF;
-    data[mappedIndex + 3] = (value >> 24) & 0xFF;
-    #else
-    // Normal path with mutex protection
-    std::lock_guard<std::mutex> lock(memoryMutex);
-    if (big_endian) value = __builtin_bswap32(value);
-    data[mappedIndex] = value & 0xFF;
-    data[mappedIndex + 1] = (value >> 8) & 0xFF;
-    data[mappedIndex + 2] = (value >> 16) & 0xFF;
-    data[mappedIndex + 3] = (value >> 24) & 0xFF;
-    #endif
-    
-    // Notify instruction caches of potential code modification
-    notifyCacheInvalidation(address, 4);
-}
+// Implementation moved to memory.h as inline function for performance optimization
 
 void Memory::initializeGBARegions(const std::string& biosFilename, const std::string& gamePakFilename) {
     regions = {
