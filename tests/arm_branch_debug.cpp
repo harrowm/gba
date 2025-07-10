@@ -176,10 +176,11 @@ int main() {
         std::cout << "Final PC: 0x" << std::hex << cpu.R()[15] << std::dec << std::endl;
         std::cout << "Final R0: 0x" << std::hex << cpu.R()[0] << std::dec << std::endl;
         
-        // Expected: 255 iterations of the loop (sub + cmp + bne) + initial mov + final infinite branch
+        // Expected: 255 iterations of the loop (sub + cmp + bne) + initial mov
         // Each loop iteration = 3 instructions (sub, cmp, bne)
-        // Total expected = 1 (mov) + 255*3 (loop) + 1 (final branch) = 767 instructions
-        int expected_steps = 1 + 255 * 3 + 1;
+        // Total expected = 1 (mov) + 255*3 (loop) = 766 instructions
+        // Note: We stop execution when we reach the infinite branch, not when we execute it
+        int expected_steps = 1 + 255 * 3;
         std::cout << "Expected steps for 255 iterations: " << expected_steps << std::endl;
         
         if (step == expected_steps) {

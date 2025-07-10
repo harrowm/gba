@@ -5,11 +5,17 @@ Create a simple GamePak ROM with a cache test loop
 import struct
 
 # Create our test ARM instructions
-# 0x08000000: mov r0, #0x100        ; Load counter (256 iterations)
+# 0x08000000: mov r0, #0xFF         ; Load counter (255 decimal)
 # 0x08000004: loop: sub r0, r0, #1  ; Decrement counter  
 # 0x08000008: cmp r0, #0            ; Compare with 0
 # 0x0800000C: bne loop              ; Branch back if not zero (creates tight loop)
 # 0x08000010: b 0x08000010          ; Infinite loop when done
+#
+# Expected execution:
+# 1. mov r0, #0xFF (1 instruction)
+# 2. 255 iterations × 3 instructions each = 765 instructions  
+# 3. Fall through to infinite branch (execution stops before infinite branch)
+# Total expected: 1 + 765 = 766 instructions
 
 instructions = [
     0xE3A000FF,  # mov r0, #0xFF (255 iterations)
@@ -19,8 +25,8 @@ instructions = [
     0xEAFFFFFE,  # b 0x08000010 (infinite loop)
 ]
 
-# Create a simple ROM file
-rom_data = bytearray(8 * 1024 * 1024)  # 8MB ROM
+# Create a simple ROM file - only 256 bytes since we only need a few instructions
+rom_data = bytearray(256)  # 256 byte ROM
 
 # Write instructions at the beginning
 for i, instr in enumerate(instructions):
