@@ -1248,42 +1248,14 @@ FORCE_INLINE bool ARMCPU::checkConditionCached(uint8_t condition) {
     }
 }
 
-// Execute cached instruction using type dispatch
+// Execute cached instruction using function pointer dispatch (optimized)
 void ARMCPU::executeCachedInstruction(const ARMCachedInstruction& cached) {
-    switch (cached.type) {
-        case ARMInstructionType::DATA_PROCESSING:
-            executeCachedDataProcessing(cached);
-            break;
-        case ARMInstructionType::SINGLE_DATA_TRANSFER:
-            executeCachedSingleDataTransfer(cached);
-            break;
-        case ARMInstructionType::BRANCH:
-            executeCachedBranch(cached);
-            break;
-        case ARMInstructionType::BLOCK_DATA_TRANSFER:
-            executeCachedBlockDataTransfer(cached);
-            break;
-        case ARMInstructionType::MULTIPLY:
-            executeCachedMultiply(cached);
-            break;
-        case ARMInstructionType::BX:
-            executeCachedBX(cached);
-            break;
-        case ARMInstructionType::SOFTWARE_INTERRUPT:
-            executeCachedSoftwareInterrupt(cached);
-            break;
-        case ARMInstructionType::PSR_TRANSFER:
-            executeCachedPSRTransfer(cached);
-            break;
-        case ARMInstructionType::COPROCESSOR_OP:
-        case ARMInstructionType::COPROCESSOR_TRANSFER:
-        case ARMInstructionType::COPROCESSOR_REGISTER:
-            executeCachedCoprocessor(cached);
-            break;
-        default:
-            // Fallback to original instruction execution
-            arm_undefined(cached.instruction);
-            break;
+    // Use function pointer for direct dispatch - eliminates switch overhead
+    if (cached.execute_func) {
+        (this->*cached.execute_func)(cached);
+    } else {
+        // Fallback to original instruction execution for undefined instructions
+        arm_undefined(cached.instruction);
     }
 }
 

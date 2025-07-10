@@ -40,7 +40,6 @@ ARM_BENCHMARK_TARGET = arm_benchmark
 ARM_BENCHMARK_PROF_TARGET = arm_benchmark_prof
 ARM_BENCHMARK_CACHE_STATS = arm_benchmark_cache_stats
 GBA_BIOS_CACHE_ANALYSIS = gba_bios_cache_analysis
-GBA_BIOS_CACHE_ANALYSIS_PROF = gba_bios_cache_analysis_prof
 ARM_BRANCH_DEBUG = arm_branch_debug
 GAMEPAK_CACHE_TEST = gamepak_cache_test
 ARM_CACHE_INVALIDATION_TEST = test_arm_cache_invalidation
@@ -70,12 +69,8 @@ PROFILING_LDFLAGS = -L/opt/homebrew/lib -lprofiler
 BIOS_ANALYSIS_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_BUILD -DDEBUG_LEVEL=0 -DARM_CACHE_STATS=1
 BIOS_ANALYSIS_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_BUILD -DDEBUG_LEVEL=0 -DARM_CACHE_STATS=1
 
-# Special profiling flags for GBA BIOS cache analysis - keep memory bounds checking enabled for safety
-BIOS_ANALYSIS_PROF_CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_BUILD -DDEBUG_LEVEL=0 -DARM_CACHE_STATS=1
-BIOS_ANALYSIS_PROF_CFLAGS = -std=c99 -Wall -Wextra -I$(INCLUDE_DIR) -O2 -DDEBUG_BUILD -DDEBUG_LEVEL=0 -DARM_CACHE_STATS=1
-
 # Build all tests and demos
-tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(ARM_BENCHMARK_CACHE_STATS) $(GBA_BIOS_CACHE_ANALYSIS) $(GBA_BIOS_CACHE_ANALYSIS_PROF) $(ARM_BRANCH_DEBUG) $(GAMEPAK_CACHE_TEST) $(ARM_CACHE_INVALIDATION_TEST) $(CACHE_STATS_TEST) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
+tests: $(ARM_TEST_TARGET) $(ARM_DEMO_TARGET) $(ARM_BENCHMARK_TARGET) $(ARM_BENCHMARK_PROF_TARGET) $(ARM_BENCHMARK_CACHE_STATS) $(GBA_BIOS_CACHE_ANALYSIS) $(ARM_BRANCH_DEBUG) $(GAMEPAK_CACHE_TEST) $(ARM_CACHE_INVALIDATION_TEST) $(CACHE_STATS_TEST) $(THUMB_BENCHMARK_TARGET) $(THUMB_BENCHMARK_PROF_TARGET) $(TIMING_TEST_TARGET) $(THUMB_TEST_TARGET) $(DEMO_CYCLE_TARGET) $(ARM_EXECUTE_PHASE1_TEST)
 
 # Build main emulator
 $(TARGET): $(ALL_OBJS)
@@ -157,20 +152,6 @@ $(GBA_BIOS_CACHE_ANALYSIS): $(TESTS_DIR)/gba_bios_cache_analysis.cpp
 	$(CC) $(BIOS_ANALYSIS_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/gba_bios_cache_analysis_timing.o
 	# Compile C++ sources and link everything together
 	$(CXX) $(BIOS_ANALYSIS_CXXFLAGS) -o $@ $(TESTS_DIR)/gba_bios_cache_analysis.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/gba_bios_cache_analysis_*.o
-
-# Build profiling GBA BIOS cache analysis test
-$(GBA_BIOS_CACHE_ANALYSIS_PROF): $(TESTS_DIR)/gba_bios_cache_analysis.cpp
-	@echo "Building GBA BIOS cache analysis with profiling enabled..."
-	mkdir -p $(BUILD_DIR)
-	# Compile C sources with C compiler and profiling (keeping memory bounds checking enabled)
-	$(CC) $(BIOS_ANALYSIS_PROF_CFLAGS) -c $(SRC_DIR)/arm_execute_optimizations.c -o $(BUILD_DIR)/gba_bios_cache_analysis_prof_arm_execute_optimizations.o
-	$(CC) $(BIOS_ANALYSIS_PROF_CFLAGS) -c $(SRC_DIR)/arm_execute_phase1.c -o $(BUILD_DIR)/gba_bios_cache_analysis_prof_arm_execute_phase1.o
-	$(CC) $(BIOS_ANALYSIS_PROF_CFLAGS) -c $(SRC_DIR)/arm_timing.c -o $(BUILD_DIR)/gba_bios_cache_analysis_prof_arm_timing.o
-	$(CC) $(BIOS_ANALYSIS_PROF_CFLAGS) -c $(SRC_DIR)/thumb_timing.c -o $(BUILD_DIR)/gba_bios_cache_analysis_prof_thumb_timing.o
-	$(CC) $(BIOS_ANALYSIS_PROF_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/gba_bios_cache_analysis_prof_timer.o
-	$(CC) $(BIOS_ANALYSIS_PROF_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/gba_bios_cache_analysis_prof_timing.o
-	# Compile C++ sources and link everything together with profiling
-	$(CXX) $(BIOS_ANALYSIS_PROF_CXXFLAGS) -o $@ $(TESTS_DIR)/gba_bios_cache_analysis.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/gba_bios_cache_analysis_prof_*.o $(PROFILING_LDFLAGS)
 
 # Build Thumb benchmark test (optimized)
 $(THUMB_BENCHMARK_TARGET): $(TESTS_DIR)/simple_thumb_benchmark.cpp
@@ -372,14 +353,6 @@ run-arm-cache-invalidation: $(ARM_CACHE_INVALIDATION_TEST)
 run-gba-bios-cache-analysis: $(GBA_BIOS_CACHE_ANALYSIS)
 	@echo "Running GBA BIOS cache analysis..."
 	./$(GBA_BIOS_CACHE_ANALYSIS)
-
-run-gba-bios-cache-analysis-prof: $(GBA_BIOS_CACHE_ANALYSIS_PROF)
-	@echo "Running GBA BIOS cache analysis with profiling..."
-	@echo "Profiling data will be written to gba_bios_profile.prof"
-	CPUPROFILE=gba_bios_profile.prof ./$(GBA_BIOS_CACHE_ANALYSIS_PROF)
-	@echo "Profile complete. Analyze with:"
-	@echo "  pprof --text ./$(GBA_BIOS_CACHE_ANALYSIS_PROF) gba_bios_profile.prof"
-	@echo "  pprof --pdf ./$(GBA_BIOS_CACHE_ANALYSIS_PROF) gba_bios_profile.prof > gba_bios_profile.pdf"
 
 run-gamepak-cache-test: $(GAMEPAK_CACHE_TEST)
 	@echo "Running GamePak cache test..."

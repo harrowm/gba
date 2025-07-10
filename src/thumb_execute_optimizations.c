@@ -8,6 +8,7 @@
 // These are optimized versions of the hottest ALU operations from profiling
 
 // Inline flag update functions for better performance
+static inline void update_nz_flags_c(CPUPtr cpu, uint32_t result) __attribute__((unused));
 static inline void update_nz_flags_c(CPUPtr cpu, uint32_t result) {
     // Use C-compatible approach: the CPU object will have these methods exposed
     // For now, we'll implement a simpler version that calls back to C++
@@ -16,6 +17,7 @@ static inline void update_nz_flags_c(CPUPtr cpu, uint32_t result) {
     (void)result;
 }
 
+static inline void update_carry_flag_lsr_c(CPUPtr cpu, uint32_t value, uint32_t shift) __attribute__((unused));
 static inline void update_carry_flag_lsr_c(CPUPtr cpu, uint32_t value, uint32_t shift) {
     // Placeholder implementation
     (void)cpu;
@@ -23,6 +25,7 @@ static inline void update_carry_flag_lsr_c(CPUPtr cpu, uint32_t value, uint32_t 
     (void)shift;
 }
 
+static inline void update_carry_flag_lsl_c(CPUPtr cpu, uint32_t value, uint32_t shift) __attribute__((unused));
 static inline void update_carry_flag_lsl_c(CPUPtr cpu, uint32_t value, uint32_t shift) {
     // Placeholder implementation
     (void)cpu;
