@@ -216,10 +216,12 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
     ARMCachedInstruction* cached = instruction_cache.lookup(pc, instruction);
     
     if (cached) {
-        if (!checkCondition(cached->condition)) return false;
+        if (!checkConditionCached(cached->condition)) return false;
         executeCachedInstruction(*cached);
         return cached->pc_modified;
     } else {
+        DEBUG_INFO("CACHE MISS: PC=0x" + debug_to_hex_string(pc, 8) + 
+                   " Instruction=0x" + debug_to_hex_string(instruction, 8));
         if (!checkCondition(instruction)) return false;
         ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
         instruction_cache.insert(pc, decoded);
