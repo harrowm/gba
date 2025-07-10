@@ -1466,7 +1466,58 @@ void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
 }
 
 void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) {
-    arm_block_data_transfer(cached.instruction);
+    // Use pre-decoded cached values to avoid redundant bit extraction
+    const uint32_t rn = cached.rn;
+    const uint16_t register_list = cached.register_list;
+    const uint8_t addressing_mode = cached.addressing_mode;
+    const bool load = cached.load;
+    
+    // Extract addressing mode bits (pre-computed in cache)
+    const bool pre_indexing = (addressing_mode & 0x2) != 0;  // P bit
+    const bool add_offset = (addressing_mode & 0x1) != 0;    // U bit
+    const bool write_back = (cached.instruction & 0x00200000) != 0; // W bit
+    
+    uint32_t address = parentCPU.R()[rn];
+    const uint32_t old_address = address;
+    
+    // Pre-calculate register count (could be cached in future optimization)
+    const uint32_t num_registers = __builtin_popcount(register_list);
+    
+    // Pre-indexing address adjustment
+    if (pre_indexing) {
+        address += add_offset ? 4 : -4;
+    }
+    
+    // Optimized register processing - avoid checking all 16 registers
+    uint16_t remaining_registers = register_list;
+    while (remaining_registers != 0) {
+        // Find next set bit (register to process)
+        const uint32_t reg_index = __builtin_ctz(remaining_registers);
+        
+        // Process the register
+        if (load) {
+            const uint32_t loaded_value = parentCPU.getMemory().read32(address);
+            // Avoid overwriting base register during load with writeback
+            if (reg_index != rn || !write_back) {
+                parentCPU.R()[reg_index] = loaded_value;
+            }
+        } else {
+            parentCPU.getMemory().write32(address, parentCPU.R()[reg_index]);
+        }
+        
+        // Update address for next register
+        address += add_offset ? 4 : -4;
+        
+        // Clear the processed bit
+        remaining_registers &= (remaining_registers - 1);
+    }
+    
+    // Write-back optimization
+    if (write_back && (!(register_list & (1 << rn)) || !load)) {
+        parentCPU.R()[rn] = add_offset ? 
+            old_address + (num_registers << 2) : 
+            old_address - (num_registers << 2);
+    }
 }
 
 void ARMCPU::executeCachedMultiply(const ARMCachedInstruction& cached) {

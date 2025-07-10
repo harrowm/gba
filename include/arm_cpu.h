@@ -33,7 +33,7 @@ private:
     void executeCachedDataProcessing(const ARMCachedInstruction& cached);
     void executeCachedSingleDataTransfer(const ARMCachedInstruction& cached);
     void executeCachedBranch(const ARMCachedInstruction& cached);
-    void executeCachedBlockDataTransfer(const ARMCachedInstruction& cached);
+    FORCE_INLINE void executeCachedBlockDataTransfer(const ARMCachedInstruction& cached);
     void executeCachedMultiply(const ARMCachedInstruction& cached);
     void executeCachedBX(const ARMCachedInstruction& cached);
     void executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached);
