@@ -6,9 +6,11 @@
 #include "timing.h"
 #include "arm_timing.h"
 #include "utility_macros.h"
+#include "arm_instruction_cache.h"
 
 /**
  * ARM CPU Optimizations:
+ * - Instruction cache for eliminating redundant decode operations
  * - Function pointer table for fast opcode dispatch
  * - Fast paths for common instructions (MOV, ADD, SUB, CMP)
  * - FORCE_INLINE for critical functions
@@ -22,9 +24,28 @@ class CPU; // Forward declaration
 class ARMCPU {
 private:
     CPU& parentCPU; // Reference to the parent CPU
+    ARMInstructionCache instruction_cache; // Instruction decode cache
     
     // Instruction execution functions
     void executeInstruction(uint32_t instruction);
+    
+    // Cached instruction execution functions - optimized for cache hits
+    void executeCachedDataProcessing(const ARMCachedInstruction& cached);
+    void executeCachedSingleDataTransfer(const ARMCachedInstruction& cached);
+    void executeCachedBranch(const ARMCachedInstruction& cached);
+    void executeCachedBlockDataTransfer(const ARMCachedInstruction& cached);
+    void executeCachedMultiply(const ARMCachedInstruction& cached);
+    void executeCachedBX(const ARMCachedInstruction& cached);
+    void executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached);
+    void executeCachedPSRTransfer(const ARMCachedInstruction& cached);
+    void executeCachedCoprocessor(const ARMCachedInstruction& cached);
+    
+    // Instruction decoding functions
+    ARMCachedInstruction decodeInstruction(uint32_t pc, uint32_t instruction);
+    ARMCachedInstruction decodeDataProcessing(uint32_t pc, uint32_t instruction);
+    ARMCachedInstruction decodeSingleDataTransfer(uint32_t pc, uint32_t instruction);
+    ARMCachedInstruction decodeBranch(uint32_t pc, uint32_t instruction);
+    ARMCachedInstruction decodeBlockDataTransfer(uint32_t pc, uint32_t instruction);
     
     // Instruction handlers by category
     void arm_data_processing(uint32_t instruction);
@@ -73,6 +94,8 @@ private:
     FORCE_INLINE void updateFlags(uint32_t result, bool carry, bool overflow);
     FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry_out);
     bool checkCondition(uint32_t instruction);
+    FORCE_INLINE bool checkConditionCached(uint8_t condition);
+    void executeCachedInstruction(const ARMCachedInstruction& cached);
     
     // Exception and mode handling
     void handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq);
@@ -102,6 +125,16 @@ public:
     
     // Public interface for testing
     bool decodeAndExecute(uint32_t instruction);
+    
+    // Cache management functions
+    void invalidateInstructionCache() { instruction_cache.clear(); }
+    void invalidateInstructionCacheRange(uint32_t start_addr, uint32_t end_addr) {
+        instruction_cache.invalidate_range(start_addr, end_addr);
+    }
+    ARMInstructionCache::CacheStats getInstructionCacheStats() const {
+        return instruction_cache.getStats();
+    }
+    void resetInstructionCacheStats() { instruction_cache.resetStats(); }
 };
 
 #endif

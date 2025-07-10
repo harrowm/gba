@@ -78,7 +78,7 @@ $(ARM_DEMO_TARGET): $(BUILD_DIR)/demo_arm_advanced.o $(LIB_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -DDEBUG_LEVEL=0
 
 # Build ARM benchmark test (optimized)
-$(ARM_BENCHMARK_TARGET): $(TESTS_DIR)/simple_benchmark.cpp
+$(ARM_BENCHMARK_TARGET): $(TESTS_DIR)/simple_arm_benchmark.cpp
 	@echo "Building ARM benchmark with optimizations (-O3 -flto)..."
 	mkdir -p $(BUILD_DIR)
 	# Compile C sources with C compiler
@@ -89,10 +89,10 @@ $(ARM_BENCHMARK_TARGET): $(TESTS_DIR)/simple_benchmark.cpp
 	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/arm_benchmark_timer.o
 	$(CC) $(OPTIMIZED_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/arm_benchmark_timing.o
 	# Compile C++ sources and link everything together
-	$(CXX) $(OPTIMIZED_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_*.o $(PROFILING_LDFLAGS)
+	$(CXX) $(OPTIMIZED_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_arm_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_*.o $(PROFILING_LDFLAGS)
 
 # Build profiling ARM benchmark test
-$(ARM_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/simple_benchmark.cpp 
+$(ARM_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/simple_arm_benchmark.cpp 
 	@echo "Building ARM benchmark with profiling enabled..."
 	mkdir -p $(BUILD_DIR)
 	# Compile C sources with C compiler
@@ -103,7 +103,7 @@ $(ARM_BENCHMARK_PROF_TARGET): $(TESTS_DIR)/simple_benchmark.cpp
 	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timer.c -o $(BUILD_DIR)/arm_benchmark_prof_timer.o
 	$(CC) $(PROFILING_CFLAGS) -c $(SRC_DIR)/timing.c -o $(BUILD_DIR)/arm_benchmark_prof_timing.o
 	# Compile C++ sources and link everything together
-	$(CXX) $(PROFILING_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_prof_*.o $(PROFILING_LDFLAGS)
+	$(CXX) $(PROFILING_CXXFLAGS) -o $@ $(TESTS_DIR)/simple_arm_benchmark.cpp $(filter-out $(SRC_DIR)/main.cpp, $(CPP_SRCS)) $(BUILD_DIR)/arm_benchmark_prof_*.o $(PROFILING_LDFLAGS)
 
 # Build Thumb benchmark test (optimized)
 $(THUMB_BENCHMARK_TARGET): $(TESTS_DIR)/simple_thumb_benchmark.cpp
@@ -327,6 +327,22 @@ profile-simple-benchmark: $(SIMPLE_BENCHMARK_TARGET)
 	@echo "To view the profile, run: pprof --web ./$(SIMPLE_BENCHMARK_TARGET) ./$(PROF_OUTPUT)"
 	@echo "or: pprof --text ./$(SIMPLE_BENCHMARK_TARGET) ./$(PROF_OUTPUT)"
 
+# Run comparison of ARM vs Thumb benchmarks
+run-benchmark-comparison: $(ARM_BENCHMARK_TARGET) $(THUMB_BENCHMARK_TARGET)
+	@echo "=== ARM vs Thumb Benchmark Comparison ==="
+	@echo ""
+	@echo "Running ARM benchmark..."
+	@echo ""
+	./$(ARM_BENCHMARK_TARGET)
+	@echo ""
+	@echo "Running Thumb benchmark..."
+	@echo ""
+	./$(THUMB_BENCHMARK_TARGET)
+	@echo ""
+	@echo "=== Comparison Complete ==="
+	@echo "Check performance_analysis.md for detailed analysis"
+	@echo ""
+
 # Run all available tests
 run-all-tests: run-timing-test run-thumb-test run-arm-test run-cycle-demo
 
@@ -379,6 +395,7 @@ help:
 	@echo "  run-arm-benchmark-prof - Build and run ARM benchmark test with profiling"
 	@echo "  run-thumb-benchmark - Build and run Thumb benchmark test"
 	@echo "  run-thumb-benchmark-prof - Build and run Thumb benchmark test with profiling"
+	@echo "  run-benchmark-comparison - Run both ARM and Thumb benchmarks for comparison"
 	@echo "  run-simple-benchmark - Build and run simple benchmark (no Google Test)"
 	@echo "  profile-simple-benchmark - Profile simple benchmark with gperftools"
 	@echo "  run-timing-test  - Build and run timing tests"
@@ -394,5 +411,5 @@ help:
 	@echo "  help             - Show this help message"
 
 # Phony targets  
-.PHONY: all tests clean run-arm-test run-arm-demo run-arm-benchmark run-arm-benchmark-prof run-thumb-benchmark run-thumb-benchmark-prof run-timing-test run-thumb-test \
+.PHONY: all tests clean run-arm-test run-arm-demo run-arm-benchmark run-arm-benchmark-prof run-thumb-benchmark run-thumb-benchmark-prof run-benchmark-comparison run-timing-test run-thumb-test \
         run-cycle-demo run-test run-all-tests quick-test docs status help debug_examples verbose_debug_examples trace_debug_examples release_examples

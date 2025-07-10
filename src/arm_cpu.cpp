@@ -2,6 +2,7 @@
 #include "debug.h"
 #include "timing.h"
 #include "arm_timing.h"
+#include "arm_instruction_cache.h"
 
 ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu) {
     DEBUG_INFO("Initializing ARMCPU with parent CPU");
@@ -1200,4 +1201,308 @@ FORCE_INLINE void ARMCPU::fastALU_CMP(uint32_t rd, uint32_t rn, uint32_t op1, ui
     bool c = op1 >= rm;
     bool v = ((op1 ^ rm) & (op1 ^ result) & 0x80000000) != 0;
     updateFlags(result, c, v);
+}
+
+// ==================== ARM INSTRUCTION CACHE IMPLEMENTATION ====================
+
+// Cached condition checking for performance
+FORCE_INLINE bool ARMCPU::checkConditionCached(uint8_t condition) {
+    uint32_t flags = parentCPU.CPSR() >> 28;
+    switch (condition) {
+        case 0x0: return (flags & 0x4) != 0;           // EQ: Z=1
+        case 0x1: return (flags & 0x4) == 0;           // NE: Z=0
+        case 0x2: return (flags & 0x2) != 0;           // CS: C=1
+        case 0x3: return (flags & 0x2) == 0;           // CC: C=0
+        case 0x4: return (flags & 0x8) != 0;           // MI: N=1
+        case 0x5: return (flags & 0x8) == 0;           // PL: N=0
+        case 0x6: return (flags & 0x1) != 0;           // VS: V=1
+        case 0x7: return (flags & 0x1) == 0;           // VC: V=0
+        case 0x8: return (flags & 0x2) && !(flags & 0x4); // HI: C=1 && Z=0
+        case 0x9: return !(flags & 0x2) || (flags & 0x4); // LS: C=0 || Z=1
+        case 0xA: return !((flags & 0x8) >> 3) == !((flags & 0x1)); // GE: N==V
+        case 0xB: return !((flags & 0x8) >> 3) != !((flags & 0x1)); // LT: N!=V
+        case 0xC: return !(flags & 0x4) && (!((flags & 0x8) >> 3) == !((flags & 0x1))); // GT: Z=0 && N==V
+        case 0xD: return (flags & 0x4) || (!((flags & 0x8) >> 3) != !((flags & 0x1))); // LE: Z=1 || N!=V
+        case 0xE: return true;                         // AL: Always
+        case 0xF: return false;                        // NV: Never (undefined in ARMv4)
+        default: return false;
+    }
+}
+
+// Execute cached instruction using type dispatch
+void ARMCPU::executeCachedInstruction(const ARMCachedInstruction& cached) {
+    switch (cached.type) {
+        case ARMInstructionType::DATA_PROCESSING:
+            executeCachedDataProcessing(cached);
+            break;
+        case ARMInstructionType::SINGLE_DATA_TRANSFER:
+            executeCachedSingleDataTransfer(cached);
+            break;
+        case ARMInstructionType::BRANCH:
+            executeCachedBranch(cached);
+            break;
+        case ARMInstructionType::BLOCK_DATA_TRANSFER:
+            executeCachedBlockDataTransfer(cached);
+            break;
+        case ARMInstructionType::MULTIPLY:
+            executeCachedMultiply(cached);
+            break;
+        case ARMInstructionType::BX:
+            executeCachedBX(cached);
+            break;
+        case ARMInstructionType::SOFTWARE_INTERRUPT:
+            executeCachedSoftwareInterrupt(cached);
+            break;
+        case ARMInstructionType::PSR_TRANSFER:
+            executeCachedPSRTransfer(cached);
+            break;
+        case ARMInstructionType::COPROCESSOR_OP:
+        case ARMInstructionType::COPROCESSOR_TRANSFER:
+        case ARMInstructionType::COPROCESSOR_REGISTER:
+            executeCachedCoprocessor(cached);
+            break;
+        default:
+            // Fallback to original instruction execution
+            arm_undefined(cached.instruction);
+            break;
+    }
+}
+
+// Main instruction decoder
+ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction) {
+    ARMCachedInstruction decoded;
+    decoded.instruction = instruction;
+    decoded.condition = (instruction >> 28) & 0xF;
+    decoded.valid = true;
+    
+    // Determine instruction format
+    uint32_t format = ARM_GET_FORMAT(instruction);
+    
+    // Special case handling first
+    if (format == 0 && (instruction & 0x0FC000F0) == 0x00000090) {
+        // Multiply instruction
+        decoded.type = ARMInstructionType::MULTIPLY;
+        decoded.rd = (instruction >> 16) & 0xF;
+        decoded.pc_modified = (decoded.rd == 15);
+        decoded.execute_func = &ARMCPU::executeCachedMultiply;
+    }
+    else if (format == 0 && (instruction & 0x0FFFFFF0) == 0x012FFF10) {
+        // BX instruction
+        decoded.type = ARMInstructionType::BX;
+        decoded.rm = instruction & 0xF;
+        decoded.pc_modified = true;
+        decoded.execute_func = &ARMCPU::executeCachedBX;
+    }
+    else if (format == 1 && (instruction & 0x0FB00000) == 0x01000000) {
+        // PSR transfer
+        decoded.type = ARMInstructionType::PSR_TRANSFER;
+        decoded.rd = (instruction >> 12) & 0xF;
+        decoded.pc_modified = (!(instruction & 0x00200000)) && (decoded.rd == 15); // MRS to PC
+        decoded.execute_func = &ARMCPU::executeCachedPSRTransfer;
+    }
+    else {
+        // Standard format-based decoding
+        switch (format) {
+            case 0:
+            case 1:
+                decoded = decodeDataProcessing(pc, instruction);
+                break;
+            case 2:
+            case 3:
+                decoded = decodeSingleDataTransfer(pc, instruction);
+                break;
+            case 4:
+                decoded = decodeBlockDataTransfer(pc, instruction);
+                break;
+            case 5:
+                decoded = decodeBranch(pc, instruction);
+                break;
+            case 6:
+                decoded.type = ARMInstructionType::COPROCESSOR_OP;
+                decoded.pc_modified = false;
+                decoded.execute_func = &ARMCPU::executeCachedCoprocessor;
+                break;
+            case 7:
+                if ((instruction & 0x0F000000) == 0x0F000000) {
+                    decoded.type = ARMInstructionType::SOFTWARE_INTERRUPT;
+                    decoded.pc_modified = true;
+                    decoded.execute_func = &ARMCPU::executeCachedSoftwareInterrupt;
+                } else {
+                    decoded.type = ARMInstructionType::COPROCESSOR_REGISTER;
+                    decoded.load = (instruction >> 20) & 1;
+                    decoded.rd = (instruction >> 12) & 0xF;
+                    decoded.pc_modified = decoded.load && (decoded.rd == 15);
+                    decoded.execute_func = &ARMCPU::executeCachedCoprocessor;
+                }
+                break;
+            default:
+                decoded.type = ARMInstructionType::UNDEFINED;
+                decoded.pc_modified = false;
+                decoded.execute_func = nullptr;
+                break;
+        }
+    }
+    
+    return decoded;
+}
+
+// Decode data processing instructions with optimizations
+ARMCachedInstruction ARMCPU::decodeDataProcessing(uint32_t pc, uint32_t instruction) {
+    ARMCachedInstruction decoded;
+    decoded.instruction = instruction;
+    decoded.condition = (instruction >> 28) & 0xF;
+    decoded.type = ARMInstructionType::DATA_PROCESSING;
+    decoded.valid = true;
+    
+    // Extract common fields
+    decoded.dp_op = static_cast<ARMDataProcessingOp>((instruction >> 21) & 0xF);
+    decoded.set_flags = (instruction >> 20) & 1;
+    decoded.rn = (instruction >> 16) & 0xF;
+    decoded.rd = (instruction >> 12) & 0xF;
+    decoded.immediate = (instruction >> 25) & 1;
+    
+    // Determine if PC is modified
+    decoded.pc_modified = (decoded.rd == 15);
+    
+    // Pre-compute immediate operand if applicable
+    if (decoded.immediate) {
+        uint32_t imm = instruction & 0xFF;
+        uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
+        
+        if (rotate == 0) {
+            decoded.imm_value = imm;
+            decoded.imm_carry = (parentCPU.CPSR() >> 29) & 1; // Preserve carry
+        } else {
+            decoded.imm_value = (imm >> rotate) | (imm << (32 - rotate));
+            decoded.imm_carry = (decoded.imm_value >> 31) & 1;
+        }
+        decoded.imm_valid = true;
+    } else {
+        decoded.rm = instruction & 0xF;
+        decoded.imm_valid = false;
+    }
+    
+    decoded.execute_func = &ARMCPU::executeCachedDataProcessing;
+    return decoded;
+}
+
+// Decode single data transfer instructions
+ARMCachedInstruction ARMCPU::decodeSingleDataTransfer(uint32_t pc, uint32_t instruction) {
+    ARMCachedInstruction decoded;
+    decoded.instruction = instruction;
+    decoded.condition = (instruction >> 28) & 0xF;
+    decoded.type = ARMInstructionType::SINGLE_DATA_TRANSFER;
+    decoded.valid = true;
+    
+    decoded.load = (instruction >> 20) & 1;
+    decoded.rd = (instruction >> 12) & 0xF;
+    decoded.rn = (instruction >> 16) & 0xF;
+    decoded.immediate = !((instruction >> 25) & 1); // I bit is inverted for LDR/STR
+    
+    decoded.pc_modified = decoded.load && (decoded.rd == 15);
+    
+    // Pre-compute offset for immediate addressing
+    if (decoded.immediate) {
+        decoded.offset_value = instruction & 0xFFF;
+        if (!((instruction >> 23) & 1)) { // U bit
+            decoded.offset_value = -decoded.offset_value;
+        }
+    } else {
+        decoded.rm = instruction & 0xF;
+        decoded.offset_type = (instruction >> 5) & 3; // Shift type
+    }
+    
+    decoded.execute_func = &ARMCPU::executeCachedSingleDataTransfer;
+    return decoded;
+}
+
+// Decode branch instructions
+ARMCachedInstruction ARMCPU::decodeBranch(uint32_t pc, uint32_t instruction) {
+    ARMCachedInstruction decoded;
+    decoded.instruction = instruction;
+    decoded.condition = (instruction >> 28) & 0xF;
+    decoded.type = ARMInstructionType::BRANCH;
+    decoded.valid = true;
+    decoded.pc_modified = true;
+    
+    decoded.link = (instruction >> 24) & 1;
+    
+    // Pre-compute branch target
+    int32_t offset = instruction & 0xFFFFFF;
+    if (offset & 0x800000) { // Sign extend
+        offset |= 0xFF000000;
+    }
+    decoded.branch_offset = (offset << 2) + 8; // ARM branches are relative to PC+8
+    
+    decoded.execute_func = &ARMCPU::executeCachedBranch;
+    return decoded;
+}
+
+// Decode block data transfer instructions
+ARMCachedInstruction ARMCPU::decodeBlockDataTransfer(uint32_t pc, uint32_t instruction) {
+    ARMCachedInstruction decoded;
+    decoded.instruction = instruction;
+    decoded.condition = (instruction >> 28) & 0xF;
+    decoded.type = ARMInstructionType::BLOCK_DATA_TRANSFER;
+    decoded.valid = true;
+    
+    decoded.load = (instruction >> 20) & 1;
+    decoded.rn = (instruction >> 16) & 0xF;
+    decoded.register_list = instruction & 0xFFFF;
+    decoded.addressing_mode = (instruction >> 23) & 3; // P and U bits
+    
+    decoded.pc_modified = decoded.load && (decoded.register_list & (1 << 15));
+    
+    decoded.execute_func = &ARMCPU::executeCachedBlockDataTransfer;
+    return decoded;
+}
+
+// Placeholder cached execution functions (these would call the original implementations)
+void ARMCPU::executeCachedDataProcessing(const ARMCachedInstruction& cached) {
+    arm_data_processing(cached.instruction);
+}
+
+void ARMCPU::executeCachedSingleDataTransfer(const ARMCachedInstruction& cached) {
+    arm_single_data_transfer(cached.instruction);
+}
+
+void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
+    arm_branch(cached.instruction);
+}
+
+void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) {
+    arm_block_data_transfer(cached.instruction);
+}
+
+void ARMCPU::executeCachedMultiply(const ARMCachedInstruction& cached) {
+    arm_multiply(cached.instruction);
+}
+
+void ARMCPU::executeCachedBX(const ARMCachedInstruction& cached) {
+    arm_bx(cached.instruction);
+}
+
+void ARMCPU::executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached) {
+    arm_software_interrupt(cached.instruction);
+}
+
+void ARMCPU::executeCachedPSRTransfer(const ARMCachedInstruction& cached) {
+    arm_psr_transfer(cached.instruction);
+}
+
+void ARMCPU::executeCachedCoprocessor(const ARMCachedInstruction& cached) {
+    switch (cached.type) {
+        case ARMInstructionType::COPROCESSOR_OP:
+            arm_coprocessor_operation(cached.instruction);
+            break;
+        case ARMInstructionType::COPROCESSOR_TRANSFER:
+            arm_coprocessor_transfer(cached.instruction);
+            break;
+        case ARMInstructionType::COPROCESSOR_REGISTER:
+            arm_coprocessor_register(cached.instruction);
+            break;
+        default:
+            arm_undefined(cached.instruction);
+            break;
+    }
 }
