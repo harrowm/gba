@@ -36,8 +36,7 @@ Memory::Memory(bool initializeTestMode) {
 Memory::~Memory() {}
 
 int Memory::mapAddress(uint32_t gbaAddress, bool isWrite /* = false */) const {
-    // Direct debug output - no more lazy evaluation
-    DEBUG_INFO("Mapping address: 0x" + debug_to_hex_string(gbaAddress, 8));
+    DEBUG_INFO("Mapping address: 0x" + debug_to_hex_string(gbaAddress, 8) + " isWrite: " + (isWrite ? "true" : "false"));
 
     // Check if the address is within the cached region
     if (lastRegion && gbaAddress >= lastRegion->start_address && gbaAddress <= lastRegion->end_address) {

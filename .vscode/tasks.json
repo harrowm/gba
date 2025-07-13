@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Build and run ARM core tests with debug prints",
+			"command": "make && ./run_basic",
+			"group": "test",
+			"problemMatcher": [],
+			"isBackground": false
+		}
+	]
+}

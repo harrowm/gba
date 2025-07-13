@@ -230,106 +230,6 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
     }
 }
 
-bool ARMCPU::decodeAndExecute(uint32_t instruction) {
-    DEBUG_INFO("Decoding and executing ARM instruction: " + debug_to_hex_string(instruction, 8));
-    
-    // Check condition first
-    if (!checkCondition(instruction)) {
-        DEBUG_INFO("ARM instruction condition not met, skipping");
-        return false; // PC not modified
-    }
-    
-    // More detailed instruction decoding
-    uint32_t format = ARM_GET_FORMAT(instruction);
-    bool pc_modified = false;
-    
-    // Special case handling for multiply instructions (format 000 with specific bit pattern)
-    if (format == 0 && (instruction & 0x0FC000F0) == 0x00000090) {
-        arm_multiply(instruction);
-        uint32_t rd = (instruction >> 16) & 0xF;
-        pc_modified = (rd == 15);
-    }
-    // BX (Branch and Exchange) instruction (format 000 with specific bit pattern)
-    else if (format == 0 && (instruction & 0x0FFFFFF0) == 0x012FFF10) {
-        arm_bx(instruction);
-        pc_modified = true; // BX always modifies PC
-    }
-    // PSR transfer instructions (format 001 with specific bit pattern)
-    else if (format == 1 && (instruction & 0x0FB00000) == 0x01000000) {
-        arm_psr_transfer(instruction);
-        if ((instruction & 0x00200000) == 0) { // MRS instruction
-            uint32_t rd = (instruction >> 12) & 0xF;
-            pc_modified = (rd == 15);
-        }
-    }
-    // Coprocessor instructions (format 110/111 with specific patterns)
-    else if (format == 6) {
-        if ((instruction & 0x0E000000) == 0x0C000000) {
-            // Coprocessor data transfer
-            arm_coprocessor_transfer(instruction);
-        } else {
-            // Coprocessor operation
-            arm_coprocessor_operation(instruction);
-        }
-    }
-    else if (format == 7) {
-        if ((instruction & 0x0F000000) == 0x0F000000) {
-            // Software interrupt
-            arm_software_interrupt(instruction);
-            pc_modified = true;
-        } else {
-            // Coprocessor register transfer
-            arm_coprocessor_register(instruction);
-            bool load = (instruction >> 20) & 1;
-            if (load) {
-                uint32_t rd = (instruction >> 12) & 0xF;
-                pc_modified = (rd == 15);
-            }
-        }
-    }
-    // Execute instruction based on format using lookup table
-    else if (format < 8 && arm_instruction_table[format]) {
-        (this->*arm_instruction_table[format])(instruction);
-        
-        // Determine if PC was modified based on instruction type
-        switch (format) {
-            case 0: // Data processing
-            case 1:
-                {
-                    uint32_t rd = ARM_GET_RD(instruction);
-                    pc_modified = (rd == 15);
-                }
-                break;
-            case 2: // Single data transfer
-            case 3:
-                {
-                    bool load = (instruction >> 20) & 1;
-                    uint32_t rd = (instruction >> 12) & 0xF;
-                    pc_modified = load && (rd == 15);
-                }
-                break;
-            case 4: // Block data transfer
-                {
-                    bool load = (instruction >> 20) & 1;
-                    uint16_t register_list = instruction & 0xFFFF;
-                    pc_modified = load && (register_list & (1 << 15));
-                }
-                break;
-            case 5: // Branch
-                pc_modified = true;
-                break;
-            case 6: // Coprocessor (already handled above)
-            case 7: // Coprocessor/SWI (already handled above)
-                break;
-        }
-    } else {
-        DEBUG_INFO("Unknown ARM instruction format: " + std::to_string(format));
-        arm_undefined(instruction);
-        pc_modified = true; // Undefined instruction changes PC
-    }
-    
-    return pc_modified;
-}
 
 // Check if instruction condition is satisfied
 bool ARMCPU::checkCondition(uint32_t instruction) {
@@ -699,25 +599,25 @@ void ARMCPU::arm_single_data_transfer(uint32_t instruction) {
     bool write_back = (instruction & 0x00200000) != 0;
     bool load = (instruction & 0x00100000) != 0;
     bool byte_transfer = (instruction & 0x00400000) != 0;
-    
+
     uint32_t rn = (instruction >> 16) & 0xF;
     uint32_t rd = (instruction >> 12) & 0xF;
     uint32_t address = parentCPU.R()[rn];
-    
+
     // Calculate offset
     uint32_t offset = 0;
-    if (instruction & 0x02000000) {
-        // Immediate offset
+    if ((instruction & 0x02000000) == 0) {
+        // Immediate offset (I bit == 0)
         offset = instruction & 0xFFF;
     } else {
-        // Register offset
+        // Register offset (I bit == 1)
         uint32_t rm = instruction & 0xF;
         uint32_t shift_type = (instruction >> 5) & 0x3;
         uint32_t shift_amount = (instruction >> 7) & 0x1F;
         uint32_t carry_out = 0;
         offset = arm_apply_shift(parentCPU.R()[rm], shift_type, shift_amount, &carry_out);
     }
-    
+
     // Apply offset based on the add/sub bit
     uint32_t effective_address = address;
     if (add_offset) {
@@ -725,28 +625,35 @@ void ARMCPU::arm_single_data_transfer(uint32_t instruction) {
     } else {
         effective_address = address - offset;
     }
-    
+
     // Pre-indexing: use effective address for memory access
     // Post-indexing: use original address for memory access, then update register
     uint32_t access_address = pre_indexing ? effective_address : address;
-    
-    // Perform the memory access
+
+    // Debug print for STR/LDR address calculation
+    printf("[arm_single_data_transfer] instr=0x%08X Rn=R[%u]=0x%08X Rd=R[%u]=0x%08X offset=0x%X add_offset=%d pre_indexing=%d write_back=%d access_address=0x%08X load=%d\n",
+        instruction, rn, address, rd, parentCPU.R()[rd], offset, add_offset, pre_indexing, write_back, access_address, load);
+
     if (load) {
         // Load from memory to register
         if (byte_transfer) {
             parentCPU.R()[rd] = parentCPU.getMemory().read8(access_address);
+            printf("[arm_single_data_transfer] LDRB: Loaded 0x%02X from 0x%08X into R[%u]\n", parentCPU.R()[rd] & 0xFF, access_address, rd);
         } else {
             parentCPU.R()[rd] = parentCPU.getMemory().read32(access_address);
+            printf("[arm_single_data_transfer] LDR: Loaded 0x%08X from 0x%08X into R[%u]\n", parentCPU.R()[rd], access_address, rd);
         }
     } else {
         // Store from register to memory
         if (byte_transfer) {
             parentCPU.getMemory().write8(access_address, parentCPU.R()[rd] & 0xFF);
+            printf("[arm_single_data_transfer] STRB: Stored 0x%02X from R[%u] to 0x%08X\n", parentCPU.R()[rd] & 0xFF, rd, access_address);
         } else {
             parentCPU.getMemory().write32(access_address, parentCPU.R()[rd]);
+            printf("[arm_single_data_transfer] STR: Stored 0x%08X from R[%u] to 0x%08X\n", parentCPU.R()[rd], rd, access_address);
         }
     }
-    
+
     // Write back the address if requested or post-indexing
     if ((pre_indexing && write_back) || !pre_indexing) {
         parentCPU.R()[rn] = effective_address;

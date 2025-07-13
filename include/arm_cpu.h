@@ -126,8 +126,6 @@ public:
     void executeWithTiming(uint32_t cycles, TimingState* timing);
     uint32_t calculateInstructionCycles(uint32_t instruction);
     
-    // Public interface for testing
-    bool decodeAndExecute(uint32_t instruction);
     
     // Cache management functions
     void invalidateInstructionCache() { instruction_cache.clear(); }
