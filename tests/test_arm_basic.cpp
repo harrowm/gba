@@ -38,7 +38,9 @@ void test_arm_multiply() {
     cpu.R()[0] = 0; // Clear destination
     
     uint32_t mul_instruction = 0xE0000291; // MUL R0, R1, R2
-    arm_cpu.decodeAndExecute(mul_instruction);
+    cpu.R()[15] = 0x08000000;
+    memory.write32(0x08000000, mul_instruction);
+    arm_cpu.execute(1);
     
     assert(cpu.R()[0] == 35); // 5 * 7 = 35
     printf("✓ MUL instruction executed correctly\n");
@@ -53,7 +55,9 @@ void test_arm_multiply() {
     // Format: cond 0000001S Rd   Rn   Rs   1001 Rm
     //         1110 0000001 0011 0110 0101 1001 0100
     uint32_t mla_instruction = 0xE0236594; // MLA R3, R4, R5, R6
-    arm_cpu.decodeAndExecute(mla_instruction);
+    cpu.R()[15] = 0x08000004;
+    memory.write32(0x08000004, mla_instruction);
+    arm_cpu.execute(1);
     
     assert(cpu.R()[3] == 22); // 3 * 4 + 10 = 22
     printf("✓ MLA instruction executed correctly\n");
@@ -74,21 +78,27 @@ void test_arm_data_processing() {
     cpu.R()[0] = 0; // Clear destination
     
     uint32_t add_instruction = 0xE0810002; // ADD R0, R1, R2
-    arm_cpu.decodeAndExecute(add_instruction);
+    cpu.R()[15] = 0x08000008;
+    memory.write32(0x08000008, add_instruction);
+    arm_cpu.execute(1);
     
     assert(cpu.R()[0] == 125); // 100 + 25 = 125
     printf("✓ ADD instruction executed correctly\n");
     
     // Test SUB with flags
     uint32_t sub_instruction = 0xE0510002; // SUBS R0, R1, R2
-    arm_cpu.decodeAndExecute(sub_instruction);
+    cpu.R()[15] = 0x0800000C;
+    memory.write32(0x0800000C, sub_instruction);
+    arm_cpu.execute(1);
     
     assert(cpu.R()[0] == 75); // 100 - 25 = 75
     printf("✓ SUB instruction executed correctly\n");
     
     // Test with immediate: MOV R3, #42
     uint32_t mov_imm_instruction = 0xE3A0302A; // MOV R3, #42
-    arm_cpu.decodeAndExecute(mov_imm_instruction);
+    cpu.R()[15] = 0x08000010;
+    memory.write32(0x08000010, mov_imm_instruction);
+    arm_cpu.execute(1);
     
     assert(cpu.R()[3] == 42);
     printf("✓ MOV immediate instruction executed correctly\n");
@@ -109,7 +119,9 @@ void test_arm_conditional_execution() {
     // Test MOVEQ R0, #42 (0x03A0002A) - should execute (Z flag set)
     cpu.R()[0] = 0; // Clear destination
     uint32_t moveq_instruction = 0x03A0002A; // MOVEQ R0, #42
-    arm_cpu.decodeAndExecute(moveq_instruction);
+    cpu.R()[15] = 0x08000014;
+    memory.write32(0x08000014, moveq_instruction);
+    arm_cpu.execute(1);
     
     assert(cpu.R()[0] == 42);
     printf("✓ MOVEQ instruction executed correctly (condition met)\n");
@@ -117,14 +129,18 @@ void test_arm_conditional_execution() {
     // Test MOVNE R1, #99 (0x13A01063) - should not execute (Z flag set)
     cpu.R()[1] = 0; // Clear destination
     uint32_t movne_instruction = 0x13A01063; // MOVNE R1, #99
-    arm_cpu.decodeAndExecute(movne_instruction);
+    cpu.R()[15] = 0x08000018;
+    memory.write32(0x08000018, movne_instruction);
+    arm_cpu.execute(1);
     
     assert(cpu.R()[1] == 0); // Should remain unchanged
     printf("✓ MOVNE instruction skipped correctly (condition not met)\n");
     
     // Clear Z flag and test again
     cpu.CPSR() &= ~0x40000000; // Clear Z flag
-    arm_cpu.decodeAndExecute(movne_instruction);
+    cpu.R()[15] = 0x0800001C;
+    memory.write32(0x0800001C, movne_instruction);
+    arm_cpu.execute(1);
     
     assert(cpu.R()[1] == 99); // Should execute now
     printf("✓ MOVNE instruction executed correctly (condition met)\n");

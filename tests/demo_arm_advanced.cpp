@@ -70,25 +70,33 @@ public:
         // ADD R0, R1, R2
         uint32_t add_instruction = 0xE0810002;
         printf("\nExecuting: ADD R0, R1, R2\n");
-        arm_cpu.decodeAndExecute(add_instruction);
+        cpu.R()[15] = 0x08000000;
+        memory.write32(0x08000000, add_instruction);
+        arm_cpu.execute(1);
         printf("Result: R0 = %d\n", cpu.R()[0]);
         
         // SUB R4, R1, R2 with flag setting
         uint32_t sub_instruction = 0xE0514002;
         printf("\nExecuting: SUBS R4, R1, R2\n");
-        arm_cpu.decodeAndExecute(sub_instruction);
+        cpu.R()[15] = 0x08000004;
+        memory.write32(0x08000004, sub_instruction);
+        arm_cpu.execute(1);
         printf("Result: R4 = %d, CPSR = 0x%08X\n", cpu.R()[4], cpu.CPSR());
         
         // Test with shifts: MOV R5, R1, LSL #2
         uint32_t mov_shift_instruction = 0xE1A05101;
         printf("\nExecuting: MOV R5, R1, LSL #2\n");
-        arm_cpu.decodeAndExecute(mov_shift_instruction);
+        cpu.R()[15] = 0x08000008;
+        memory.write32(0x08000008, mov_shift_instruction);
+        arm_cpu.execute(1);
         printf("Result: R5 = %d (R1 << 2)\n", cpu.R()[5]);
         
         // Logical operations: ORR R6, R1, R2
         uint32_t orr_instruction = 0xE1816002;
         printf("\nExecuting: ORR R6, R1, R2\n");
-        arm_cpu.decodeAndExecute(orr_instruction);
+        cpu.R()[15] = 0x0800000C;
+        memory.write32(0x0800000C, orr_instruction);
+        arm_cpu.execute(1);
         printf("Result: R6 = 0x%08X (R1 | R2)\n", cpu.R()[6]);
     }
     
@@ -104,7 +112,9 @@ public:
         // STR R1, [R2]
         uint32_t str_instruction = 0xE5821000;
         printf("Executing: STR R1, [R2] (storing 0x%08X at 0x%08X)\n", cpu.R()[1], cpu.R()[2]);
-        arm_cpu.decodeAndExecute(str_instruction);
+        cpu.R()[15] = 0x08000010;
+        memory.write32(0x08000010, str_instruction);
+        arm_cpu.execute(1);
         
         // Verify storage
         uint32_t stored_value = cpu.getMemory().read32(test_address);
@@ -114,14 +124,18 @@ public:
         cpu.R()[3] = 0; // Clear destination
         uint32_t ldr_instruction = 0xE5923000;
         printf("\nExecuting: LDR R3, [R2]\n");
-        arm_cpu.decodeAndExecute(ldr_instruction);
+        cpu.R()[15] = 0x08000014;
+        memory.write32(0x08000014, ldr_instruction);
+        arm_cpu.execute(1);
         printf("Loaded value: R3 = 0x%08X\n", cpu.R()[3]);
         
         // Demonstrate pre-indexed addressing: STR R1, [R2, #4]!
         uint32_t str_pre_instruction = 0xE5A21004;
         printf("\nExecuting: STR R1, [R2, #4]! (pre-indexed with writeback)\n");
         printf("Before: R2 = 0x%08X\n", cpu.R()[2]);
-        arm_cpu.decodeAndExecute(str_pre_instruction);
+        cpu.R()[15] = 0x08000018;
+        memory.write32(0x08000018, str_pre_instruction);
+        arm_cpu.execute(1);
         printf("After: R2 = 0x%08X\n", cpu.R()[2]);
         
         // Block transfer demonstration
@@ -135,7 +149,9 @@ public:
         uint32_t stm_instruction = 0xE8A20033;
         printf("Executing: STMIA R2!, {R0,R1,R4,R5}\n");
         printf("Before: R2 = 0x%08X\n", cpu.R()[2]);
-        arm_cpu.decodeAndExecute(stm_instruction);
+        cpu.R()[15] = 0x0800001C;
+        memory.write32(0x0800001C, stm_instruction);
+        arm_cpu.execute(1);
         printf("After: R2 = 0x%08X\n", cpu.R()[2]);
         
         // Verify stored data
@@ -161,14 +177,16 @@ public:
         // CMP R0, #0
         uint32_t cmp_instruction = 0xE3500000;
         printf("\nExecuting: CMP R0, #0\n");
-        arm_cpu.decodeAndExecute(cmp_instruction);
+        memory.write32(cpu.R()[15], cmp_instruction);
+        arm_cpu.execute(1);
         printf("CPSR after CMP: 0x%08X\n", cpu.CPSR());
         
         // BNE +8 (branch if not equal)
         uint32_t bne_instruction = 0x1A000001;
         printf("\nExecuting: BNE +8 (should branch since R0 != 0)\n");
         printf("PC before: 0x%08X\n", cpu.R()[15]);
-        arm_cpu.decodeAndExecute(bne_instruction);
+        memory.write32(cpu.R()[15], bne_instruction);
+        arm_cpu.execute(1);
         printf("PC after: 0x%08X\n", cpu.R()[15]);
         
         // Function call simulation: BL subroutine
@@ -177,7 +195,8 @@ public:
         uint32_t bl_instruction = 0xEB000010; // BL +64
         printf("\nExecuting: BL +64 (function call)\n");
         printf("PC before: 0x%08X, LR before: 0x%08X\n", cpu.R()[15], cpu.R()[14]);
-        arm_cpu.decodeAndExecute(bl_instruction);
+        memory.write32(cpu.R()[15], bl_instruction);
+        arm_cpu.execute(1);
         printf("PC after: 0x%08X, LR after: 0x%08X\n", cpu.R()[15], cpu.R()[14]);
     }
     
@@ -196,7 +215,8 @@ public:
         // Software interrupt
         uint32_t swi_instruction = 0xEF000042; // SWI #0x42
         printf("\nExecuting: SWI #0x42\n");
-        arm_cpu.decodeAndExecute(swi_instruction);
+        memory.write32(cpu.R()[15], swi_instruction);
+        arm_cpu.execute(1);
         
         printf("After SWI:\n");
         printf("  PC: 0x%08X (should be 0x08)\n", cpu.R()[15]);
@@ -213,7 +233,8 @@ public:
         
         uint32_t undef_instruction = 0xE7F000F0;
         printf("Executing undefined instruction: 0x%08X\n", undef_instruction);
-        arm_cpu.decodeAndExecute(undef_instruction);
+        memory.write32(cpu.R()[15], undef_instruction);
+        arm_cpu.execute(1);
         
         printf("After undefined instruction:\n");
         printf("  PC: 0x%08X (should be 0x04)\n", cpu.R()[15]);
@@ -289,7 +310,8 @@ public:
         
         printf("\nExecuting ARM ADD R1, R1, R2\n");
         printf("Before: R1=%d, R2=%d\n", cpu.R()[1], cpu.R()[2]);
-        arm_cpu.decodeAndExecute(arm_add);
+        memory.write32(cpu.R()[15], arm_add);
+        arm_cpu.execute(1);
         printf("After: R1=%d\n", cpu.R()[1]);
         
         // Switch to Thumb mode (normally done by BX instruction)
