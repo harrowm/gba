@@ -1,6 +1,7 @@
 #ifndef CPU_H
 #define CPU_H
 
+#include <cassert>
 #include "memory.h"
 #include "interrupt.h"
 #include "debug.h"
@@ -15,22 +16,97 @@ class ThumbCPU;
 class ARMCPU;
 
 class CPU {
+    // Prevent accidental copies/moves (breaks memory reference)
+    CPU(const CPU&) = delete;
+    CPU& operator=(const CPU&) = delete;
+    CPU(CPU&&) = delete;
+    CPU& operator=(CPU&&) = delete;
 public:
     struct CPUState {
         std::array<uint32_t, 16> registers; // General-purpose registers
         uint32_t cpsr; // Current Program Status Register
     };
 
+    // ARM privileged mode banked registers
+    // FIQ: R8_fiq-R14_fiq, others: R13/R14 for each mode
+    enum Mode {
+        USER = 0x10,
+        FIQ = 0x11,
+        IRQ = 0x12,
+        SVC = 0x13,
+        ABT = 0x17,
+        UND = 0x1B,
+        SYS = 0x1F
+    };
+
+
 private:
     Memory& memory;
     InterruptController& interruptController;
-    std::array<uint32_t, 16> registers; // Shared registers
+    std::array<uint32_t, 16> registers; // Shared registers (User/System)
     uint32_t cpsr; // Current Program Status Register
     TimingState timing; // Timing state for cycle-driven execution
+
+    // Banked registers for privileged modes
+    // R13 (SP) and R14 (LR) for each mode except User/System
+    uint32_t banked_r13_fiq, banked_r14_fiq;
+    uint32_t banked_r13_svc, banked_r14_svc;
+    uint32_t banked_r13_abt, banked_r14_abt;
+    uint32_t banked_r13_irq, banked_r14_irq;
+    uint32_t banked_r13_und, banked_r14_und;
+    // User mode banked SP/LR for correct restoration after exceptions
+    uint32_t banked_r13_usr, banked_r14_usr;
 
     ThumbCPU* thumbCPU; // Delegate for Thumb instructions
     ARMCPU* armCPU; // Delegate for ARM instructions
 
+    // Helper: get current mode
+    Mode getMode() const { return static_cast<Mode>(cpsr & 0x1F); }
+
+    // Accessors for R13 (SP) and R14 (LR) with banking
+public:
+    uint32_t& SP() {
+        switch (getMode()) {
+            case FIQ: return banked_r13_fiq;
+            case SVC: return banked_r13_svc;
+            case ABT: return banked_r13_abt;
+            case IRQ: return banked_r13_irq;
+            case UND: return banked_r13_und;
+            default:  return registers[13];
+        }
+    }
+    uint32_t& LR() {
+        switch (getMode()) {
+            case FIQ: return banked_r14_fiq;
+            case SVC: return banked_r14_svc;
+            case ABT: return banked_r14_abt;
+            case IRQ: return banked_r14_irq;
+            case UND: return banked_r14_und;
+            default:  return registers[14];
+        }
+    }
+
+    // For test/debug: direct access to all banks
+    uint32_t& bankedSP(Mode m) {
+        switch (m) {
+            case FIQ: return banked_r13_fiq;
+            case SVC: return banked_r13_svc;
+            case ABT: return banked_r13_abt;
+            case IRQ: return banked_r13_irq;
+            case UND: return banked_r13_und;
+            default:  return registers[13];
+        }
+    }
+    uint32_t& bankedLR(Mode m) {
+        switch (m) {
+            case FIQ: return banked_r14_fiq;
+            case SVC: return banked_r14_svc;
+            case ABT: return banked_r14_abt;
+            case IRQ: return banked_r14_irq;
+            case UND: return banked_r14_und;
+            default:  return registers[14];
+        }
+    }
 
 public:
     CPU(Memory& mem, InterruptController& interrupt);
@@ -41,6 +117,45 @@ public:
 
     std::array<uint32_t, 16>& R() { return registers; }
     uint32_t& CPSR() { return cpsr; }
+    // Set mode and swap banked registers as needed
+    void setMode(Mode newMode) {
+        DEBUG_INFO("setMode: ENTRY oldMode=" + std::to_string((int)getMode()) + ", newMode=" + std::to_string((int)newMode));
+        DEBUG_INFO("Banked SP/LR: FIQ SP=0x" + debug_to_hex_string(banked_r13_fiq,8) + ", LR=0x" + debug_to_hex_string(banked_r14_fiq,8) +
+                    ", SVC SP=0x" + debug_to_hex_string(banked_r13_svc,8) + ", LR=0x" + debug_to_hex_string(banked_r14_svc,8) +
+                    ", ABT SP=0x" + debug_to_hex_string(banked_r13_abt,8) + ", LR=0x" + debug_to_hex_string(banked_r14_abt,8) +
+                    ", IRQ SP=0x" + debug_to_hex_string(banked_r13_irq,8) + ", LR=0x" + debug_to_hex_string(banked_r14_irq,8) +
+                    ", UND SP=0x" + debug_to_hex_string(banked_r13_und,8) + ", LR=0x" + debug_to_hex_string(banked_r14_und,8));
+        Mode oldMode = getMode();
+        DEBUG_INFO("setMode: BEFORE swap, mode=" + std::to_string((int)oldMode) + ", SP=0x" + debug_to_hex_string(registers[13], 8) + ", LR=0x" + debug_to_hex_string(registers[14], 8));
+        DEBUG_INFO(std::string("setMode: switching from ") + std::to_string((int)oldMode) + " to " + std::to_string((int)newMode));
+        assert((int)newMode >= 0x10 && (int)newMode <= 0x1F && "Invalid newMode in setMode");
+        if (oldMode == newMode) return;
+        // Save current SP/LR to bank
+        switch (oldMode) {
+            case FIQ: banked_r13_fiq = registers[13]; banked_r14_fiq = registers[14]; break;
+            case SVC: banked_r13_svc = registers[13]; banked_r14_svc = registers[14]; break;
+            case ABT: banked_r13_abt = registers[13]; banked_r14_abt = registers[14]; break;
+            case IRQ: banked_r13_irq = registers[13]; banked_r14_irq = registers[14]; break;
+            case UND: banked_r13_und = registers[13]; banked_r14_und = registers[14]; break;
+            case USER:
+            case SYS: banked_r13_usr = registers[13]; banked_r14_usr = registers[14]; break;
+            default: break;
+        }
+        // Load new SP/LR from bank
+        switch (newMode) {
+            case FIQ: registers[13] = banked_r13_fiq; registers[14] = banked_r14_fiq; break;
+            case SVC: registers[13] = banked_r13_svc; registers[14] = banked_r14_svc; break;
+            case ABT: registers[13] = banked_r13_abt; registers[14] = banked_r14_abt; break;
+            case IRQ: registers[13] = banked_r13_irq; registers[14] = banked_r14_irq; break;
+            case UND: registers[13] = banked_r13_und; registers[14] = banked_r14_und; break;
+            case USER:
+            case SYS: registers[13] = banked_r13_usr; registers[14] = banked_r14_usr; break;
+            default: break;
+        }
+        DEBUG_INFO("setMode: AFTER swap, mode=" + std::to_string((int)newMode) + ", SP=0x" + debug_to_hex_string(registers[13], 8) + ", LR=0x" + debug_to_hex_string(registers[14], 8));
+        // Update CPSR mode bits
+        cpsr = (cpsr & ~0x1F) | (uint32_t)newMode;
+    }
     Memory& getMemory() { return memory; }
     TimingState& getTiming() { return timing; } // Access to timing state
     

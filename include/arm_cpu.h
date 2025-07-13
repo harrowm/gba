@@ -23,12 +23,13 @@ class CPU; // Forward declaration
 
 class ARMCPU {
 private:
+    bool exception_taken = false;
     CPU& parentCPU; // Reference to the parent CPU
     ARMInstructionCache instruction_cache; // Instruction decode cache
-    
+
     // Instruction execution functions
     void executeInstruction(uint32_t instruction);
-    
+
     // Cached instruction execution functions - optimized for cache hits
     FORCE_INLINE void executeCachedDataProcessing(const ARMCachedInstruction& cached);
     void executeCachedSingleDataTransfer(const ARMCachedInstruction& cached);
@@ -39,17 +40,17 @@ private:
     void executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached);
     void executeCachedPSRTransfer(const ARMCachedInstruction& cached);
     void executeCachedCoprocessor(const ARMCachedInstruction& cached);
-    
+
     // Instruction decoding functions
     ARMCachedInstruction decodeInstruction(uint32_t pc, uint32_t instruction);
     ARMCachedInstruction decodeDataProcessing(uint32_t pc, uint32_t instruction);
     ARMCachedInstruction decodeSingleDataTransfer(uint32_t pc, uint32_t instruction);
     ARMCachedInstruction decodeBranch(uint32_t pc, uint32_t instruction);
     ARMCachedInstruction decodeBlockDataTransfer(uint32_t pc, uint32_t instruction);
-    
+
     // Cache-aware execution method
     bool executeWithCache(uint32_t pc, uint32_t instruction);
-    
+
     // Instruction handlers by category
     void arm_data_processing(uint32_t instruction);
     void arm_multiply(uint32_t instruction);
@@ -63,7 +64,7 @@ private:
     void arm_coprocessor_transfer(uint32_t instruction);
     void arm_coprocessor_register(uint32_t instruction);
     void arm_undefined(uint32_t instruction);
-    
+
     // Data processing operation handlers - critical ones marked as FORCE_INLINE for optimization
     void arm_and(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_eor(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
@@ -78,6 +79,9 @@ private:
     FORCE_INLINE void arm_cmp(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_cmn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_orr(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+
+public:
+    // ...existing public methods...
     FORCE_INLINE void arm_mov(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_bic(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_mvn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);

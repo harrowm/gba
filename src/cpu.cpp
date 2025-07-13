@@ -13,11 +13,19 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     std::fill(std::begin(registers), std::end(registers), 0); // Reset all registers to zero using std::fill
     DEBUG_INFO("Registers initialized to zero");
     cpsr = 0; // Sets us up in ARM mode and little endian by default
-    
+
+    // Initialize all banked registers to zero
+    banked_r13_fiq = banked_r14_fiq = 0;
+    banked_r13_svc = banked_r14_svc = 0;
+    banked_r13_abt = banked_r14_abt = 0;
+    banked_r13_irq = banked_r14_irq = 0;
+    banked_r13_und = banked_r14_und = 0;
+    banked_r13_usr = banked_r14_usr = 0;
+
     // Initialize timing system
     timing_init(&timing);
     DEBUG_INFO("Timing system initialized");
-    
+
     // Register ARM instruction cache invalidation callback
     memory.registerCacheInvalidationCallback([this](uint32_t start_addr, uint32_t end_addr) {
         armCPU->invalidateInstructionCache(start_addr, end_addr);

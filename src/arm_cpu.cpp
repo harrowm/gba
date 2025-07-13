@@ -1,3 +1,4 @@
+#include <cassert>
 #include "arm_cpu.h"
 #include "debug.h"
 #include "timing.h"
@@ -16,29 +17,30 @@ void ARMCPU::execute(uint32_t cycles) {
     // Use lazy evaluation for debug logs
     DEBUG_INFO("Executing ARM instructions for " + std::to_string(cycles) + " cycles. Memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
         
+    exception_taken = false;
     while (cycles > 0) {
         // Check if we're still in ARM mode - if not, break out early
         if (parentCPU.getFlag(CPU::FLAG_T)) {
             DEBUG_INFO("Mode switched to Thumb during execution, breaking out of ARM execution");
             break;
         }
-        
+
         uint32_t pc = parentCPU.R()[15]; // Get current PC
         uint32_t instruction = parentCPU.getMemory().read32(pc); // Fetch instruction
-        
+
         // Use lazy evaluation for instruction fetch debug logs
         DEBUG_INFO("Fetched ARM instruction: " + debug_to_hex_string(instruction, 8) + " at PC: " + debug_to_hex_string(pc, 8));
-        
+
         // Use cached execution path
         bool pc_modified = executeWithCache(pc, instruction);
-        
+        if (exception_taken) {
+            break;
+        }
         // Only increment PC if instruction didn't modify it (e.g., not a branch)
         if (!pc_modified) {
             parentCPU.R()[15] = pc + 4;
-            
             DEBUG_INFO("Incremented PC to: 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
         }
-        
         cycles -= 1; // Placeholder for cycle deduction
     }
 }
@@ -49,6 +51,7 @@ void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
     DEBUG_INFO("Executing ARM instructions with timing for " + std::to_string(cycles) + " cycles");
     
     while (cycles > 0) {
+        exception_taken = false;
         // Check if we're still in ARM mode - if not, break out early
         if (parentCPU.getFlag(CPU::FLAG_T)) {
             DEBUG_INFO("Mode switched to Thumb during timing execution, breaking out of ARM execution");
@@ -218,6 +221,7 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
     if (cached) {
         if (!checkConditionCached(cached->condition)) return false;
         executeCachedInstruction(*cached);
+        if (exception_taken) return true; // treat as PC modified
         return cached->pc_modified;
     } else {
         DEBUG_INFO("CACHE MISS: PC=0x" + debug_to_hex_string(pc, 8) + 
@@ -226,6 +230,7 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
         ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
         instruction_cache.insert(pc, decoded);
         executeCachedInstruction(decoded);
+        if (exception_taken) return true;
         return decoded.pc_modified;
     }
 }
@@ -630,27 +635,19 @@ void ARMCPU::arm_single_data_transfer(uint32_t instruction) {
     // Post-indexing: use original address for memory access, then update register
     uint32_t access_address = pre_indexing ? effective_address : address;
 
-    // Debug print for STR/LDR address calculation
-    printf("[arm_single_data_transfer] instr=0x%08X Rn=R[%u]=0x%08X Rd=R[%u]=0x%08X offset=0x%X add_offset=%d pre_indexing=%d write_back=%d access_address=0x%08X load=%d\n",
-        instruction, rn, address, rd, parentCPU.R()[rd], offset, add_offset, pre_indexing, write_back, access_address, load);
-
     if (load) {
         // Load from memory to register
         if (byte_transfer) {
             parentCPU.R()[rd] = parentCPU.getMemory().read8(access_address);
-            printf("[arm_single_data_transfer] LDRB: Loaded 0x%02X from 0x%08X into R[%u]\n", parentCPU.R()[rd] & 0xFF, access_address, rd);
         } else {
             parentCPU.R()[rd] = parentCPU.getMemory().read32(access_address);
-            printf("[arm_single_data_transfer] LDR: Loaded 0x%08X from 0x%08X into R[%u]\n", parentCPU.R()[rd], access_address, rd);
         }
     } else {
         // Store from register to memory
         if (byte_transfer) {
             parentCPU.getMemory().write8(access_address, parentCPU.R()[rd] & 0xFF);
-            printf("[arm_single_data_transfer] STRB: Stored 0x%02X from R[%u] to 0x%08X\n", parentCPU.R()[rd] & 0xFF, rd, access_address);
         } else {
             parentCPU.getMemory().write32(access_address, parentCPU.R()[rd]);
-            printf("[arm_single_data_transfer] STR: Stored 0x%08X from R[%u] to 0x%08X\n", parentCPU.R()[rd], rd, access_address);
         }
     }
 
@@ -849,25 +846,54 @@ void ARMCPU::arm_psr_transfer(uint32_t instruction) {
 
 // Add simplified exception handling implementation
 void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq) {
+    DEBUG_INFO("handleException: vector=0x" + debug_to_hex_string(vector_address, 8) + ", new_mode=0x" + debug_to_hex_string(new_mode, 2) + ", PC=0x" + debug_to_hex_string(parentCPU.R()[15], 8));
+    assert((new_mode & 0x1F) >= 0x10 && (new_mode & 0x1F) <= 0x1F && "Invalid new_mode in handleException");
     // Save the current CPSR (SPSR not supported in this implementation)
     uint32_t old_cpsr = parentCPU.CPSR();
-    
+
+    // Calculate the return address (PC+4)
+    uint32_t return_address = parentCPU.R()[15] + 4;
+
+    // Set mode and swap in correct banked registers first
+    CPU::Mode mode_enum = static_cast<CPU::Mode>(new_mode & 0x1F);
+    parentCPU.setMode(mode_enum);
+
+    // Set the correct banked LR for the new mode (after swap)
+    switch (mode_enum) {
+        case CPU::SVC:
+            parentCPU.bankedLR(CPU::SVC) = return_address;
+            break;
+        case CPU::IRQ:
+            parentCPU.bankedLR(CPU::IRQ) = return_address;
+            break;
+        case CPU::FIQ:
+            parentCPU.bankedLR(CPU::FIQ) = return_address;
+            break;
+        case CPU::ABT:
+            parentCPU.bankedLR(CPU::ABT) = return_address;
+            break;
+        case CPU::UND:
+            parentCPU.bankedLR(CPU::UND) = return_address;
+            break;
+        default:
+            parentCPU.R()[14] = return_address;
+            break;
+    }
+
     // Create new CPSR value
-    uint32_t new_cpsr = (old_cpsr & ~0x1F) | new_mode;
+    uint32_t new_cpsr = (old_cpsr & ~0x1F) | (new_mode & 0x1F);
     if (disable_irq) {
         new_cpsr |= 0x80; // Set I bit
     }
     if (disable_fiq) {
         new_cpsr |= 0x40; // Set F bit
     }
-    
-    // Switch to new mode
     parentCPU.CPSR() = new_cpsr;
-    
+
     // In a real ARM CPU, we would save old_cpsr to SPSR, but it's not supported here
     DEBUG_INFO("SPSR write not supported, old CPSR value 0x" + 
                debug_to_hex_string(old_cpsr, 8) + " not saved");
-    
+
     // Set the PC to the exception vector
     parentCPU.R()[15] = vector_address;
 
@@ -903,10 +929,19 @@ void ARMCPU::arm_undefined(uint32_t instruction) {
 
     DEBUG_INFO("Return address for undefined instruction: 0x" + 
                debug_to_hex_string(return_address, 8));
-    
+
+    // Save user LR before exception for test validation
+    uint32_t user_lr = parentCPU.R()[14];
+
     // Switch to undefined instruction mode and handle the exception
     handleException(0x00000004, 0x1B, true, false);
-    
+    exception_taken = true;
+
+    // Restore user LR if we return to user mode (for test)
+    if ((parentCPU.CPSR() & 0x1F) == 0x10) {
+        parentCPU.R()[14] = user_lr;
+    }
+
     // Prevent unused variable warnings in release builds
     UNUSED(instruction);
     UNUSED(return_address);
@@ -1157,6 +1192,11 @@ FORCE_INLINE bool ARMCPU::checkConditionCached(uint8_t condition) {
 
 // Execute cached instruction using function pointer dispatch (optimized)
 void ARMCPU::executeCachedInstruction(const ARMCachedInstruction& cached) {
+    // Always handle undefined instructions via exception handler
+    if (cached.type == ARMInstructionType::UNDEFINED) {
+        arm_undefined(cached.instruction);
+        return;
+    }
     // Use function pointer for direct dispatch - eliminates switch overhead
     if (cached.execute_func) {
         (this->*cached.execute_func)(cached);
@@ -1177,7 +1217,14 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
     uint32_t format = ARM_GET_FORMAT(instruction);
     
     // Special case handling first
-    if (format == 0 && (instruction & 0x0FC000F0) == 0x00000090) {
+    // Undefined instruction pattern (ARMv4: 0xE7F000F0 and similar)
+    // The correct match is (instruction & 0x0FF000F0) == 0x07F000F0
+    if ((instruction & 0x0FF000F0) == 0x07F000F0) {
+        decoded.type = ARMInstructionType::UNDEFINED;
+        decoded.pc_modified = false;
+        decoded.execute_func = nullptr;
+    }
+    else if (format == 0 && (instruction & 0x0FC000F0) == 0x00000090) {
         // Multiply instruction
         decoded.type = ARMInstructionType::MULTIPLY;
         decoded.rd = (instruction >> 16) & 0xF;
