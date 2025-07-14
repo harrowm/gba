@@ -1592,7 +1592,11 @@ void ARMCPU::executeCachedSingleDataTransfer(const ARMCachedInstruction& cached)
 }
 
 void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
-    arm_branch(cached.instruction);
+    // Use pre-decoded branch_offset and link from cache
+    if (cached.link) {
+        parentCPU.R()[14] = parentCPU.R()[15] + 4;
+    }
+    parentCPU.R()[15] = parentCPU.R()[15] + cached.branch_offset;
 }
 
 void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) {
