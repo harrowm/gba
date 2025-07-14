@@ -1752,11 +1752,28 @@ void ARMCPU::executeCachedMultiply(const ARMCachedInstruction& cached) {
 }
 
 void ARMCPU::executeCachedBX(const ARMCachedInstruction& cached) {
-    arm_bx(cached.instruction);
+    // Use cached.rm for BX
+    uint32_t target_address = parentCPU.R()[cached.rm];
+    bool switch_to_thumb = (target_address & 1) != 0;
+    target_address &= ~1U;
+    if (switch_to_thumb) {
+        uint32_t cpsr = parentCPU.CPSR();
+        cpsr |= 0x00000020; // Set T flag (bit 5)
+        parentCPU.CPSR() = cpsr;
+    }
+    parentCPU.R()[15] = target_address;
 }
 
 void ARMCPU::executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached) {
-    arm_software_interrupt(cached.instruction);
+    // Use cached.instruction for SWI number
+    uint32_t swi_number = cached.instruction & 0x00FFFFFF;
+    uint32_t return_address = parentCPU.R()[15] + 4;
+    handleException(0x00000008, 0x13, true, false);
+    DEBUG_INFO("ARM Software Interrupt: number=0x" + 
+               debug_to_hex_string(swi_number, 6) + 
+               " return_address=0x" + debug_to_hex_string(return_address, 8));
+    UNUSED(swi_number);
+    UNUSED(return_address);
 }
 
 void ARMCPU::executeCachedPSRTransfer(const ARMCachedInstruction& cached) {
