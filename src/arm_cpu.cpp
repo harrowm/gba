@@ -1291,6 +1291,11 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
         printf("[DECODE] MULTIPLY path: instruction=0x%08X, rd(bits19-16)=%u\n", instruction, (instruction >> 16) & 0xF);
         decoded.type = ARMInstructionType::MULTIPLY;
         decoded.rd = (instruction >> 16) & 0xF;
+        decoded.rn = (instruction >> 12) & 0xF;
+        decoded.rs = (instruction >> 8) & 0xF;
+        decoded.rm = instruction & 0xF;
+        decoded.accumulate = (instruction & 0x00200000) != 0;
+        decoded.set_flags = (instruction & 0x00100000) != 0;
         decoded.pc_modified = (decoded.rd == 15);
         decoded.execute_func = &ARMCPU::executeCachedMultiply;
     }
@@ -1685,7 +1690,31 @@ void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) 
 }
 
 void ARMCPU::executeCachedMultiply(const ARMCachedInstruction& cached) {
-    arm_multiply(cached.instruction);
+    // Use cached fields to perform multiply/MLA without re-decoding
+    uint32_t rd = cached.rd;
+    uint32_t rn = cached.rn;
+    uint32_t rs = cached.rs;
+    uint32_t rm = cached.rm;
+    bool accumulate = cached.accumulate;
+    bool set_flags = cached.set_flags;
+
+    uint32_t result = parentCPU.R()[rm] * parentCPU.R()[rs];
+    if (accumulate) {
+        result += parentCPU.R()[rn];
+    }
+
+    parentCPU.R()[rd] = result;
+
+    // Set flags if requested
+    if (set_flags) {
+        uint32_t cpsr = parentCPU.CPSR();
+        cpsr &= ~(0x80000000 | 0x40000000); // Clear N and Z flags
+        cpsr |= (result & 0x80000000);      // Set N flag if result is negative
+        if (result == 0) {
+            cpsr |= 0x40000000;             // Set Z flag if result is zero
+        }
+        parentCPU.CPSR() = cpsr;
+    }
 }
 
 void ARMCPU::executeCachedBX(const ARMCachedInstruction& cached) {
