@@ -559,8 +559,8 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     EXPECT_EQ(cpu.R()[3], cpu.CPSR()) << "MRS R3, CPSR failed";
 
     // --- PSR Transfer: MSR (write CPSR flags from immediate) ---
-    // MSR CPSR_f, #0xF0000000: 0xE3EF0E0F (immediate value 0xF, rotate_imm 14)
-    uint32_t msr_cpsr_f_imm = 0xE3EF0E0F;
+    // MSR CPSR_f, #0xF0000000: 0xE32F020F (immediate value 0xF, rotate_imm 4 = 2*2 )
+    uint32_t msr_cpsr_f_imm = 0xE32F020F;
     memory.write32(0x00000034, msr_cpsr_f_imm);
     cpu.R()[15] = 0x00000034;
     arm_cpu.execute(1);
