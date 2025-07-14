@@ -232,8 +232,8 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
     } else {
         DEBUG_INFO("CACHE MISS: PC=0x" + debug_to_hex_string(pc, 8) + 
                    " Instruction=0x" + debug_to_hex_string(instruction, 8));
-        if (!checkCondition(instruction)) return false;
         ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
+        if (!checkConditionCached(decoded.condition)) return false;
         instruction_cache.insert(pc, decoded);
         executeCachedInstruction(decoded);
         if (exception_taken) return true;
@@ -243,39 +243,39 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
 
 
 // Check if instruction condition is satisfied
-bool ARMCPU::checkCondition(uint32_t instruction) {
-    ARMCondition condition = (ARMCondition)ARM_GET_CONDITION(instruction);
+// bool ARMCPU::checkCondition(uint32_t instruction) {
+//     ARMCondition condition = (ARMCondition)ARM_GET_CONDITION(instruction);
     
-    // Fast path for most common condition
-    if (condition == ARM_COND_AL) return true;  // Always - most common
+//     // Fast path for most common condition
+//     if (condition == ARM_COND_AL) return true;  // Always - most common
     
-    // Use switch statement for condition checking (reverted from function pointer optimization)
-    uint32_t cpsr = parentCPU.CPSR();
-    bool n = (cpsr >> 31) & 1;
-    bool z = (cpsr >> 30) & 1;
-    bool c = (cpsr >> 29) & 1;
-    bool v = (cpsr >> 28) & 1;
+//     // Use switch statement for condition checking (reverted from function pointer optimization)
+//     uint32_t cpsr = parentCPU.CPSR();
+//     bool n = (cpsr >> 31) & 1;
+//     bool z = (cpsr >> 30) & 1;
+//     bool c = (cpsr >> 29) & 1;
+//     bool v = (cpsr >> 28) & 1;
     
-    switch (condition) {
-        case ARM_COND_EQ: return z;         // 0000 - EQ (Z set)
-        case ARM_COND_NE: return !z;        // 0001 - NE (Z clear)
-        case ARM_COND_CS: return c;         // 0010 - CS/HS (C set)
-        case ARM_COND_CC: return !c;        // 0011 - CC/LO (C clear)
-        case ARM_COND_MI: return n;         // 0100 - MI (N set)
-        case ARM_COND_PL: return !n;        // 0101 - PL (N clear)
-        case ARM_COND_VS: return v;         // 0110 - VS (V set)
-        case ARM_COND_VC: return !v;        // 0111 - VC (V clear)
-        case ARM_COND_HI: return c && !z;   // 1000 - HI (C set and Z clear)
-        case ARM_COND_LS: return !c || z;   // 1001 - LS (C clear or Z set)
-        case ARM_COND_GE: return n == v;    // 1010 - GE (N == V)
-        case ARM_COND_LT: return n != v;    // 1011 - LT (N != V)
-        case ARM_COND_GT: return !z && (n == v); // 1100 - GT (Z clear and N == V)
-        case ARM_COND_LE: return z || (n != v);  // 1101 - LE (Z set or N != V)
-        case ARM_COND_AL: return true;      // 1110 - AL (always)
-        case ARM_COND_NV: return true;      // 1111 - NV (never/deprecated, treat as always)
-        default: return false;
-    }
-}
+//     switch (condition) {
+//         case ARM_COND_EQ: return z;         // 0000 - EQ (Z set)
+//         case ARM_COND_NE: return !z;        // 0001 - NE (Z clear)
+//         case ARM_COND_CS: return c;         // 0010 - CS/HS (C set)
+//         case ARM_COND_CC: return !c;        // 0011 - CC/LO (C clear)
+//         case ARM_COND_MI: return n;         // 0100 - MI (N set)
+//         case ARM_COND_PL: return !n;        // 0101 - PL (N clear)
+//         case ARM_COND_VS: return v;         // 0110 - VS (V set)
+//         case ARM_COND_VC: return !v;        // 0111 - VC (V clear)
+//         case ARM_COND_HI: return c && !z;   // 1000 - HI (C set and Z clear)
+//         case ARM_COND_LS: return !c || z;   // 1001 - LS (C clear or Z set)
+//         case ARM_COND_GE: return n == v;    // 1010 - GE (N == V)
+//         case ARM_COND_LT: return n != v;    // 1011 - LT (N != V)
+//         case ARM_COND_GT: return !z && (n == v); // 1100 - GT (Z clear and N == V)
+//         case ARM_COND_LE: return z || (n != v);  // 1101 - LE (Z set or N != V)
+//         case ARM_COND_AL: return true;      // 1110 - AL (always)
+//         case ARM_COND_NV: return true;      // 1111 - NV (never/deprecated, treat as always)
+//         default: return false;
+//     }
+// }
 
 // Data processing instruction handler
 // Using macros from arm_timing.h
@@ -575,323 +575,323 @@ void ARMCPU::arm_mvn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags
     }
 }
 
-// Restore missing ARM CPU functions
-void ARMCPU::arm_branch(uint32_t instruction) {
-    // Extract the 24-bit signed offset and shift left 2 bits
-    int32_t offset = ((instruction & 0x00FFFFFF) << 2);
+// // Restore missing ARM CPU functions
+// void ARMCPU::arm_branch(uint32_t instruction) {
+//     // Extract the 24-bit signed offset and shift left 2 bits
+//     int32_t offset = ((instruction & 0x00FFFFFF) << 2);
     
-    // Sign extend from 26 bits to 32 bits
-    if (offset & 0x02000000) {
-        offset |= 0xFC000000;
-    }
+//     // Sign extend from 26 bits to 32 bits
+//     if (offset & 0x02000000) {
+//         offset |= 0xFC000000;
+//     }
     
-    // Get the link bit
-    bool link = (instruction & 0x01000000) != 0;
+//     // Get the link bit
+//     bool link = (instruction & 0x01000000) != 0;
     
-    // If link bit is set (BL instruction), store the return address in LR
-    if (link) {
-        parentCPU.R()[14] = parentCPU.R()[15] + 4;
-    }
+//     // If link bit is set (BL instruction), store the return address in LR
+//     if (link) {
+//         parentCPU.R()[14] = parentCPU.R()[15] + 4;
+//     }
     
-    // Update PC (R15)
-    parentCPU.R()[15] = parentCPU.R()[15] + offset + 8;
+//     // Update PC (R15)
+//     parentCPU.R()[15] = parentCPU.R()[15] + offset + 8;
     
 
-    DEBUG_INFO("ARM Branch instruction executed: " + 
-               debug_to_hex_string(instruction, 8) + 
-               " with offset: " + std::to_string(offset) + 
-               " link: " + std::to_string(link) + 
-               " new PC: 0x" + debug_to_hex_string(parentCPU.R()[15], 8)); 
-}
+//     DEBUG_INFO("ARM Branch instruction executed: " + 
+//                debug_to_hex_string(instruction, 8) + 
+//                " with offset: " + std::to_string(offset) + 
+//                " link: " + std::to_string(link) + 
+//                " new PC: 0x" + debug_to_hex_string(parentCPU.R()[15], 8)); 
+// }
 
-void ARMCPU::arm_single_data_transfer(uint32_t instruction) {
-    bool pre_indexing = (instruction & 0x01000000) != 0;
-    bool add_offset = (instruction & 0x00800000) != 0;
-    bool write_back = (instruction & 0x00200000) != 0;
-    bool load = (instruction & 0x00100000) != 0;
-    bool byte_transfer = (instruction & 0x00400000) != 0;
+// void ARMCPU::arm_single_data_transfer(uint32_t instruction) {
+//     bool pre_indexing = (instruction & 0x01000000) != 0;
+//     bool add_offset = (instruction & 0x00800000) != 0;
+//     bool write_back = (instruction & 0x00200000) != 0;
+//     bool load = (instruction & 0x00100000) != 0;
+//     bool byte_transfer = (instruction & 0x00400000) != 0;
 
-    uint32_t rn = (instruction >> 16) & 0xF;
-    uint32_t rd = (instruction >> 12) & 0xF;
-    uint32_t address = parentCPU.R()[rn];
+//     uint32_t rn = (instruction >> 16) & 0xF;
+//     uint32_t rd = (instruction >> 12) & 0xF;
+//     uint32_t address = parentCPU.R()[rn];
 
-    // Calculate offset
-    uint32_t offset = 0;
-    if ((instruction & 0x02000000) == 0) {
-        // Immediate offset (I bit == 0)
-        offset = instruction & 0xFFF;
-    } else {
-        // Register offset (I bit == 1)
-        uint32_t rm = instruction & 0xF;
-        uint32_t shift_type = (instruction >> 5) & 0x3;
-        uint32_t shift_amount = (instruction >> 7) & 0x1F;
-        uint32_t carry_out = 0;
-        offset = arm_apply_shift(parentCPU.R()[rm], shift_type, shift_amount, &carry_out);
-    }
+//     // Calculate offset
+//     uint32_t offset = 0;
+//     if ((instruction & 0x02000000) == 0) {
+//         // Immediate offset (I bit == 0)
+//         offset = instruction & 0xFFF;
+//     } else {
+//         // Register offset (I bit == 1)
+//         uint32_t rm = instruction & 0xF;
+//         uint32_t shift_type = (instruction >> 5) & 0x3;
+//         uint32_t shift_amount = (instruction >> 7) & 0x1F;
+//         uint32_t carry_out = 0;
+//         offset = arm_apply_shift(parentCPU.R()[rm], shift_type, shift_amount, &carry_out);
+//     }
 
-    // Apply offset based on the add/sub bit
-    uint32_t effective_address = address;
-    if (add_offset) {
-        effective_address = address + offset;
-    } else {
-        effective_address = address - offset;
-    }
+//     // Apply offset based on the add/sub bit
+//     uint32_t effective_address = address;
+//     if (add_offset) {
+//         effective_address = address + offset;
+//     } else {
+//         effective_address = address - offset;
+//     }
 
-    // Pre-indexing: use effective address for memory access
-    // Post-indexing: use original address for memory access, then update register
-    uint32_t access_address = pre_indexing ? effective_address : address;
+//     // Pre-indexing: use effective address for memory access
+//     // Post-indexing: use original address for memory access, then update register
+//     uint32_t access_address = pre_indexing ? effective_address : address;
 
-    if (load) {
-        // Load from memory to register
-        if (byte_transfer) {
-            parentCPU.R()[rd] = parentCPU.getMemory().read8(access_address);
-        } else {
-            parentCPU.R()[rd] = parentCPU.getMemory().read32(access_address);
-        }
-    } else {
-        // Store from register to memory
-        if (byte_transfer) {
-            parentCPU.getMemory().write8(access_address, parentCPU.R()[rd] & 0xFF);
-        } else {
-            parentCPU.getMemory().write32(access_address, parentCPU.R()[rd]);
-        }
-    }
+//     if (load) {
+//         // Load from memory to register
+//         if (byte_transfer) {
+//             parentCPU.R()[rd] = parentCPU.getMemory().read8(access_address);
+//         } else {
+//             parentCPU.R()[rd] = parentCPU.getMemory().read32(access_address);
+//         }
+//     } else {
+//         // Store from register to memory
+//         if (byte_transfer) {
+//             parentCPU.getMemory().write8(access_address, parentCPU.R()[rd] & 0xFF);
+//         } else {
+//             parentCPU.getMemory().write32(access_address, parentCPU.R()[rd]);
+//         }
+//     }
 
-    // Write back the address if requested or post-indexing
-    if ((pre_indexing && write_back) || !pre_indexing) {
-        parentCPU.R()[rn] = effective_address;
-    }
-}
+//     // Write back the address if requested or post-indexing
+//     if ((pre_indexing && write_back) || !pre_indexing) {
+//         parentCPU.R()[rn] = effective_address;
+//     }
+// }
 
-void ARMCPU::arm_block_data_transfer(uint32_t instruction) {
-    bool pre_indexing = (instruction & 0x01000000) != 0;
-    bool add_offset = (instruction & 0x00800000) != 0;
-    // NOTE: psr_force_user flag is currently unused but kept for documentation
-    // bool psr_force_user = (instruction & 0x00400000) != 0;
-    bool write_back = (instruction & 0x00200000) != 0;
-    bool load = (instruction & 0x00100000) != 0;
+// void ARMCPU::arm_block_data_transfer(uint32_t instruction) {
+//     bool pre_indexing = (instruction & 0x01000000) != 0;
+//     bool add_offset = (instruction & 0x00800000) != 0;
+//     // NOTE: psr_force_user flag is currently unused but kept for documentation
+//     // bool psr_force_user = (instruction & 0x00400000) != 0;
+//     bool write_back = (instruction & 0x00200000) != 0;
+//     bool load = (instruction & 0x00100000) != 0;
     
-    uint32_t rn = (instruction >> 16) & 0xF;
-    uint16_t register_list = instruction & 0xFFFF;
+//     uint32_t rn = (instruction >> 16) & 0xF;
+//     uint16_t register_list = instruction & 0xFFFF;
     
-    uint32_t address = parentCPU.R()[rn];
-    uint32_t old_address = address;
-    uint32_t num_registers = __builtin_popcount(register_list);
+//     uint32_t address = parentCPU.R()[rn];
+//     uint32_t old_address = address;
+//     uint32_t num_registers = __builtin_popcount(register_list);
     
-    // If pre-indexing, adjust address before first access
-    if (pre_indexing) {
-        if (add_offset) {
-            address += 4;
-        } else {
-            address -= 4;
-        }
-    }
+//     // If pre-indexing, adjust address before first access
+//     if (pre_indexing) {
+//         if (add_offset) {
+//             address += 4;
+//         } else {
+//             address -= 4;
+//         }
+//     }
     
-    // Perform the memory access for each register in the list
-    for (uint32_t i = 0; i < 16; i++) {
-        if (register_list & (1 << i)) {
-            // For load operations, use temporary variables to avoid overwriting base register
-            if (load) {
-                uint32_t loaded_value = parentCPU.getMemory().read32(address);
-                if (i != rn || !write_back) {
-                    parentCPU.R()[i] = loaded_value;
-                }
-            } else {
-                parentCPU.getMemory().write32(address, parentCPU.R()[i]);
-            }
+//     // Perform the memory access for each register in the list
+//     for (uint32_t i = 0; i < 16; i++) {
+//         if (register_list & (1 << i)) {
+//             // For load operations, use temporary variables to avoid overwriting base register
+//             if (load) {
+//                 uint32_t loaded_value = parentCPU.getMemory().read32(address);
+//                 if (i != rn || !write_back) {
+//                     parentCPU.R()[i] = loaded_value;
+//                 }
+//             } else {
+//                 parentCPU.getMemory().write32(address, parentCPU.R()[i]);
+//             }
             
-            // Update address for next register
-            if (add_offset) {
-                address += 4;
-            } else {
-                address -= 4;
-            }
-        }
-    }
+//             // Update address for next register
+//             if (add_offset) {
+//                 address += 4;
+//             } else {
+//                 address -= 4;
+//             }
+//         }
+//     }
     
-    // Update base register if write-back is enabled
-    if (write_back && (!(register_list & (1 << rn)) || !load)) {
-        if (add_offset) {
-            parentCPU.R()[rn] = old_address + 4 * num_registers;
-        } else {
-            parentCPU.R()[rn] = old_address - 4 * num_registers;
-        }
-    }
-}
+//     // Update base register if write-back is enabled
+//     if (write_back && (!(register_list & (1 << rn)) || !load)) {
+//         if (add_offset) {
+//             parentCPU.R()[rn] = old_address + 4 * num_registers;
+//         } else {
+//             parentCPU.R()[rn] = old_address - 4 * num_registers;
+//         }
+//     }
+// }
 
-void ARMCPU::arm_multiply(uint32_t instruction) {
-    bool accumulate = (instruction & 0x00200000) != 0;
-    bool set_flags = (instruction & 0x00100000) != 0;
+// void ARMCPU::arm_multiply(uint32_t instruction) {
+//     bool accumulate = (instruction & 0x00200000) != 0;
+//     bool set_flags = (instruction & 0x00100000) != 0;
 
-    // ARM multiply/MLA field mapping:
-    // Rd = bits 19-16, Rn = bits 15-12 (accumulate), Rs = bits 11-8, Rm = bits 3-0
-    uint32_t rd = (instruction >> 16) & 0xF;
-    uint32_t rn = (instruction >> 12) & 0xF;
-    uint32_t rs = (instruction >> 8) & 0xF;
-    uint32_t rm = instruction & 0xF;
+//     // ARM multiply/MLA field mapping:
+//     // Rd = bits 19-16, Rn = bits 15-12 (accumulate), Rs = bits 11-8, Rm = bits 3-0
+//     uint32_t rd = (instruction >> 16) & 0xF;
+//     uint32_t rn = (instruction >> 12) & 0xF;
+//     uint32_t rs = (instruction >> 8) & 0xF;
+//     uint32_t rm = instruction & 0xF;
 
-    uint32_t result = parentCPU.R()[rm] * parentCPU.R()[rs];
-    if (accumulate) {
-        result += parentCPU.R()[rn];
-    }
+//     uint32_t result = parentCPU.R()[rm] * parentCPU.R()[rs];
+//     if (accumulate) {
+//         result += parentCPU.R()[rn];
+//     }
 
-    parentCPU.R()[rd] = result;
+//     parentCPU.R()[rd] = result;
 
-    // Set flags if requested
-    if (set_flags) {
-        uint32_t cpsr = parentCPU.CPSR();
-        cpsr &= ~(0x80000000 | 0x40000000); // Clear N and Z flags
-        cpsr |= (result & 0x80000000);      // Set N flag if result is negative
-        if (result == 0) {
-            cpsr |= 0x40000000;             // Set Z flag if result is zero
-        }
-        parentCPU.CPSR() = cpsr;
-    }
-}
+//     // Set flags if requested
+//     if (set_flags) {
+//         uint32_t cpsr = parentCPU.CPSR();
+//         cpsr &= ~(0x80000000 | 0x40000000); // Clear N and Z flags
+//         cpsr |= (result & 0x80000000);      // Set N flag if result is negative
+//         if (result == 0) {
+//             cpsr |= 0x40000000;             // Set Z flag if result is zero
+//         }
+//         parentCPU.CPSR() = cpsr;
+//     }
+// }
 
-void ARMCPU::arm_bx(uint32_t instruction) {
-    uint32_t rm = instruction & 0xF;
-    uint32_t target_address = parentCPU.R()[rm];
+// void ARMCPU::arm_bx(uint32_t instruction) {
+//     uint32_t rm = instruction & 0xF;
+//     uint32_t target_address = parentCPU.R()[rm];
     
-    // Check if switching to Thumb mode (bit 0 of target address)
-    bool switch_to_thumb = (target_address & 1) != 0;
+//     // Check if switching to Thumb mode (bit 0 of target address)
+//     bool switch_to_thumb = (target_address & 1) != 0;
     
-    // Clear the least significant bit for address alignment
-    target_address &= ~1U;
+//     // Clear the least significant bit for address alignment
+//     target_address &= ~1U;
     
-    // Update CPSR T flag if switching to Thumb mode
-    if (switch_to_thumb) {
-        uint32_t cpsr = parentCPU.CPSR();
-        cpsr |= 0x00000020; // Set T flag (bit 5)
-        parentCPU.CPSR() = cpsr;
-    }
+//     // Update CPSR T flag if switching to Thumb mode
+//     if (switch_to_thumb) {
+//         uint32_t cpsr = parentCPU.CPSR();
+//         cpsr |= 0x00000020; // Set T flag (bit 5)
+//         parentCPU.CPSR() = cpsr;
+//     }
     
-    // Update PC (R15)
-    parentCPU.R()[15] = target_address;
-}
+//     // Update PC (R15)
+//     parentCPU.R()[15] = target_address;
+// }
 
-void ARMCPU::arm_software_interrupt(uint32_t instruction) {
-    // Extract SWI number
-    uint32_t swi_number = instruction & 0x00FFFFFF;
+// void ARMCPU::arm_software_interrupt(uint32_t instruction) {
+//     // Extract SWI number
+//     uint32_t swi_number = instruction & 0x00FFFFFF;
     
-    // Calculate the return address (PC+4)
-    uint32_t return_address = parentCPU.R()[15] + 4;
+//     // Calculate the return address (PC+4)
+//     uint32_t return_address = parentCPU.R()[15] + 4;
     
-    // Switch to supervisor mode and handle the software interrupt
-    handleException(0x00000008, 0x13, true, false);
+//     // Switch to supervisor mode and handle the software interrupt
+//     handleException(0x00000008, 0x13, true, false);
     
-    DEBUG_INFO("ARM Software Interrupt: number=0x" + 
-               debug_to_hex_string(swi_number, 6) + 
-               " return_address=0x" + debug_to_hex_string(return_address, 8));
+//     DEBUG_INFO("ARM Software Interrupt: number=0x" + 
+//                debug_to_hex_string(swi_number, 6) + 
+//                " return_address=0x" + debug_to_hex_string(return_address, 8));
     
-    // Use variables to avoid unused warnings in release builds
-    UNUSED(swi_number);
-    UNUSED(return_address);
-}
+//     // Use variables to avoid unused warnings in release builds
+//     UNUSED(swi_number);
+//     UNUSED(return_address);
+// }
 
-void ARMCPU::arm_psr_transfer(uint32_t instruction) {
-    printf("[TRACE] Entered arm_psr_transfer for instruction=0x%08X\n", instruction); fflush(stdout);
-    bool is_cpsr = ((instruction & 0x00400000) == 0); // 1=CPSR (bit 22=0), 0=SPSR (bit 22=1)
-    bool is_mrs = (instruction & 0x00200000) == 0; // 0=MSR, 1=MRS
+// void ARMCPU::arm_psr_transfer(uint32_t instruction) {
+//     printf("[TRACE] Entered arm_psr_transfer for instruction=0x%08X\n", instruction); fflush(stdout);
+//     bool is_cpsr = ((instruction & 0x00400000) == 0); // 1=CPSR (bit 22=0), 0=SPSR (bit 22=1)
+//     bool is_mrs = (instruction & 0x00200000) == 0; // 0=MSR, 1=MRS
 
-    DEBUG_INFO("ARM PSR Transfer: is_cpsr=" + std::to_string(is_cpsr) + 
-               " is_mrs=" + std::to_string(is_mrs) + 
-               " instruction=0x" + debug_to_hex_string(instruction, 8));
-    if (!is_mrs) {
-        // MSR: Move from register/immediate to PSR
-        uint32_t field_mask = (instruction >> 16) & 0xF;
-        uint32_t value;
+//     DEBUG_INFO("ARM PSR Transfer: is_cpsr=" + std::to_string(is_cpsr) + 
+//                " is_mrs=" + std::to_string(is_mrs) + 
+//                " instruction=0x" + debug_to_hex_string(instruction, 8));
+//     if (!is_mrs) {
+//         // MSR: Move from register/immediate to PSR
+//         uint32_t field_mask = (instruction >> 16) & 0xF;
+//         uint32_t value;
 
-        if (instruction & 0x02000000) {
-            // Immediate operand (ARM: rotate right by 2*rotate_imm)
-            printf("[***TRACE***] [arm_psr_transfer] instruction=0x%08X, calc rotate_field=%u\n", instruction, (instruction >> 8) & 0xF);
+//         if (instruction & 0x02000000) {
+//             // Immediate operand (ARM: rotate right by 2*rotate_imm)
+//             printf("[***TRACE***] [arm_psr_transfer] instruction=0x%08X, calc rotate_field=%u\n", instruction, (instruction >> 8) & 0xF);
 
-            uint32_t imm = instruction & 0xFF;
-            printf("[***TRACE***] [arm_psr_transfer] instruction=0x%08X, calc rotate_field=%u\n", instruction, (instruction >> 8) & 0xF);
+//             uint32_t imm = instruction & 0xFF;
+//             printf("[***TRACE***] [arm_psr_transfer] instruction=0x%08X, calc rotate_field=%u\n", instruction, (instruction >> 8) & 0xF);
             
-            uint32_t rotate_field = (instruction >> 8) & 0xF;
-            uint32_t rotate = rotate_field * 2;
-            printf("[***TRACE***] [arm_psr_transfer] instruction=0x%08X, field_mask=0x%X, imm=0x%02X, rotate_field=%u, rotate=%u\n", instruction, field_mask, imm, rotate_field, rotate);
-            value = (uint32_t)imm;
-            if (rotate) {
-                printf("[DEBUG] MSR: rotating immediate value: before=0x%08X, amount=%u\n", value, rotate);
-                value = ror32(value, rotate);
-                printf("[DEBUG] MSR: rotating immediate value: after=0x%08X\n", value);
-            } else {
-                printf("[DEBUG] MSR: no rotation applied, value=0x%08X\n", value);
-            }
-            printf("[DEBUG] MSR: (final) value to write=0x%08X\n", value);
-        } else {
-            // Register operand
-            uint32_t rm = instruction & 0xF;
-            value = parentCPU.R()[rm];
-            printf("[DEBUG] MSR: register operand Rm=R%d=0x%08X\n", rm, value);
-        }
+//             uint32_t rotate_field = (instruction >> 8) & 0xF;
+//             uint32_t rotate = rotate_field * 2;
+//             printf("[***TRACE***] [arm_psr_transfer] instruction=0x%08X, field_mask=0x%X, imm=0x%02X, rotate_field=%u, rotate=%u\n", instruction, field_mask, imm, rotate_field, rotate);
+//             value = (uint32_t)imm;
+//             if (rotate) {
+//                 printf("[DEBUG] MSR: rotating immediate value: before=0x%08X, amount=%u\n", value, rotate);
+//                 value = ror32(value, rotate);
+//                 printf("[DEBUG] MSR: rotating immediate value: after=0x%08X\n", value);
+//             } else {
+//                 printf("[DEBUG] MSR: no rotation applied, value=0x%08X\n", value);
+//             }
+//             printf("[DEBUG] MSR: (final) value to write=0x%08X\n", value);
+//         } else {
+//             // Register operand
+//             uint32_t rm = instruction & 0xF;
+//             value = parentCPU.R()[rm];
+//             printf("[DEBUG] MSR: register operand Rm=R%d=0x%08X\n", rm, value);
+//         }
 
-        // Apply field mask and update PSR (ARM: c=0x000000FF, x=0x0000FF00, s=0x00FF0000, f=0xF0000000)
-        uint32_t psr = parentCPU.CPSR(); // Always use CPSR since SPSR is not supported
-        printf("[DEBUG] MSR: before update, field_mask=0x%X, value=0x%08X, old CPSR=0x%08X\n", field_mask, value, psr);
-        printf("[DEBUG] MSR: old CPSR fields: control=0x%02X, extension=0x%02X, status=0x%02X, flags=0x%02X\n", psr & 0xFF, (psr >> 8) & 0xFF, (psr >> 16) & 0xFF, (psr >> 24) & 0xFF);
-        if (field_mask & 1) { // c
-            uint32_t control = value & 0xFF;
-            printf("[DEBUG] MSR: updating control field: old=0x%02X, new=0x%02X\n", psr & 0xFF, control);
-            psr = (psr & ~0x000000FF) | (control << 0);
-            printf("[DEBUG] MSR: control field after update: 0x%02X\n", psr & 0xFF);
-        }
-        if (field_mask & 2) { // x
-            uint32_t extension = (value >> 8) & 0xFF;
-            printf("[DEBUG] MSR: updating extension field: old=0x%02X, new=0x%02X\n", (psr >> 8) & 0xFF, extension);
-            psr = (psr & ~0x0000FF00) | (extension << 8);
-            printf("[DEBUG] MSR: extension field after update: 0x%02X\n", (psr >> 8) & 0xFF);
-        }
-        if (field_mask & 4) { // s
-            uint32_t status = (value >> 16) & 0xFF;
-            printf("[DEBUG] MSR: updating status field: old=0x%02X, new=0x%02X\n", (psr >> 16) & 0xFF, status);
-            psr = (psr & ~0x00FF0000) | (status << 16);
-            printf("[DEBUG] MSR: status field after update: 0x%02X\n", (psr >> 16) & 0xFF);
-        }
-        if (field_mask & 8) { // f
-            uint32_t flags_nibble = (value >> 28) & 0xF;
-            printf("[DEBUG] MSR: updating flags field: old=0x%01X, new=0x%01X\n", (psr >> 28) & 0xF, flags_nibble);
-            psr = (psr & ~0xF0000000) | (flags_nibble << 28);
-            printf("[DEBUG] MSR: flags field after update: 0x%01X\n", (psr >> 28) & 0xF);
-        }
-        printf("[DEBUG] MSR: after update, new CPSR=0x%08X\n", psr);
-        printf("[DEBUG] MSR: new CPSR fields: control=0x%02X, extension=0x%02X, status=0x%02X, flags=0x%02X\n", psr & 0xFF, (psr >> 8) & 0xFF, (psr >> 16) & 0xFF, (psr >> 24) & 0xFF);
+//         // Apply field mask and update PSR (ARM: c=0x000000FF, x=0x0000FF00, s=0x00FF0000, f=0xF0000000)
+//         uint32_t psr = parentCPU.CPSR(); // Always use CPSR since SPSR is not supported
+//         printf("[DEBUG] MSR: before update, field_mask=0x%X, value=0x%08X, old CPSR=0x%08X\n", field_mask, value, psr);
+//         printf("[DEBUG] MSR: old CPSR fields: control=0x%02X, extension=0x%02X, status=0x%02X, flags=0x%02X\n", psr & 0xFF, (psr >> 8) & 0xFF, (psr >> 16) & 0xFF, (psr >> 24) & 0xFF);
+//         if (field_mask & 1) { // c
+//             uint32_t control = value & 0xFF;
+//             printf("[DEBUG] MSR: updating control field: old=0x%02X, new=0x%02X\n", psr & 0xFF, control);
+//             psr = (psr & ~0x000000FF) | (control << 0);
+//             printf("[DEBUG] MSR: control field after update: 0x%02X\n", psr & 0xFF);
+//         }
+//         if (field_mask & 2) { // x
+//             uint32_t extension = (value >> 8) & 0xFF;
+//             printf("[DEBUG] MSR: updating extension field: old=0x%02X, new=0x%02X\n", (psr >> 8) & 0xFF, extension);
+//             psr = (psr & ~0x0000FF00) | (extension << 8);
+//             printf("[DEBUG] MSR: extension field after update: 0x%02X\n", (psr >> 8) & 0xFF);
+//         }
+//         if (field_mask & 4) { // s
+//             uint32_t status = (value >> 16) & 0xFF;
+//             printf("[DEBUG] MSR: updating status field: old=0x%02X, new=0x%02X\n", (psr >> 16) & 0xFF, status);
+//             psr = (psr & ~0x00FF0000) | (status << 16);
+//             printf("[DEBUG] MSR: status field after update: 0x%02X\n", (psr >> 16) & 0xFF);
+//         }
+//         if (field_mask & 8) { // f
+//             uint32_t flags_nibble = (value >> 28) & 0xF;
+//             printf("[DEBUG] MSR: updating flags field: old=0x%01X, new=0x%01X\n", (psr >> 28) & 0xF, flags_nibble);
+//             psr = (psr & ~0xF0000000) | (flags_nibble << 28);
+//             printf("[DEBUG] MSR: flags field after update: 0x%01X\n", (psr >> 28) & 0xF);
+//         }
+//         printf("[DEBUG] MSR: after update, new CPSR=0x%08X\n", psr);
+//         printf("[DEBUG] MSR: new CPSR fields: control=0x%02X, extension=0x%02X, status=0x%02X, flags=0x%02X\n", psr & 0xFF, (psr >> 8) & 0xFF, (psr >> 16) & 0xFF, (psr >> 24) & 0xFF);
 
-        // DEBUG: Print for MOV LSR #32 case
-        if (((instruction >> 5) & 3) == 1 && ((instruction >> 7) & 0x1F) == 0) {
-            uint32_t rm = parentCPU.R()[instruction & 0xF];
-            printf("[DEBUG] MOV LSR #32: Rm=0x%08X, shift_amount=32\n", rm);
-        }
+//         // DEBUG: Print for MOV LSR #32 case
+//         if (((instruction >> 5) & 3) == 1 && ((instruction >> 7) & 0x1F) == 0) {
+//             uint32_t rm = parentCPU.R()[instruction & 0xF];
+//             printf("[DEBUG] MOV LSR #32: Rm=0x%08X, shift_amount=32\n", rm);
+//         }
 
-        // Update the PSR
-        if (is_cpsr) {
-            DEBUG_INFO("MSR: Writing to CPSR, new value 0x" + debug_to_hex_string(psr, 8));
-            parentCPU.CPSR() = psr;
-        } else {
-            // SPSR not supported, log warning
-            DEBUG_INFO("MSR: SPSR write not supported, operation ignored");
-        }
-    } else {
-        // MRS: Move from PSR to register
-        uint32_t rd = (instruction >> 12) & 0xF;
-        uint32_t cpsr_val = parentCPU.CPSR();
-        DEBUG_INFO("MRS: Writing CPSR value 0x" + debug_to_hex_string(cpsr_val, 8) + " to R" + std::to_string(rd));
-        if (is_cpsr) {
-            // CPSR -> Rd
-            DEBUG_INFO("MRS: CPSR access, R" + std::to_string(rd) + " = 0x" + debug_to_hex_string(cpsr_val, 8));
-            parentCPU.R()[rd] = cpsr_val;
-        } else {
-            // SPSR -> Rd (not supported in this implementation)
-            // Use CPSR as fallback
-            DEBUG_INFO("MRS: SPSR access not supported, using CPSR instead");
-            parentCPU.R()[rd] = cpsr_val;
+//         // Update the PSR
+//         if (is_cpsr) {
+//             DEBUG_INFO("MSR: Writing to CPSR, new value 0x" + debug_to_hex_string(psr, 8));
+//             parentCPU.CPSR() = psr;
+//         } else {
+//             // SPSR not supported, log warning
+//             DEBUG_INFO("MSR: SPSR write not supported, operation ignored");
+//         }
+//     } else {
+//         // MRS: Move from PSR to register
+//         uint32_t rd = (instruction >> 12) & 0xF;
+//         uint32_t cpsr_val = parentCPU.CPSR();
+//         DEBUG_INFO("MRS: Writing CPSR value 0x" + debug_to_hex_string(cpsr_val, 8) + " to R" + std::to_string(rd));
+//         if (is_cpsr) {
+//             // CPSR -> Rd
+//             DEBUG_INFO("MRS: CPSR access, R" + std::to_string(rd) + " = 0x" + debug_to_hex_string(cpsr_val, 8));
+//             parentCPU.R()[rd] = cpsr_val;
+//         } else {
+//             // SPSR -> Rd (not supported in this implementation)
+//             // Use CPSR as fallback
+//             DEBUG_INFO("MRS: SPSR access not supported, using CPSR instead");
+//             parentCPU.R()[rd] = cpsr_val;
 
-        }
-        DEBUG_INFO("MRS: After, R" + std::to_string(rd) + " = 0x" + debug_to_hex_string(parentCPU.R()[rd], 8));
-    }
-}
+//         }
+//         DEBUG_INFO("MRS: After, R" + std::to_string(rd) + " = 0x" + debug_to_hex_string(parentCPU.R()[rd], 8));
+//     }
+// }
 
 // Add simplified exception handling implementation
 void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq) {
