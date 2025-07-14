@@ -167,38 +167,50 @@ FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* 
                 }
             }
         }
+        // Debug print for shifter operand
+        const char* shift_names[] = {"LSL", "LSR", "ASR", "ROR"};
+        printf("[SHIFTER] type=%s (%u), amount=%u, rm=0x%08X\n", shift_names[shift_type], shift_type, shift_amount, rm);
         switch (shift_type) {
             case 0: // LSL
                 if (shift_amount >= 32) {
                     *carry_out = (shift_amount == 32) ? (rm & 1) : 0;
+                    printf("[SHIFTER] LSL >=32: result=0\n");
                     return 0;
                 }
                 *carry_out = (rm >> (32 - shift_amount)) & 1;
+                printf("[SHIFTER] LSL: result=0x%08X\n", rm << shift_amount);
                 return rm << shift_amount;
             case 1: // LSR
                 if (shift_amount == 32) {
                     *carry_out = (rm >> 31) & 1;
+                    printf("[SHIFTER] LSR ==32: result=0\n");
                     return 0;
                 } else if (shift_amount > 32) {
                     *carry_out = 0;
+                    printf("[SHIFTER] LSR >32: result=0\n");
                     return 0;
                 }
                 *carry_out = (rm >> (shift_amount - 1)) & 1;
+                printf("[SHIFTER] LSR: result=0x%08X\n", rm >> shift_amount);
                 return rm >> shift_amount;
             case 2: // ASR
                 if (shift_amount >= 32) {
                     *carry_out = (rm >> 31) & 1;
+                    printf("[SHIFTER] ASR >=32: result=0x%08X\n", (rm & 0x80000000) ? 0xFFFFFFFF : 0);
                     return (rm & 0x80000000) ? 0xFFFFFFFF : 0;
                 }
                 *carry_out = (rm >> (shift_amount - 1)) & 1;
+                printf("[SHIFTER] ASR: result=0x%08X\n", static_cast<int32_t>(rm) >> shift_amount);
                 return static_cast<int32_t>(rm) >> shift_amount;
             case 3: // ROR
                 if (shift_amount == 0) {
                     *carry_out = (parentCPU.CPSR() >> 29) & 1;
+                    printf("[SHIFTER] ROR #0: result=0x%08X\n", rm);
                     return rm;
                 }
                 shift_amount %= 32;
                 *carry_out = (rm >> (shift_amount - 1)) & 1;
+                printf("[SHIFTER] ROR: result=0x%08X\n", (rm >> shift_amount) | (rm << (32 - shift_amount)));
                 return (rm >> shift_amount) | (rm << (32 - shift_amount));
         }
         return rm;
@@ -1059,9 +1071,9 @@ uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t s
 // Implementation of arm_mov with FORCE_INLINE
 FORCE_INLINE void ARMCPU::arm_mov(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out) {
     UNUSED(rn); // MOV doesn't use Rn
-    
+    printf("[DEBUG] arm_mov called: rd=R%u, operand2=0x%08X\n", rd, operand2);
     parentCPU.R()[rd] = operand2;
-    
+    printf("[DEBUG] arm_mov after write: R%u=0x%08X\n", rd, parentCPU.R()[rd]);
     if (set_flags && rd != 15) { // PC updates need special handling
         updateFlagsLogical(operand2, carry_out);
     }
@@ -1251,8 +1263,10 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
         decoded.pc_modified = false;
         decoded.execute_func = nullptr;
     }
-    else if (format == 0 && (instruction & 0x0FC000F0) == 0x00000090) {
+    // ARM multiply: bits 27-22=000000, bits 7-4=1001
+    else if (format == 0 && (instruction & 0x0FF000F0) == 0x00000090) {
         // Multiply instruction
+        printf("[DECODE] MULTIPLY path: instruction=0x%08X, rd(bits19-16)=%u\n", instruction, (instruction >> 16) & 0xF);
         decoded.type = ARMInstructionType::MULTIPLY;
         decoded.rd = (instruction >> 16) & 0xF;
         decoded.pc_modified = (decoded.rd == 15);
@@ -1337,6 +1351,7 @@ ARMCachedInstruction ARMCPU::decodeDataProcessing(uint32_t pc, uint32_t instruct
     decoded.set_flags = (instruction >> 20) & 1;
     decoded.rn = (instruction >> 16) & 0xF;
     decoded.rd = (instruction >> 12) & 0xF;
+    printf("[DECODE] DATA_PROC path: instruction=0x%08X, rd(bits15-12)=%u\n", instruction, decoded.rd);
     decoded.immediate = (instruction >> 25) & 1;
     
     // Determine if PC is modified
