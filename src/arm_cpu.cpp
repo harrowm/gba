@@ -1779,7 +1779,47 @@ void ARMCPU::executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached) 
 void ARMCPU::executeCachedPSRTransfer(const ARMCachedInstruction& cached) {
     printf("[HANDLER] PSRTransfer for instruction=0x%08X\n", cached.instruction); fflush(stdout);
     printf("[TRACE] Entered executeCachedPSRTransfer for cached instruction=0x%08X\n", cached.instruction); fflush(stdout);
-    arm_psr_transfer(cached.instruction);
+    // Inline arm_psr_transfer logic using only cached fields
+    bool is_cpsr = ((cached.instruction & 0x00400000) == 0); // 1=CPSR (bit 22=0), 0=SPSR (bit 22=1)
+    bool is_mrs = (cached.instruction & 0x00200000) == 0; // 0=MSR, 1=MRS
+
+    if (!is_mrs) {
+        // MSR: Move from register/immediate to PSR
+        uint32_t field_mask = (cached.instruction >> 16) & 0xF;
+        uint32_t value;
+        if (cached.instruction & 0x02000000) {
+            // Immediate operand
+            uint32_t imm = cached.instruction & 0xFF;
+            uint32_t rotate_field = (cached.instruction >> 8) & 0xF;
+            uint32_t rotate = rotate_field * 2;
+            value = imm;
+            if (rotate) {
+                value = ror32(value, rotate);
+            }
+        } else {
+            // Register operand
+            uint32_t rm = cached.instruction & 0xF;
+            value = parentCPU.R()[rm];
+        }
+        uint32_t psr = parentCPU.CPSR();
+        if (field_mask & 1) psr = (psr & ~0x000000FF) | ((value & 0xFF) << 0);
+        if (field_mask & 2) psr = (psr & ~0x0000FF00) | (((value >> 8) & 0xFF) << 8);
+        if (field_mask & 4) psr = (psr & ~0x00FF0000) | (((value >> 16) & 0xFF) << 16);
+        if (field_mask & 8) psr = (psr & ~0xF0000000) | (((value >> 28) & 0xF) << 28);
+        if (is_cpsr) {
+            parentCPU.CPSR() = psr;
+        }
+        // SPSR not supported
+    } else {
+        // MRS: Move from PSR to register
+        uint32_t rd = (cached.instruction >> 12) & 0xF;
+        uint32_t cpsr_val = parentCPU.CPSR();
+        if (is_cpsr) {
+            parentCPU.R()[rd] = cpsr_val;
+        } else {
+            parentCPU.R()[rd] = cpsr_val; // SPSR not supported
+        }
+    }
 }
 
 void ARMCPU::executeCachedCoprocessor(const ARMCachedInstruction& cached) {
