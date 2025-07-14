@@ -123,14 +123,18 @@ FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* 
     if (instruction & 0x02000000) {
         // Immediate operand
         uint32_t imm = instruction & 0xFF;
-        uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
+        uint32_t rotate_field = (instruction >> 8) & 0xF;
+        uint32_t rotate = rotate_field * 2;
+        printf("[TRACE] [calculateOperand2] instruction=0x%08X, imm=0x%02X, rotate_field=%u, rotate=%u\n", instruction, imm, rotate_field, rotate);
         if (rotate == 0) {
             *carry_out = (parentCPU.CPSR() >> 29) & 1;
+            printf("[TRACE] [calculateOperand2] No rotation, returning imm=0x%08X\n", imm);
             return imm;
         }
         if (rotate > 0) {
             uint32_t result = (imm >> rotate) | (imm << (32 - rotate));
             *carry_out = (result >> 31) & 1;
+            printf("[TRACE] [calculateOperand2] Rotating imm=0x%08X by %u, result=0x%08X\n", imm, rotate, result);
             return result;
         }
         return imm;
@@ -718,34 +722,29 @@ void ARMCPU::arm_block_data_transfer(uint32_t instruction) {
 void ARMCPU::arm_multiply(uint32_t instruction) {
     bool accumulate = (instruction & 0x00200000) != 0;
     bool set_flags = (instruction & 0x00100000) != 0;
-    
+
+    // ARM multiply/MLA field mapping:
+    // Rd = bits 19-16, Rn = bits 15-12 (accumulate), Rs = bits 11-8, Rm = bits 3-0
     uint32_t rd = (instruction >> 16) & 0xF;
     uint32_t rn = (instruction >> 12) & 0xF;
     uint32_t rs = (instruction >> 8) & 0xF;
     uint32_t rm = instruction & 0xF;
-    
+
     uint32_t result = parentCPU.R()[rm] * parentCPU.R()[rs];
     if (accumulate) {
         result += parentCPU.R()[rn];
     }
-    
+
     parentCPU.R()[rd] = result;
-    
+
     // Set flags if requested
     if (set_flags) {
-        // Update N and Z flags
         uint32_t cpsr = parentCPU.CPSR();
         cpsr &= ~(0x80000000 | 0x40000000); // Clear N and Z flags
-        
-        // Set N flag (bit 31) if result is negative
-        cpsr |= (result & 0x80000000);
-        
-        // Set Z flag (bit 30) if result is zero
+        cpsr |= (result & 0x80000000);      // Set N flag if result is negative
         if (result == 0) {
-            cpsr |= 0x40000000;
+            cpsr |= 0x40000000;             // Set Z flag if result is zero
         }
-        
-        // C and V flags are preserved
         parentCPU.CPSR() = cpsr;
     }
 }
@@ -792,7 +791,7 @@ void ARMCPU::arm_software_interrupt(uint32_t instruction) {
 
 void ARMCPU::arm_psr_transfer(uint32_t instruction) {
     printf("[TRACE] Entered arm_psr_transfer for instruction=0x%08X\n", instruction); fflush(stdout);
-    bool is_cpsr = (instruction & 0x00400000) != 0; // 1=CPSR, 0=SPSR (not supported in this implementation)
+    bool is_cpsr = ((instruction & 0x00400000) == 0); // 1=CPSR (bit 22=0), 0=SPSR (bit 22=1)
     bool is_mrs = (instruction & 0x00200000) == 0; // 0=MSR, 1=MRS
 
     DEBUG_INFO("ARM PSR Transfer: is_cpsr=" + std::to_string(is_cpsr) + 
@@ -805,14 +804,23 @@ void ARMCPU::arm_psr_transfer(uint32_t instruction) {
 
         if (instruction & 0x02000000) {
             // Immediate operand (ARM: rotate right by 2*rotate_imm)
+            printf("[***TRACE***] [arm_psr_transfer] instruction=0x%08X, calc rotate_field=%u\n", instruction, (instruction >> 8) & 0xF);
+
             uint32_t imm = instruction & 0xFF;
-            uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
-            printf("[DEBUG] MSR: instruction=0x%08X, field_mask=0x%X, imm=0x%02X, rotate=%u\n", instruction, field_mask, imm, rotate);
-            printf("[DEBUG] MSR: ror32 input: value=0x%08X, amount=%u\n", imm, rotate);
+            printf("[***TRACE***] [arm_psr_transfer] instruction=0x%08X, calc rotate_field=%u\n", instruction, (instruction >> 8) & 0xF);
+            
+            uint32_t rotate_field = (instruction >> 8) & 0xF;
+            uint32_t rotate = rotate_field * 2;
+            printf("[***TRACE***] [arm_psr_transfer] instruction=0x%08X, field_mask=0x%X, imm=0x%02X, rotate_field=%u, rotate=%u\n", instruction, field_mask, imm, rotate_field, rotate);
             value = (uint32_t)imm;
-            if (rotate)
-                value = (value << rotate) | (value >> (32 - rotate));
-            printf("[DEBUG] MSR: rotated immediate value=0x%08X\n", value);
+            if (rotate) {
+                printf("[DEBUG] MSR: rotating immediate value: before=0x%08X, amount=%u\n", value, rotate);
+                value = ror32(value, rotate);
+                printf("[DEBUG] MSR: rotating immediate value: after=0x%08X\n", value);
+            } else {
+                printf("[DEBUG] MSR: no rotation applied, value=0x%08X\n", value);
+            }
+            printf("[DEBUG] MSR: (final) value to write=0x%08X\n", value);
         } else {
             // Register operand
             uint32_t rm = instruction & 0xF;
@@ -1263,9 +1271,23 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
         decoded.pc_modified = false;
         decoded.execute_func = nullptr;
     }
-    // ARM multiply: bits 27-22=000000, bits 7-4=1001
-    else if (format == 0 && (instruction & 0x0FF000F0) == 0x00000090) {
-        // Multiply instruction
+    // PSR transfer (MRS/MSR, register or immediate)
+    else if (
+        // MRS (register form)
+        (instruction & 0x0FBF0FFF) == 0x010F0000 ||
+        // MSR (register form, ignore bits 19-16 and 3-0)
+        (instruction & 0x0FBFFFF0) == 0x012FF000 ||
+        // MSR (immediate form)
+        ((instruction & 0x0FB00000) == 0x03200000)
+    ) {
+        decoded.type = ARMInstructionType::PSR_TRANSFER;
+        decoded.rd = (instruction >> 12) & 0xF;
+        decoded.pc_modified = (!(instruction & 0x00200000)) && (decoded.rd == 15); // MRS to PC
+        decoded.execute_func = &ARMCPU::executeCachedPSRTransfer;
+    }
+    // ARM multiply/MLA: bits 27-22=000000, bits 7-4=1001 (ignore accumulate/set flags bits)
+    else if (format == 0 && ((instruction & 0x0FE000F0) == 0x00000090 || (instruction & 0x0FE000F0) == 0x00200090)) {
+        // Multiply or MLA instruction
         printf("[DECODE] MULTIPLY path: instruction=0x%08X, rd(bits19-16)=%u\n", instruction, (instruction >> 16) & 0xF);
         decoded.type = ARMInstructionType::MULTIPLY;
         decoded.rd = (instruction >> 16) & 0xF;
@@ -1279,18 +1301,7 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
         decoded.pc_modified = true;
         decoded.execute_func = &ARMCPU::executeCachedBX;
     }
-    else if (
-        /* MRS/MSR register form */
-        (instruction & 0x0FBF0FFF) == 0x010F0000 ||
-        /* MSR immediate form: bits 27-23=11110, bit 21=1, bit 20=0, field mask (bits 19-16) must be nonzero */
-        ( (instruction & 0x0FBF0000) == 0x03A00000 && (instruction & 0x000F0000) != 0 )
-    ) {
-        // PSR transfer (MRS/MSR, register or immediate)
-        decoded.type = ARMInstructionType::PSR_TRANSFER;
-        decoded.rd = (instruction >> 12) & 0xF;
-        decoded.pc_modified = (!(instruction & 0x00200000)) && (decoded.rd == 15); // MRS to PC
-        decoded.execute_func = &ARMCPU::executeCachedPSRTransfer;
-    }
+    // ...existing code...
     else {
         // Standard format-based decoding
         switch (format) {
@@ -1581,7 +1592,6 @@ void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
 
 void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) {
     printf("[HANDLER] BlockDataTransfer for instruction=0x%08X\n", cached.instruction); fflush(stdout);
-    printf("[HANDLER] Branch for instruction=0x%08X\n", cached.instruction); fflush(stdout);
     // Use pre-decoded cached values to avoid redundant bit extraction
     const uint32_t rn = cached.rn;
     const uint16_t register_list = cached.register_list;
@@ -1688,17 +1698,12 @@ void ARMCPU::executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached) 
 
 void ARMCPU::executeCachedPSRTransfer(const ARMCachedInstruction& cached) {
     printf("[HANDLER] PSRTransfer for instruction=0x%08X\n", cached.instruction); fflush(stdout);
-    printf("[HANDLER] Multiply for instruction=0x%08X\n", cached.instruction); fflush(stdout);
-    printf("[HANDLER] BX for instruction=0x%08X\n", cached.instruction); fflush(stdout);
     printf("[TRACE] Entered executeCachedPSRTransfer for cached instruction=0x%08X\n", cached.instruction); fflush(stdout);
     arm_psr_transfer(cached.instruction);
-    printf("[TRACE] Entered arm_psr_transfer for cached instruction=0x%08X\n", cached.instruction); fflush(stdout);
 }
 
 void ARMCPU::executeCachedCoprocessor(const ARMCachedInstruction& cached) {
     printf("[HANDLER] Coprocessor for instruction=0x%08X\n", cached.instruction); fflush(stdout);
-    printf("[HANDLER] SoftwareInterrupt for instruction=0x%08X\n", cached.instruction); fflush(stdout);
-    printf("[HANDLER] Undefined for instruction=0x%08X\n", cached.instruction); fflush(stdout);
     switch (cached.type) {
         case ARMInstructionType::COPROCESSOR_OP:
             arm_coprocessor_operation(cached.instruction);
