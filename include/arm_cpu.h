@@ -81,6 +81,8 @@ private:
     void arm_orr(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
 
 public:
+    // Clear the instruction cache (for testing)
+    void clearInstructionCache() { instruction_cache.clear(); }
     // ...existing public methods...
     FORCE_INLINE void arm_mov(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     void arm_bic(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
