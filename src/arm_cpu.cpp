@@ -1,9 +1,17 @@
+
+#include <cstdint>
 #include <cassert>
 #include "arm_cpu.h"
 #include "debug.h"
 #include "timing.h"
 #include "arm_timing.h"
 #include "arm_instruction_cache.h"
+
+// Helper for 32-bit rotate right
+static inline uint32_t ror32(uint32_t value, unsigned int amount) {
+    amount &= 31;
+    return (value >> amount) | (value << (32 - amount));
+}
 
 ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu) {
     DEBUG_INFO("Initializing ARMCPU with parent CPU");
@@ -116,65 +124,49 @@ FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* 
         // Immediate operand
         uint32_t imm = instruction & 0xFF;
         uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
-        
-        // Fast path for most common case: no rotation needed
         if (rotate == 0) {
-            *carry_out = (parentCPU.CPSR() >> 29) & 1; // Preserve carry
+            *carry_out = (parentCPU.CPSR() >> 29) & 1;
             return imm;
         }
-        
-        // Handle rotation if needed
         if (rotate > 0) {
-            // Use optimized right rotation for immediates
             uint32_t result = (imm >> rotate) | (imm << (32 - rotate));
-            *carry_out = (result >> 31) & 1; // Set carry to bit 31 of the result
+            *carry_out = (result >> 31) & 1;
             return result;
         }
-        return imm; // No rotation
+        return imm;
     } else {
-        // Register operand
         uint32_t rm = parentCPU.R()[instruction & 0xF];
         uint32_t shift_type = (instruction >> 5) & 3;
-        
-        // Fast path for no shift (most common case)
+        uint32_t result = 0;
+        uint32_t shift_amount = 0;
         if (!(instruction & 0xFF0)) {
-            *carry_out = (parentCPU.CPSR() >> 29) & 1; // Preserve carry
+            *carry_out = (parentCPU.CPSR() >> 29) & 1;
             return rm;
         }
-        
-        uint32_t shift_amount;
         if (instruction & 0x10) {
-            // Shift by register
             uint32_t rs = (instruction >> 8) & 0xF;
-            shift_amount = parentCPU.R()[rs] & 0xFF; // Only bottom 8 bits count
-            
-            // Special case: if shift amount is 0, no shift is performed
+            shift_amount = parentCPU.R()[rs] & 0xFF;
             if (shift_amount == 0) {
-                *carry_out = (parentCPU.CPSR() >> 29) & 1; // Preserve carry
+                *carry_out = (parentCPU.CPSR() >> 29) & 1;
                 return rm;
             }
         } else {
-            // Shift by immediate
             shift_amount = (instruction >> 7) & 0x1F;
-            
-            // Special case: if shift amount is 0 and not LSR/ASR/ROR
-            if (shift_amount == 0 && shift_type != 3) { // Not ROR
-                if (shift_type == 0) { // LSL #0
-                    *carry_out = (parentCPU.CPSR() >> 29) & 1; // Preserve carry
+            if (shift_amount == 0) {
+                if (shift_type == 0) {
+                    *carry_out = (parentCPU.CPSR() >> 29) & 1;
                     return rm;
-                } else {
-                    // LSR #0 and ASR #0 are interpreted as LSR #32 and ASR #32
+                } else if (shift_type == 1) { // LSR #0 means LSR #32
                     shift_amount = 32;
+                } else if (shift_type == 2) { // ASR #0 means ASR #32
+                    shift_amount = 32;
+                } else if (shift_type == 3) {
+                    uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
+                    *carry_out = rm & 1;
+                    return (old_carry << 31) | (rm >> 1);
                 }
-            } else if (shift_amount == 0 && shift_type == 3) {
-                // ROR #0 is interpreted as RRX
-                uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
-                *carry_out = rm & 1;
-                return (old_carry << 31) | (rm >> 1);
             }
         }
-        
-        // Use switch statement for shift operations (reverted from function pointer optimization)
         switch (shift_type) {
             case 0: // LSL
                 if (shift_amount >= 32) {
@@ -183,15 +175,16 @@ FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* 
                 }
                 *carry_out = (rm >> (32 - shift_amount)) & 1;
                 return rm << shift_amount;
-                
             case 1: // LSR
-                if (shift_amount >= 32) {
-                    *carry_out = (shift_amount == 32) ? ((rm >> 31) & 1) : 0;
+                if (shift_amount == 32) {
+                    *carry_out = (rm >> 31) & 1;
+                    return 0;
+                } else if (shift_amount > 32) {
+                    *carry_out = 0;
                     return 0;
                 }
                 *carry_out = (rm >> (shift_amount - 1)) & 1;
                 return rm >> shift_amount;
-                
             case 2: // ASR
                 if (shift_amount >= 32) {
                     *carry_out = (rm >> 31) & 1;
@@ -199,19 +192,16 @@ FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* 
                 }
                 *carry_out = (rm >> (shift_amount - 1)) & 1;
                 return static_cast<int32_t>(rm) >> shift_amount;
-                
             case 3: // ROR
                 if (shift_amount == 0) {
-                    // Should never happen due to earlier check
                     *carry_out = (parentCPU.CPSR() >> 29) & 1;
                     return rm;
                 }
-                shift_amount %= 32; // Normalize rotation amount
+                shift_amount %= 32;
                 *carry_out = (rm >> (shift_amount - 1)) & 1;
                 return (rm >> shift_amount) | (rm << (32 - shift_amount));
         }
-        
-        return rm; // Should never reach here
+        return rm;
     }
 }
 
@@ -789,58 +779,97 @@ void ARMCPU::arm_software_interrupt(uint32_t instruction) {
 }
 
 void ARMCPU::arm_psr_transfer(uint32_t instruction) {
-    bool psr_source = (instruction & 0x00400000) != 0; // 0=CPSR, 1=SPSR (not supported in this implementation)
-    bool move_to_psr = (instruction & 0x00200000) != 0; // 0=MSR, 1=MRS
-    
-    if (!move_to_psr) {
-        // MRS: Move from PSR to register
-        uint32_t rd = (instruction >> 12) & 0xF;
-        
-        if (psr_source) {
-            // SPSR -> Rd (not supported in this implementation)
-            // Use CPSR as fallback
-            DEBUG_INFO("MRS: SPSR access not supported, using CPSR instead");
-            parentCPU.R()[rd] = parentCPU.CPSR();
-        } else {
-            // CPSR -> Rd
-            parentCPU.R()[rd] = parentCPU.CPSR();
-        }
-    } else {
+    printf("[TRACE] Entered arm_psr_transfer for instruction=0x%08X\n", instruction); fflush(stdout);
+    bool is_cpsr = (instruction & 0x00400000) != 0; // 1=CPSR, 0=SPSR (not supported in this implementation)
+    bool is_mrs = (instruction & 0x00200000) == 0; // 0=MSR, 1=MRS
+
+    DEBUG_INFO("ARM PSR Transfer: is_cpsr=" + std::to_string(is_cpsr) + 
+               " is_mrs=" + std::to_string(is_mrs) + 
+               " instruction=0x" + debug_to_hex_string(instruction, 8));
+    if (!is_mrs) {
         // MSR: Move from register/immediate to PSR
         uint32_t field_mask = (instruction >> 16) & 0xF;
         uint32_t value;
-        
+
         if (instruction & 0x02000000) {
-            // Immediate operand
+            // Immediate operand (ARM: rotate right by 2*rotate_imm)
             uint32_t imm = instruction & 0xFF;
             uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
-            value = (imm >> rotate) | (imm << (32 - rotate));
+            printf("[DEBUG] MSR: instruction=0x%08X, field_mask=0x%X, imm=0x%02X, rotate=%u\n", instruction, field_mask, imm, rotate);
+            printf("[DEBUG] MSR: ror32 input: value=0x%08X, amount=%u\n", imm, rotate);
+            value = (uint32_t)imm;
+            if (rotate)
+                value = (value << rotate) | (value >> (32 - rotate));
+            printf("[DEBUG] MSR: rotated immediate value=0x%08X\n", value);
         } else {
             // Register operand
             uint32_t rm = instruction & 0xF;
             value = parentCPU.R()[rm];
+            printf("[DEBUG] MSR: register operand Rm=R%d=0x%08X\n", rm, value);
         }
-        
-        // Apply field mask and update PSR
+
+        // Apply field mask and update PSR (ARM: c=0x000000FF, x=0x0000FF00, s=0x00FF0000, f=0xF0000000)
         uint32_t psr = parentCPU.CPSR(); // Always use CPSR since SPSR is not supported
-        
-        // Update control field if requested (field_mask & 1)
-        if (field_mask & 1) {
-            psr = (psr & ~0xFF) | (value & 0xFF);
+        printf("[DEBUG] MSR: before update, field_mask=0x%X, value=0x%08X, old CPSR=0x%08X\n", field_mask, value, psr);
+        printf("[DEBUG] MSR: old CPSR fields: control=0x%02X, extension=0x%02X, status=0x%02X, flags=0x%02X\n", psr & 0xFF, (psr >> 8) & 0xFF, (psr >> 16) & 0xFF, (psr >> 24) & 0xFF);
+        if (field_mask & 1) { // c
+            uint32_t control = value & 0xFF;
+            printf("[DEBUG] MSR: updating control field: old=0x%02X, new=0x%02X\n", psr & 0xFF, control);
+            psr = (psr & ~0x000000FF) | (control << 0);
+            printf("[DEBUG] MSR: control field after update: 0x%02X\n", psr & 0xFF);
         }
-        
-        // Update status flags if requested (field_mask & 8)
-        if (field_mask & 8) {
-            psr = (psr & ~0xF0000000) | (value & 0xF0000000);
+        if (field_mask & 2) { // x
+            uint32_t extension = (value >> 8) & 0xFF;
+            printf("[DEBUG] MSR: updating extension field: old=0x%02X, new=0x%02X\n", (psr >> 8) & 0xFF, extension);
+            psr = (psr & ~0x0000FF00) | (extension << 8);
+            printf("[DEBUG] MSR: extension field after update: 0x%02X\n", (psr >> 8) & 0xFF);
         }
-        
+        if (field_mask & 4) { // s
+            uint32_t status = (value >> 16) & 0xFF;
+            printf("[DEBUG] MSR: updating status field: old=0x%02X, new=0x%02X\n", (psr >> 16) & 0xFF, status);
+            psr = (psr & ~0x00FF0000) | (status << 16);
+            printf("[DEBUG] MSR: status field after update: 0x%02X\n", (psr >> 16) & 0xFF);
+        }
+        if (field_mask & 8) { // f
+            uint32_t flags_nibble = (value >> 28) & 0xF;
+            printf("[DEBUG] MSR: updating flags field: old=0x%01X, new=0x%01X\n", (psr >> 28) & 0xF, flags_nibble);
+            psr = (psr & ~0xF0000000) | (flags_nibble << 28);
+            printf("[DEBUG] MSR: flags field after update: 0x%01X\n", (psr >> 28) & 0xF);
+        }
+        printf("[DEBUG] MSR: after update, new CPSR=0x%08X\n", psr);
+        printf("[DEBUG] MSR: new CPSR fields: control=0x%02X, extension=0x%02X, status=0x%02X, flags=0x%02X\n", psr & 0xFF, (psr >> 8) & 0xFF, (psr >> 16) & 0xFF, (psr >> 24) & 0xFF);
+
+        // DEBUG: Print for MOV LSR #32 case
+        if (((instruction >> 5) & 3) == 1 && ((instruction >> 7) & 0x1F) == 0) {
+            uint32_t rm = parentCPU.R()[instruction & 0xF];
+            printf("[DEBUG] MOV LSR #32: Rm=0x%08X, shift_amount=32\n", rm);
+        }
+
         // Update the PSR
-        if (psr_source) {
+        if (is_cpsr) {
+            DEBUG_INFO("MSR: Writing to CPSR, new value 0x" + debug_to_hex_string(psr, 8));
+            parentCPU.CPSR() = psr;
+        } else {
             // SPSR not supported, log warning
             DEBUG_INFO("MSR: SPSR write not supported, operation ignored");
-        } else {
-            parentCPU.CPSR() = psr;
         }
+    } else {
+        // MRS: Move from PSR to register
+        uint32_t rd = (instruction >> 12) & 0xF;
+        uint32_t cpsr_val = parentCPU.CPSR();
+        DEBUG_INFO("MRS: Writing CPSR value 0x" + debug_to_hex_string(cpsr_val, 8) + " to R" + std::to_string(rd));
+        if (is_cpsr) {
+            // CPSR -> Rd
+            DEBUG_INFO("MRS: CPSR access, R" + std::to_string(rd) + " = 0x" + debug_to_hex_string(cpsr_val, 8));
+            parentCPU.R()[rd] = cpsr_val;
+        } else {
+            // SPSR -> Rd (not supported in this implementation)
+            // Use CPSR as fallback
+            DEBUG_INFO("MRS: SPSR access not supported, using CPSR instead");
+            parentCPU.R()[rd] = cpsr_val;
+
+        }
+        DEBUG_INFO("MRS: After, R" + std::to_string(rd) + " = 0x" + debug_to_hex_string(parentCPU.R()[rd], 8));
     }
 }
 
@@ -953,11 +982,9 @@ uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t s
     switch (shift_type) {
         case 0: // LSL
             if (shift_amount == 0) {
-                // No shift
+                *carry_out = (value >> 31) & 1;
                 return value;
-                // Carry unchanged
             } else if (shift_amount < 32) {
-                // Set carry to the last bit shifted out
                 *carry_out = (value >> (32 - shift_amount)) & 1;
                 return value << shift_amount;
             } else if (shift_amount == 32) {
@@ -967,7 +994,6 @@ uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t s
                 *carry_out = 0;
                 return 0;
             }
-            
         case 1: // LSR
             if (shift_amount == 0) {
                 // Special case: LSR #0 is interpreted as LSR #32
@@ -980,7 +1006,6 @@ uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t s
                 *carry_out = 0;
                 return 0;
             }
-            
         case 2: // ASR
             if (shift_amount == 0) {
                 // Special case: ASR #0 is interpreted as ASR #32
@@ -1208,6 +1233,8 @@ void ARMCPU::executeCachedInstruction(const ARMCachedInstruction& cached) {
 
 // Main instruction decoder
 ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction) {
+    // DEBUG: Log instruction and mask for MSR immediate diagnosis
+    printf("[DECODE] instruction=0x%08X, (instruction & 0x0FB00000)=0x%08X\n", instruction, instruction & 0x0FB00000); fflush(stdout);
     ARMCachedInstruction decoded;
     decoded.instruction = instruction;
     decoded.condition = (instruction >> 28) & 0xF;
@@ -1238,8 +1265,13 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
         decoded.pc_modified = true;
         decoded.execute_func = &ARMCPU::executeCachedBX;
     }
-    else if (format == 1 && (instruction & 0x0FB00000) == 0x01000000) {
-        // PSR transfer
+    else if (
+        /* MRS/MSR register form */
+        (instruction & 0x0FBF0FFF) == 0x010F0000 ||
+        /* MSR immediate form: bits 27-23=11110, bit 21=1, bit 20=0, field mask (bits 19-16) must be nonzero */
+        ( (instruction & 0x0FBF0000) == 0x03A00000 && (instruction & 0x000F0000) != 0 )
+    ) {
+        // PSR transfer (MRS/MSR, register or immediate)
         decoded.type = ARMInstructionType::PSR_TRANSFER;
         decoded.rd = (instruction >> 12) & 0xF;
         decoded.pc_modified = (!(instruction & 0x00200000)) && (decoded.rd == 15); // MRS to PC
@@ -1408,6 +1440,7 @@ ARMCachedInstruction ARMCPU::decodeBlockDataTransfer(uint32_t pc, uint32_t instr
 
 // Placeholder cached execution functions (these would call the original implementations)
 void ARMCPU::executeCachedDataProcessing(const ARMCachedInstruction& cached) {
+    printf("[HANDLER] DataProcessing for instruction=0x%08X\n", cached.instruction); fflush(stdout);
     // Use pre-decoded cached values to avoid redundant bit extraction
     const uint32_t opcode = static_cast<uint32_t>(cached.dp_op);
     const uint32_t rd = cached.rd;
@@ -1523,6 +1556,7 @@ void ARMCPU::executeCachedDataProcessing(const ARMCachedInstruction& cached) {
 }
 
 void ARMCPU::executeCachedSingleDataTransfer(const ARMCachedInstruction& cached) {
+    printf("[HANDLER] SingleDataTransfer for instruction=0x%08X\n", cached.instruction); fflush(stdout);
     arm_single_data_transfer(cached.instruction);
 }
 
@@ -1531,6 +1565,8 @@ void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
 }
 
 void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) {
+    printf("[HANDLER] BlockDataTransfer for instruction=0x%08X\n", cached.instruction); fflush(stdout);
+    printf("[HANDLER] Branch for instruction=0x%08X\n", cached.instruction); fflush(stdout);
     // Use pre-decoded cached values to avoid redundant bit extraction
     const uint32_t rn = cached.rn;
     const uint16_t register_list = cached.register_list;
@@ -1636,10 +1672,18 @@ void ARMCPU::executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached) 
 }
 
 void ARMCPU::executeCachedPSRTransfer(const ARMCachedInstruction& cached) {
+    printf("[HANDLER] PSRTransfer for instruction=0x%08X\n", cached.instruction); fflush(stdout);
+    printf("[HANDLER] Multiply for instruction=0x%08X\n", cached.instruction); fflush(stdout);
+    printf("[HANDLER] BX for instruction=0x%08X\n", cached.instruction); fflush(stdout);
+    printf("[TRACE] Entered executeCachedPSRTransfer for cached instruction=0x%08X\n", cached.instruction); fflush(stdout);
     arm_psr_transfer(cached.instruction);
+    printf("[TRACE] Entered arm_psr_transfer for cached instruction=0x%08X\n", cached.instruction); fflush(stdout);
 }
 
 void ARMCPU::executeCachedCoprocessor(const ARMCachedInstruction& cached) {
+    printf("[HANDLER] Coprocessor for instruction=0x%08X\n", cached.instruction); fflush(stdout);
+    printf("[HANDLER] SoftwareInterrupt for instruction=0x%08X\n", cached.instruction); fflush(stdout);
+    printf("[HANDLER] Undefined for instruction=0x%08X\n", cached.instruction); fflush(stdout);
     switch (cached.type) {
         case ARMInstructionType::COPROCESSOR_OP:
             arm_coprocessor_operation(cached.instruction);
