@@ -1588,7 +1588,37 @@ void ARMCPU::executeCachedDataProcessing(const ARMCachedInstruction& cached) {
 
 void ARMCPU::executeCachedSingleDataTransfer(const ARMCachedInstruction& cached) {
     printf("[HANDLER] SingleDataTransfer for instruction=0x%08X\n", cached.instruction); fflush(stdout);
-    arm_single_data_transfer(cached.instruction);
+    // Use cached fields to perform single data transfer without re-decoding
+    const bool load = cached.load;
+    const uint32_t rd = cached.rd;
+    const uint32_t rn = cached.rn;
+    const bool immediate = cached.immediate;
+    uint32_t address = parentCPU.R()[rn];
+    uint32_t offset = 0;
+    if (immediate) {
+        offset = cached.offset_value;
+    } else {
+        uint32_t rm = cached.rm;
+        uint32_t shift_type = cached.offset_type;
+        uint32_t shift_amount = (cached.instruction >> 7) & 0x1F;
+        uint32_t carry_out = 0;
+        offset = arm_apply_shift(parentCPU.R()[rm], shift_type, shift_amount, &carry_out);
+        if (!((cached.instruction >> 23) & 1)) { // U bit
+            offset = -offset;
+        }
+    }
+    uint32_t effective_address = address + offset;
+    if (load) {
+        parentCPU.R()[rd] = parentCPU.getMemory().read32(effective_address);
+    } else {
+        parentCPU.getMemory().write32(effective_address, parentCPU.R()[rd]);
+    }
+    // Write-back for pre-indexed addressing with write-back (P and W bits set)
+    bool pre_indexing = (cached.instruction & 0x01000000) != 0; // P bit
+    bool write_back = (cached.instruction & 0x00200000) != 0;   // W bit
+    if (pre_indexing && write_back) {
+        parentCPU.R()[rn] = effective_address;
+    }
 }
 
 void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
