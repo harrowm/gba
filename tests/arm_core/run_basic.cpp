@@ -586,3 +586,128 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     EXPECT_EQ(cpu.R()[0], 0u) << "MOV R0, R2, LSR #32 failed (should be 0)";
 }
 
+TEST_F(ArmCoreTest, MultiplyInstructions) {
+    // Clear all registers and flags
+    for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
+    cpu.CPSR() = 0x10; // User mode, no flags
+    cpu.R()[15] = 0x00000000;
+
+    // --- Basic MUL: MUL R0, R1, R2 ---
+    cpu.R()[1] = 7;
+    cpu.R()[2] = 6;
+    uint32_t mul_inst = 0xE0000291; // MUL R0, R1, R2
+    memory.write32(0x00000000, mul_inst);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 42u) << "MUL R0, R1, R2 failed";
+
+    // --- MLA: MLA R3, R4, R5, R6 ---
+    cpu.R()[4] = 3;
+    cpu.R()[5] = 4;
+    cpu.R()[6] = 10;
+    cpu.R()[3] = 0;
+    uint32_t mla_inst = 0xE0236594; // MLA R3, R4, R5, R6
+    memory.write32(0x00000004, mla_inst);
+    cpu.R()[15] = 0x00000004;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[3], 22u) << "MLA R3, R4, R5, R6 failed";
+
+    // --- MUL with zero ---
+    cpu.R()[1] = 0;
+    cpu.R()[2] = 12345;
+    cpu.R()[0] = 0xFFFFFFFF;
+    memory.write32(0x00000008, mul_inst);
+    cpu.R()[15] = 0x00000008;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0u) << "MUL R0, R1=0, R2 failed (should be 0)";
+
+    // --- MUL with negative numbers ---
+    cpu.R()[1] = (uint32_t)-5;
+    cpu.R()[2] = 3;
+    memory.write32(0x0000000C, mul_inst);
+    cpu.R()[15] = 0x0000000C;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], (uint32_t)-15) << "MUL R0, R1=-5, R2=3 failed";
+
+    // --- MLA with negative accumulator ---
+    cpu.R()[4] = 2;
+    cpu.R()[5] = 4;
+    cpu.R()[6] = (uint32_t)-10;
+    memory.write32(0x00000010, mla_inst);
+    cpu.R()[15] = 0x00000010;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[3], (uint32_t)-2) << "MLA R3, R4=2, R5=4, R6=-10 failed";
+
+    // --- MUL with max unsigned values ---
+    cpu.R()[1] = 0xFFFFFFFF;
+    cpu.R()[2] = 2;
+    memory.write32(0x00000014, mul_inst);
+    cpu.R()[15] = 0x00000014;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0xFFFFFFFEu) << "MUL R0, R1=0xFFFFFFFF, R2=2 failed";
+
+    // --- MLA with overflow ---
+    cpu.R()[4] = 0x80000000;
+    cpu.R()[5] = 2;
+    cpu.R()[6] = 0x80000000;
+    memory.write32(0x00000018, mla_inst);
+    cpu.R()[15] = 0x00000018;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[3], 0x80000000u) << "MLA R3, overflow case failed (0x80000000*2+0x80000000==0x80000000)";
+
+    // --- MULS: MUL with S bit set, check flags ---
+    uint32_t muls_inst = 0xE0100291; // MULS R0, R1, R2
+    cpu.R()[1] = 0x80000000;
+    cpu.R()[2] = 2;
+    cpu.R()[0] = 0;
+    memory.write32(0x0000001C, muls_inst);
+    cpu.R()[15] = 0x0000001C;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0u) << "MULS R0, R1=0x80000000, R2=2 failed";
+    EXPECT_FALSE(cpu.CPSR() & CPU::FLAG_N) << "MULS N flag should not be set (result is zero)";
+
+    // --- MLAS: MLA with S bit set, check flags ---
+    uint32_t mlas_inst = 0xE0336594; // MLAS R3, R4, R5, R6 (S bit set)
+    cpu.R()[4] = 0xFFFFFFFF;
+    cpu.R()[5] = 2;
+    cpu.R()[6] = 1;
+    memory.write32(0x00000020, mlas_inst);
+    cpu.R()[15] = 0x00000020;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[3], 0xFFFFFFFFu) << "MLAS R3, R4=0xFFFFFFFF, R5=2, R6=1 failed";
+    EXPECT_TRUE(cpu.CPSR() & CPU::FLAG_N) << "MLAS did not set N flag (should be negative)";
+
+    // --- MUL with accumulator not used (MLA with Rn=0) ---
+    cpu.R()[4] = 2;
+    cpu.R()[5] = 3;
+    cpu.R()[6] = 0;
+    memory.write32(0x00000024, mla_inst);
+    cpu.R()[15] = 0x00000024;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[3], 6u) << "MLA R3, R4=2, R5=3, R6=0 failed (should be 6)";
+
+    // --- MUL with all zeros ---
+    cpu.R()[1] = 0;
+    cpu.R()[2] = 0;
+    memory.write32(0x00000028, mul_inst);
+    cpu.R()[15] = 0x00000028;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0u) << "MUL R0, R1=0, R2=0 failed (should be 0)";
+
+    // --- MLA with all zeros ---
+    cpu.R()[4] = 0;
+    cpu.R()[5] = 0;
+    cpu.R()[6] = 0;
+    memory.write32(0x0000002C, mla_inst);
+    cpu.R()[15] = 0x0000002C;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[3], 0u) << "MLA R3, R4=0, R5=0, R6=0 failed (should be 0)";
+
+    // --- MUL with max RAM address ---
+    cpu.R()[1] = 2;
+    cpu.R()[2] = 3;
+    cpu.R()[0] = 0;
+    memory.write32(0x1FFC, mul_inst);
+    cpu.R()[15] = 0x1FFC;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 6u) << "MUL R0, R1=2, R2=3 at max RAM failed";
+}
