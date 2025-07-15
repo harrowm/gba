@@ -578,13 +578,11 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- Edge: MOV with max shift (LSR #32) ---
     cpu.R()[2] = 0xFFFFFFFF;
     cpu.R()[0] = 0xDEADBEEF; // Set to known value
-    printf("[TEST] Before MOV LSR #32: R0 = 0x%08X, R2 = 0x%08X\n", cpu.R()[0], cpu.R()[2]);
     // MOV R0, R2, LSR #32: 0xE1A00022 with bit 11-7 cleared (shift_imm = 0b00000 = 32, special case)
     uint32_t mov_lsr32 = 0xE1A00022;
     memory.write32(0x0000003C, mov_lsr32);
     cpu.R()[15] = 0x0000003C;
     arm_cpu.execute(1);
-    printf("[TEST] After MOV LSR #32: R0 = 0x%08X (should be 0), R2 = 0x%08X\n", cpu.R()[0], cpu.R()[2]);
     EXPECT_EQ(cpu.R()[0], 0u) << "MOV R0, R2, LSR #32 failed (should be 0)";
 }
 

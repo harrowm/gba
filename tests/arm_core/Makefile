@@ -1,8 +1,8 @@
 # Makefile for ARM core tests only
 CXX = g++
 CC = gcc
-CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -g -O2 -DDEBUG_BUILD $(GTEST_INCLUDE_FLAGS)
-CFLAGS = -std=c23 -Wall -Wextra -I../../include -g -O2 -DDEBUG_BUILD
+CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -g -O2 -DDXXEBUG_BUILD $(GTEST_INCLUDE_FLAGS)
+CFLAGS = -std=c23 -Wall -Wextra -I../../include -g -O2 -DDXXEBUG_BUILD
 
 # Google Test paths (if available)
 GTEST_INCLUDE = /opt/homebrew/include
