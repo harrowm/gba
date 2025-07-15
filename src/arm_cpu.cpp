@@ -1137,6 +1137,215 @@ void ARMCPU::execute_arm_and_imm(ARMCachedInstruction& cached) {
     }
 }
 
+void ARMCPU::execute_arm_eor_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_eor_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] ^ result;
+    if (cached.set_flags && cached.rd != 15) {
+        updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
+    }
+}
+
+void ARMCPU::execute_arm_sub_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_sub_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] - result;
+    if (cached.set_flags && cached.rd != 15) {
+        bool c = parentCPU.R()[cached.rn] >= result;
+        bool v = ((parentCPU.R()[cached.rn] ^ result) & (parentCPU.R()[cached.rn] ^ parentCPU.R()[cached.rd]) & 0x80000000) != 0;
+        updateFlags(parentCPU.R()[cached.rd], c, v);
+    }
+}
+
+void ARMCPU::execute_arm_rsb_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_rsb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    parentCPU.R()[cached.rd] = result - parentCPU.R()[cached.rn];
+    if (cached.set_flags && cached.rd != 15) {
+        bool c = result >= parentCPU.R()[cached.rn];
+        bool v = ((result ^ parentCPU.R()[cached.rn]) & (result ^ parentCPU.R()[cached.rd]) & 0x80000000) != 0;
+        updateFlags(parentCPU.R()[cached.rd], c, v);
+    }
+}
+
+void ARMCPU::execute_arm_add_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_add_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] + result;
+    if (cached.set_flags && cached.rd != 15) {
+        bool c = parentCPU.R()[cached.rd] < parentCPU.R()[cached.rn];
+        bool v = ((parentCPU.R()[cached.rn] ^ result) & (parentCPU.R()[cached.rn] ^ parentCPU.R()[cached.rd]) & 0x80000000) != 0;
+        updateFlags(parentCPU.R()[cached.rd], c, v);
+    }
+}
+
+void ARMCPU::execute_arm_adc_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_adc_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    uint32_t op1 = parentCPU.R()[cached.rn] + carry_out; // Include carry from CPSR
+    parentCPU.R()[cached.rd] = op1 + result;
+    if (cached.set_flags && cached.rd != 15) {
+        bool c = (op1 + result) < op1; // Carry out if overflow
+        bool v = ((op1 ^ result) & (op1 ^ parentCPU.R()[cached.rd]) & 0x80000000) != 0;
+        updateFlags(parentCPU.R()[cached.rd], c, v);
+    }
+}
+
+void ARMCPU::execute_arm_sbc_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_sbc_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    uint32_t op1 = parentCPU.R()[cached.rn] - carry_out; // Include carry from CPSR
+    parentCPU.R()[cached.rd] = op1 - result;
+    if (cached.set_flags && cached.rd != 15) {
+        bool c = op1 >= result; // Carry out if no borrow
+        bool v = ((op1 ^ result) & (op1 ^ parentCPU.R()[cached.rd]) & 0x80000000) != 0;
+        updateFlags(parentCPU.R()[cached.rd], c, v);
+    }
+}
+
+void ARMCPU::execute_arm_rsc_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_rsc_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    parentCPU.R()[cached.rd] = result - parentCPU.R()[cached.rn];
+    if (cached.set_flags && cached.rd != 15) {
+        bool c = result >= parentCPU.R()[cached.rn];
+        bool v = ((result ^ parentCPU.R()[cached.rn]) & (result ^ parentCPU.R()[cached.rd]) & 0x80000000) != 0;
+        updateFlags(parentCPU.R()[cached.rd], c, v);
+    }
+}
+
+void ARMCPU::execute_arm_tst_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_tst_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    uint32_t op1 = parentCPU.R()[cached.rn];
+    uint32_t res = op1 & result;
+    if (cached.set_flags && cached.rd != 15) {
+        updateFlagsLogical(res, carry_out);
+    }
+}
+
+void ARMCPU::execute_arm_teq_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_teq_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    uint32_t op1 = parentCPU.R()[cached.rn];
+    uint32_t res = op1 ^ result;
+    if (cached.set_flags && cached.rd != 15) {
+        updateFlagsLogical(res, carry_out);
+    }
+}
+
+void ARMCPU::execute_arm_cmp_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_cmp_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    uint32_t op1 = parentCPU.R()[cached.rn];
+    uint32_t res = op1 - result;
+    if (cached.set_flags && cached.rd != 15) {
+        bool c = op1 >= result; // Carry out if no borrow
+        bool v = ((op1 ^ result) & (op1 ^ res) & 0x80000000) != 0;
+        updateFlags(res, c, v);
+    }
+}
+
+void ARMCPU::execute_arm_cmn_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_cmn_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    uint32_t op1 = parentCPU.R()[cached.rn];
+    uint32_t res = op1 + result;
+    if (cached.set_flags && cached.rd != 15) {
+        bool c = (op1 + result) < op1; // Carry out if overflow
+        bool v = ((op1 ^ result) & (op1 ^ res) & 0x80000000) != 0;
+        updateFlags(res, c, v);
+    }
+}
+
+void ARMCPU::execute_arm_orr_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_orr_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] | result;
+    if (cached.set_flags && cached.rd != 15) {
+        updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
+    }
+}
+
+void ARMCPU::execute_arm_bic_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_bic_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] & ~result;
+    if (cached.set_flags && cached.rd != 15) {
+        updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
+    }
+}
+
+void ARMCPU::execute_arm_mvn_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_mvn_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    parentCPU.R()[cached.rd] = ~result;
+    if (cached.set_flags && cached.rd != 15) {
+        updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
+    }
+}
+
+void ARMCPU::execute_arm_mov_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_mov_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    if (cached.set_flags && cached.rd != 15) {
+        uint32_t cpsr = parentCPU.CPSR();
+        cpsr &= ~(0x80000000 | 0x40000000); // Clear N, Z
+        if (result == 0) cpsr |= 0x40000000;   // Set Z if zero
+        if (carry_out) cpsr |= 0x20000000;     // Set C from rotation
+        parentCPU.CPSR() = cpsr;
+    }
+    parentCPU.R()[cached.rd] = result;
+}
+
+
+
+
 // Placeholder cached execution functions (these would call the original implementations)
 void ARMCPU::executeCachedDataProcessing(const ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("executeCachedDataProcessing: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
