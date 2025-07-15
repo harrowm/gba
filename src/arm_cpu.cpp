@@ -230,118 +230,6 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
     }
 }
 
-
-// Data processing instruction handler
-// Using macros from arm_timing.h
-// void ARMCPU::arm_data_processing(uint32_t instruction) {
-//     // Extract all instruction fields at once to avoid multiple bit operations
-//     uint32_t opcode = ARM_GET_OPCODE(instruction);
-//     uint32_t rd = ARM_GET_RD(instruction);
-//     uint32_t rn = ARM_GET_RN(instruction);
-//     bool set_flags = ARM_GET_S_BIT(instruction);
-    
-//     // Fast path for MOV instructions with immediate (very common)
-//     if (opcode == 0xD && (instruction & 0x02000000)) {  // MOV with immediate
-//         uint32_t imm = instruction & 0xFF;
-//         uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
-        
-//         if (rotate == 0) {  // No rotation - most common MOV case
-//             // Super-optimized MOV path
-//             if (set_flags && rd != 15) {
-//                 uint32_t cpsr = parentCPU.CPSR();
-//                 cpsr &= ~(0x80000000 | 0x40000000); // Clear N (bit 31), Z (bit 30)
-//                 if (imm == 0) cpsr |= 0x40000000;   // Set Z if zero
-//                 // Carry unchanged
-//                 parentCPU.CPSR() = cpsr;
-//             }
-//             parentCPU.R()[rd] = imm;
-            
-//             // Log using debug macros
-//             DEBUG_INFO("Fast MOV: rd=R" + std::to_string(rd) + 
-//                       " imm=0x" + debug_to_hex_string(imm, 8) + 
-//                       " set_flags=" + std::to_string(set_flags));
-//             return;
-//         }
-//     }
-    
-//     // Fast path for common ALU operations with register operands, no shift
-//     if ((instruction & 0x02000FF0) == 0) {  // Register operand with no shift
-//         uint32_t rm = parentCPU.R()[instruction & 0xF];
-//         uint32_t op1 = parentCPU.R()[rn];
-//         uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-        
-//         DEBUG_INFO("Fast ALU: opcode=" + std::to_string(opcode) +
-//                   " rd=R" + std::to_string(rd) +
-//                   " rn=R" + std::to_string(rn) +
-//                   " rm=R" + std::to_string(instruction & 0xF) +
-//                   " set_flags=" + std::to_string(set_flags));
-        
-//         // Fast-path dispatch table for common ALU operations
-//         // Use function pointer table for branchless dispatch
-//         typedef void (ARMCPU::*FastALUFunc)(uint32_t, uint32_t, uint32_t, uint32_t, bool, uint32_t);
-//         static const FastALUFunc fastALUTable[16] = {
-//             &ARMCPU::fastALU_AND, // 0x0 - AND
-//             nullptr,              // 0x1 - EOR (not in fast path)
-//             &ARMCPU::fastALU_SUB, // 0x2 - SUB
-//             nullptr,              // 0x3 - RSB (not in fast path)
-//             &ARMCPU::fastALU_ADD, // 0x4 - ADD
-//             nullptr,              // 0x5 - ADC (not in fast path)
-//             nullptr,              // 0x6 - SBC (not in fast path)
-//             nullptr,              // 0x7 - RSC (not in fast path)
-//             nullptr,              // 0x8 - TST (not in fast path)
-//             nullptr,              // 0x9 - TEQ (not in fast path)
-//             &ARMCPU::fastALU_CMP, // 0xA - CMP
-//             nullptr,              // 0xB - CMN (not in fast path)
-//             &ARMCPU::fastALU_ORR, // 0xC - ORR
-//             &ARMCPU::fastALU_MOV, // 0xD - MOV
-//             nullptr,              // 0xE - BIC (not in fast path)
-//             nullptr               // 0xF - MVN (not in fast path)
-//         };
-        
-//         // Use function pointer table for branchless dispatch
-//         FastALUFunc fastFunc = fastALUTable[opcode];
-//         if (fastFunc) {
-//             (this->*fastFunc)(rd, rn, op1, rm, set_flags, carry);
-//             return;
-//         }
-//     }
-    
-//     // Standard path for all other cases - calculate operand2
-//     uint32_t carry_out = 0;
-//     uint32_t operand2 = calculateOperand2(instruction, &carry_out);
-    
-//     DEBUG_INFO("ARM Data Processing: opcode=" + std::to_string(opcode) + 
-//               " rd=R" + std::to_string(rd) + 
-//               " rn=R" + std::to_string(rn) + 
-//               " operand2=0x" + debug_to_hex_string(operand2, 8) + 
-//               " set_flags=" + std::to_string(set_flags));
-    
-//     // Use a static array of function pointers for opcode dispatch
-//     // This is faster than a switch statement for a fixed number of cases
-//     typedef void (ARMCPU::*DataProcessingFunc)(uint32_t, uint32_t, uint32_t, bool, uint32_t);
-//     static const DataProcessingFunc funcTable[16] = {
-//         &ARMCPU::arm_and,  // 0000 - AND
-//         &ARMCPU::arm_eor,  // 0001 - EOR 
-//         &ARMCPU::arm_sub,  // 0010 - SUB
-//         &ARMCPU::arm_rsb,  // 0011 - RSB
-//         &ARMCPU::arm_add,  // 0100 - ADD
-//         &ARMCPU::arm_adc,  // 0101 - ADC
-//         &ARMCPU::arm_sbc,  // 0110 - SBC
-//         &ARMCPU::arm_rsc,  // 0111 - RSC
-//         &ARMCPU::arm_tst,  // 1000 - TST
-//         &ARMCPU::arm_teq,  // 1001 - TEQ
-//         &ARMCPU::arm_cmp,  // 1010 - CMP
-//         &ARMCPU::arm_cmn,  // 1011 - CMN
-//         &ARMCPU::arm_orr,  // 1100 - ORR
-//         &ARMCPU::arm_mov,  // 1101 - MOV
-//         &ARMCPU::arm_bic,  // 1110 - BIC
-//         &ARMCPU::arm_mvn   // 1111 - MVN
-//     };
-    
-//     // No need for bounds check since opcode is masked to 4 bits by ARM_GET_OPCODE
-//     (this->*funcTable[opcode])(rd, rn, operand2, set_flags, carry_out);
-// }
-
 // Optimized flag update function for logical operations (AND, EOR, TST, TEQ, etc.)
 FORCE_INLINE void ARMCPU::updateFlagsLogical(uint32_t result, uint32_t carry_out) {
     // Get current CPSR value once to reduce memory access
@@ -893,10 +781,44 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
     decoded.instruction = instruction;
     decoded.condition = (instruction >> 28) & 0xF;
     decoded.valid = true;
+
+    // Add in common decodes here .. instruction handlers can add to these
+    decoded.set_flags = (instruction & 0x00100000) != 0;
+    decoded.pc_modified = (decoded.rd == 15);
     
+
+
     // Determine instruction format
     uint32_t format = ARM_GET_FORMAT(instruction);
-    
+
+    // --- New decode table migration: MOV example ---
+    // MOV_REG opcode  index 0x068-0x06B in the 9-bit table
+    uint32_t decode_index = (instruction >> 19) & 0x1FF;
+    if (decode_index >= 0x068 && decode_index <= 0x06B) {
+        arm_decode_table[decode_index](&decoded);
+        // Fill out ARMCachedInstruction for MOV (match decodeDataProcessing fields)
+        decoded.type = ARMInstructionType::DATA_PROCESSING;
+        decoded.dp_op = static_cast<ARMDataProcessingOp>((instruction >> 21) & 0xF);
+        decoded.immediate = (instruction >> 25) & 1;
+        if (decoded.immediate) {
+            uint32_t imm = instruction & 0xFF;
+            uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
+            if (rotate == 0) {
+                decoded.imm_value = imm;
+                decoded.imm_carry = (parentCPU.CPSR() >> 29) & 1;
+            } else {
+                decoded.imm_value = (imm >> rotate) | (imm << (32 - rotate));
+                decoded.imm_carry = (decoded.imm_value >> 31) & 1;
+            }
+            decoded.imm_valid = true;
+        } else {
+            decoded.rm = instruction & 0xF;
+            decoded.imm_valid = false;
+        }
+        decoded.execute_func = nullptr; // Not used for new decode path yet
+        return decoded;
+    }
+
     // Special case handling first
     // Undefined instruction pattern (ARMv4: 0xE7F000F0 and similar)
     // The correct match is (instruction & 0x0FF000F0) == 0x07F000F0

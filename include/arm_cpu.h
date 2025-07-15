@@ -5,6 +5,7 @@
 #include "cpu.h"
 #include "timing.h"
 #include "arm_timing.h"
+#include "arm_decode.h"
 #include "utility_macros.h"
 #include "arm_instruction_cache.h"
 
@@ -22,7 +23,7 @@
 class CPU; // Forward declaration
 
 class ARMCPU {
-private:
+public:
     bool exception_taken = false;
     CPU& parentCPU; // Reference to the parent CPU
     ARMInstructionCache instruction_cache; // Instruction decode cache
@@ -103,6 +104,180 @@ public:
     bool isPrivilegedMode();
     void switchToMode(uint32_t new_mode);
     bool checkMemoryAccess(uint32_t address, bool is_write, bool is_privileged);
+
+private:
+    // ARM7TDMI instruction decode table using bits 27-19 (9 bits, providing finer granularity)
+    // For groups or ambiguous cases, a group name is used in the comment.
+
+    void decode_arm_and_reg(ARMCachedInstruction& decoded);
+    void decode_arm_and_imm(ARMCachedInstruction& decoded);
+    void decode_arm_eor_reg(ARMCachedInstruction& decoded);
+    void decode_arm_eor_imm(ARMCachedInstruction& decoded);
+    void decode_arm_sub_reg(ARMCachedInstruction& decoded);
+    void decode_arm_sub_imm(ARMCachedInstruction& decoded);
+    void decode_arm_rsb_reg(ARMCachedInstruction& decoded);
+    void decode_arm_rsb_imm(ARMCachedInstruction& decoded);
+    void decode_arm_add_reg(ARMCachedInstruction& decoded);
+    void decode_arm_add_imm(ARMCachedInstruction& decoded);
+    void decode_arm_adc_reg(ARMCachedInstruction& decoded);
+    void decode_arm_adc_imm(ARMCachedInstruction& decoded);
+    void decode_arm_sbc_reg(ARMCachedInstruction& decoded);
+    void decode_arm_sbc_imm(ARMCachedInstruction& decoded);
+    void decode_arm_rsc_reg(ARMCachedInstruction& decoded);
+    void decode_arm_rsc_imm(ARMCachedInstruction& decoded);
+    void decode_arm_tst_reg(ARMCachedInstruction& decoded);
+    void decode_arm_tst_imm(ARMCachedInstruction& decoded);
+    void decode_arm_teq_reg(ARMCachedInstruction& decoded);
+    void decode_arm_teq_imm(ARMCachedInstruction& decoded);
+    void decode_arm_cmp_reg(ARMCachedInstruction& decoded);
+    void decode_arm_cmp_imm(ARMCachedInstruction& decoded);
+    void decode_arm_cmn_reg(ARMCachedInstruction& decoded);
+    void decode_arm_cmn_imm(ARMCachedInstruction& decoded);
+    void decode_arm_orr_reg(ARMCachedInstruction& decoded);
+    void decode_arm_orr_imm(ARMCachedInstruction& decoded);
+    void decode_arm_mov_reg(ARMCachedInstruction& decoded);
+    void decode_arm_mov_imm(ARMCachedInstruction& decoded);
+    void decode_arm_bic_reg(ARMCachedInstruction& decoded);
+    void decode_arm_bic_imm(ARMCachedInstruction& decoded);
+    void decode_arm_mvn_reg(ARMCachedInstruction& decoded);
+    void decode_arm_mvn_imm(ARMCachedInstruction& decoded);
+    void decode_arm_data_processing(ARMCachedInstruction& decoded);
+    void decode_arm_load_store(ARMCachedInstruction& decoded);
+    void decode_arm_branch(ARMCachedInstruction& decoded);
+    void decode_arm_load_store_multiple(ARMCachedInstruction& decoded);
+    void decode_arm_mul(ARMCachedInstruction& decoded);
+    void decode_arm_mla(ARMCachedInstruction& decoded);
+    void decode_arm_umull(ARMCachedInstruction& decoded);
+    void decode_arm_umlal(ARMCachedInstruction& decoded);
+    void decode_arm_smull(ARMCachedInstruction& decoded);
+    void decode_arm_smlal(ARMCachedInstruction& decoded);
+    void decode_arm_swp(ARMCachedInstruction& decoded);
+    void decode_arm_swpb(ARMCachedInstruction& decoded);
+    void decode_arm_ldrh(ARMCachedInstruction& decoded);
+    void decode_arm_strh(ARMCachedInstruction& decoded);
+    void decode_arm_ldrsb(ARMCachedInstruction& decoded);
+    void decode_arm_ldrsh(ARMCachedInstruction& decoded);
+    void decode_arm_halfword_transfer(ARMCachedInstruction& decoded); 
+    void decode_arm_mull_group(ARMCachedInstruction& decoded); // fallback for ambiguous/undefined
+    void decode_arm_swap_group(ARMCachedInstruction& decoded); // fallback for ambiguous/undefined
+    void decode_arm_stm(ARMCachedInstruction& decoded);
+    void decode_arm_ldm(ARMCachedInstruction& decoded);
+    void decode_arm_undefined(ARMCachedInstruction& decoded);
+    void decode_arm_coprocessor(ARMCachedInstruction& decoded);
+    void decode_arm_software_interrupt(ARMCachedInstruction& decoded);
+    void decode_arm_ldr(ARMCachedInstruction& decoded);
+    void decode_arm_str(ARMCachedInstruction& decoded);
+    void decode_arm_ldrb(ARMCachedInstruction& decoded);
+    void decode_arm_strb(ARMCachedInstruction& decoded);
+    void decode_arm_strb_imm(ARMCachedInstruction& decoded);
+    void decode_arm_strb_reg(ARMCachedInstruction& decoded);
+    void decode_arm_ldrb_imm(ARMCachedInstruction& decoded);
+    void decode_arm_ldrb_reg(ARMCachedInstruction& decoded);
+    void decode_arm_ldm(ARMCachedInstruction& decoded);
+    void decode_arm_stm(ARMCachedInstruction& decoded);
+    void decode_arm_b(ARMCachedInstruction& decoded);
+    void decode_arm_bl(ARMCachedInstruction& decoded);
+    void decode_arm_cdp(ARMCachedInstruction& decoded);
+    void decode_arm_mrc(ARMCachedInstruction& decoded);
+    void decode_arm_mcr(ARMCachedInstruction& decoded);
+
+
+    // Helper macros for cleaner instruction table initialization
+    #define ARM_HANDLER(func) &ARMCPU::func
+    #define REPEAT_2(handler) handler, handler
+    #define REPEAT_4(handler) handler, handler, handler, handler
+    #define REPEAT_8(handler) handler, handler, handler, handler, handler, handler, handler, handler
+    #define REPEAT_16(handler) REPEAT_8(handler), REPEAT_8(handler)
+    #define REPEAT_32(handler) REPEAT_16(handler), REPEAT_16(handler)
+    #define REPEAT_64(handler) REPEAT_32(handler), REPEAT_32(handler)
+    #define REPEAT_128(handler) REPEAT_64(handler), REPEAT_64(handler)
+    
+    #define REPEAT_ALT_4(h1, h2) h1, h2, h1, h2
+    
+    // Table of 512 entries indexed by bits 27-19 (9 bits)
+    static constexpr void (ARMCPU::*arm_decode_table[512])(ARMCachedInstruction& decoded) = {
+        // 0x000-0x007: AND (reg, imm alternating)
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_and_reg), ARM_HANDLER(decode_arm_and_imm)),
+        // 0x008-0x00F: EOR
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_eor_reg), ARM_HANDLER(decode_arm_eor_imm)),
+        // 0x010-0x017: SUB
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_sub_reg), ARM_HANDLER(decode_arm_sub_imm)),
+        // 0x018-0x01F: RSB
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_rsb_reg), ARM_HANDLER(decode_arm_rsb_imm)),
+        // 0x020-0x027: ADD
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_add_reg), ARM_HANDLER(decode_arm_add_imm)),
+        // 0x028-0x02F: ADC
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_adc_reg), ARM_HANDLER(decode_arm_adc_imm)),
+        // 0x030-0x037: SBC
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_sbc_reg), ARM_HANDLER(decode_arm_sbc_imm)),
+        // 0x038-0x03F: RSC
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_rsc_reg), ARM_HANDLER(decode_arm_rsc_imm)),
+        // 0x040-0x047: TST
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_tst_reg), ARM_HANDLER(decode_arm_tst_imm)),
+        // 0x048-0x04F: TEQ
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_teq_reg), ARM_HANDLER(decode_arm_teq_imm)),
+        // 0x050-0x057: CMP
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_cmp_reg), ARM_HANDLER(decode_arm_cmp_imm)),
+        // 0x058-0x05F: CMN
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_cmn_reg), ARM_HANDLER(decode_arm_cmn_imm)),
+        // 0x060-0x067: ORR
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_orr_reg), ARM_HANDLER(decode_arm_orr_imm)),
+        // 0x068-0x06B: MOV register
+        REPEAT_4(ARM_HANDLER(decode_arm_mov_reg)),
+        // 0x06C-0x06F: MOV immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_mov_imm)),
+        // 0x070-0x077: BIC
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_bic_reg), ARM_HANDLER(decode_arm_bic_imm)),
+        // 0x078-0x07F: MVN
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_mvn_reg), ARM_HANDLER(decode_arm_mvn_imm)),
+        // 0x080 - 0x083: MUL, MLA
+        ARM_HANDLER(decode_arm_mul), ARM_HANDLER(decode_arm_mul), ARM_HANDLER(decode_arm_mla), ARM_HANDLER(decode_arm_mla),
+        // 0x084 - 0x087: UMULL, UMLAL, SMULL, SMLAL
+        ARM_HANDLER(decode_arm_umull), ARM_HANDLER(decode_arm_umlal), ARM_HANDLER(decode_arm_smull), ARM_HANDLER(decode_arm_smlal),
+        // 0x088 - 0x089: SWP, SWPB
+        ARM_HANDLER(decode_arm_swp), ARM_HANDLER(decode_arm_swpb),
+        // 0x08A - 0x08B: Reserved/undefined (swap group fallback)
+        ARM_HANDLER(decode_arm_swap_group), ARM_HANDLER(decode_arm_swap_group),
+        // 0x08C - 0x08F: LDRH, LDRSB, LDRSH, STRH
+        ARM_HANDLER(decode_arm_ldrh), ARM_HANDLER(decode_arm_ldrsb), ARM_HANDLER(decode_arm_ldrsh), ARM_HANDLER(decode_arm_strh),
+        // 0x090 - 0x0FF: Undefined or reserved
+        REPEAT_64(ARM_HANDLER(decode_arm_undefined)), REPEAT_32(ARM_HANDLER(decode_arm_undefined)), REPEAT_16(ARM_HANDLER(decode_arm_undefined)),
+        // 0x100 - 0x13F: STR (store word)
+        REPEAT_64(ARM_HANDLER(decode_arm_str)),
+        // 0x140 - 0x17F: LDR (load word)
+        REPEAT_64(ARM_HANDLER(decode_arm_ldr)),
+        // 0x180 - 0x19F: STRB (store byte, reg/imm alternating)
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)),
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)),
+        // 0x1A0 - 0x1DF: LDRB (load byte, reg/imm alternating)
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_ldrb_reg), ARM_HANDLER(decode_arm_ldrb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_ldrb_reg), ARM_HANDLER(decode_arm_ldrb_imm)),
+        REPEAT_ALT_4(ARM_HANDLER(decode_arm_ldrb_reg), ARM_HANDLER(decode_arm_ldrb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_ldrb_reg), ARM_HANDLER(decode_arm_ldrb_imm)),
+        // 0x1E0 - 0x1FF: Reserved/undefined
+        REPEAT_16(ARM_HANDLER(decode_arm_undefined)), REPEAT_16(ARM_HANDLER(decode_arm_undefined)),
+        // 0x180 - 0x187: STM
+        REPEAT_8(ARM_HANDLER(decode_arm_stm)),
+        // 0x188 - 0x18F: LDM
+        REPEAT_8(ARM_HANDLER(decode_arm_ldm)),
+        // 0x1C0 - 0x1DF: Reserved/undefined
+        REPEAT_16(ARM_HANDLER(decode_arm_undefined)),
+        // 0x1E0 - 0x1FF: Branch (B, BL)
+        REPEAT_8(ARM_HANDLER(decode_arm_b)), REPEAT_8(ARM_HANDLER(decode_arm_bl)),
+        // 0x200 - 0x2FF: Coprocessor (CDP, MRC, MCR)
+        REPEAT_8(ARM_HANDLER(decode_arm_cdp)), REPEAT_8(ARM_HANDLER(decode_arm_mrc)), REPEAT_8(ARM_HANDLER(decode_arm_mcr)),
+        // 0x300 - 0x31F: Software Interrupt
+        REPEAT_32(ARM_HANDLER(decode_arm_software_interrupt))
+    };
+
+    // Cleanup macros to avoid polluting the namespace
+    #undef ARM_HANDLER
+    #undef REPEAT_2
+    #undef REPEAT_4
+    #undef REPEAT_8
+    #undef REPEAT_16
+    #undef REPEAT_32
+    #undef REPEAT_64
+    #undef REPEAT_128
+    #undef REPEAT_ALT_4
 
 public:
     explicit ARMCPU(CPU& cpu);

@@ -57,6 +57,11 @@ struct ARMCachedInstruction {
     uint32_t instruction;               // Original instruction word
     bool valid;                         // Cache entry validity
     
+    uint8_t shift_type;                 // 2 bit shift type in operand2
+    bool reg_shift;                     // true if the shift treats rs as a register, false if rs is actually an imm value
+    uint8_t rotate_imm;                 // 4 bit rotate value in operand2
+    uint8_t imm8;                       // 8 bit immediate va;ue in operand2
+    
     // Pre-decoded instruction information
     ARMInstructionType type;            // Instruction category
     uint8_t condition;                  // Condition code (4 bits)
