@@ -19,7 +19,7 @@ void ARMCPU::decode_arm_##name##_imm(ARMCachedInstruction& decoded) { \
     decoded.immediate = true; \
     decoded.rotate_imm = bits<11,8>(decoded.instruction); \
     decoded.imm8 = bits<7,0>(decoded.instruction); \
-    decoded.execute_func = &ARMCPU::arm_##name; \
+    decoded.execute_func = &ARMCPU::execute_arm_##name##_imm; \
 }
 
 #define ARM_DP_DECODER_REG(name) \
@@ -33,7 +33,7 @@ void ARMCPU::decode_arm_##name##_reg(ARMCachedInstruction& decoded) { \
     decoded.shift_type = bits<6,5>(decoded.instruction); \
     decoded.reg_shift = bits<4,4>(decoded.instruction); \
     decoded.rm = bits<3,0>(decoded.instruction); \
-    decoded.execute_func = &ARMCPU::arm_##name; \
+    decoded.execute_func = &ARMCPU::execute_arm_##name##_reg; \
 }
 
 ARM_DP_DECODER_IMM(and)
@@ -67,76 +67,15 @@ ARM_DP_DECODER_REG(bic)
 ARM_DP_DECODER_IMM(mvn)
 ARM_DP_DECODER_REG(mvn)
 
-// MOV immediate handler (already present)
-// MOV register handler (already present)
-
-// STR/LDR/STRB/LDRB decoders
-// STR immediate
-void ARMCPU::decode_arm_str_imm(ARMCachedInstruction& decoded) {
-    decoded.load = false;
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.immediate = true;
-    decoded.offset_value = bits<11,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_str;
-}
-
-// STR register
-void ARMCPU::decode_arm_str_reg(ARMCachedInstruction& decoded) {
-    decoded.load = false;
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.immediate = false;
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.offset_type = bits<6,5>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_str;
-}
-
-// LDR immediate
-void ARMCPU::decode_arm_ldr_imm(ARMCachedInstruction& decoded) {
-    decoded.load = true;
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.immediate = true;
-    decoded.offset_value = bits<11,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_ldr;
-}
-
-// LDR register
-void ARMCPU::decode_arm_ldr_reg(ARMCachedInstruction& decoded) {
-    decoded.load = true;
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.immediate = false;
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.offset_type = bits<6,5>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_ldr;
-}
-
-void ARMCPU::decode_arm_strb(ARMCachedInstruction& decoded) {
-    decoded.load = false;
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.immediate = false; // This line is modified for clarity
-    if (decoded.immediate) {
-        decoded.offset_value = bits<11,0>(decoded.instruction);
-    } else {
-        decoded.rm = bits<3,0>(decoded.instruction);
-        decoded.offset_type = bits<6,5>(decoded.instruction);
-    }
-    decoded.execute_func = arm_strb;
-}
-// STRB immediate
 void ARMCPU::decode_arm_strb_imm(ARMCachedInstruction& decoded) {
     decoded.load = false;
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.immediate = true;
     decoded.offset_value = bits<11,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_strb;
+    decoded.execute_func = &ARMCPU::execute_arm_strb_imm;
 }
 
-// STRB register
 void ARMCPU::decode_arm_strb_reg(ARMCachedInstruction& decoded) {
     decoded.load = false;
     decoded.rd = bits<15,12>(decoded.instruction);
@@ -144,33 +83,18 @@ void ARMCPU::decode_arm_strb_reg(ARMCachedInstruction& decoded) {
     decoded.immediate = false;
     decoded.rm = bits<3,0>(decoded.instruction);
     decoded.offset_type = bits<6,5>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_strb;
+    decoded.execute_func = &ARMCPU::execute_arm_strb_reg;
 }
 
-void ARMCPU::decode_arm_ldrb(ARMCachedInstruction& decoded) {
-    decoded.load = true;
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.immediate = false; // This line is modified for clarity
-    if (decoded.immediate) {
-        decoded.offset_value = bits<11,0>(decoded.instruction);
-    } else {
-        decoded.rm = bits<3,0>(decoded.instruction);
-        decoded.offset_type = bits<6,5>(decoded.instruction);
-    }
-    decoded.execute_func = arm_ldrb;
-}
-// LDRB immediate
 void ARMCPU::decode_arm_ldrb_imm(ARMCachedInstruction& decoded) {
     decoded.load = true;
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.immediate = true;
     decoded.offset_value = bits<11,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_ldrb;
+    decoded.execute_func = &ARMCPU::execute_arm_ldrb_imm;
 }
 
-// LDRB register
 void ARMCPU::decode_arm_ldrb_reg(ARMCachedInstruction& decoded) {
     decoded.load = true;
     decoded.rd = bits<15,12>(decoded.instruction);
@@ -178,7 +102,7 @@ void ARMCPU::decode_arm_ldrb_reg(ARMCachedInstruction& decoded) {
     decoded.immediate = false;
     decoded.rm = bits<3,0>(decoded.instruction);
     decoded.offset_type = bits<6,5>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_ldrb;
+    decoded.execute_func = &ARMCPU::execute_arm_ldrb_reg;
 }
 
 // STM/LDM decoders
@@ -187,7 +111,7 @@ void ARMCPU::decode_arm_stm(ARMCachedInstruction& decoded) {
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.register_list = bits<15,0>(decoded.instruction);
     decoded.addressing_mode = bits<23,22>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_stm;
+    decoded.execute_func = &ARMCPU::execute_arm_stm;
 }
 
 void ARMCPU::decode_arm_ldm(ARMCachedInstruction& decoded) {
@@ -195,7 +119,7 @@ void ARMCPU::decode_arm_ldm(ARMCachedInstruction& decoded) {
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.register_list = bits<15,0>(decoded.instruction);
     decoded.addressing_mode = bits<23,22>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_ldm;
+    decoded.execute_func = &ARMCPU::execute_arm_ldm;
 }
 
 // Branch decoders
@@ -204,7 +128,7 @@ void ARMCPU::decode_arm_b(ARMCachedInstruction& decoded) {
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
     decoded.branch_offset = (offset << 2) + 8;
     decoded.link = false;
-    decoded.execute_func = &ARMCPU::arm_b;
+    decoded.execute_func = &ARMCPU::execute_arm_b;
 }
 
 void ARMCPU::decode_arm_bl(ARMCachedInstruction& decoded) {
@@ -212,7 +136,7 @@ void ARMCPU::decode_arm_bl(ARMCachedInstruction& decoded) {
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
     decoded.branch_offset = (offset << 2) + 8;
     decoded.link = true;
-    decoded.execute_func = &ARMCPU::arm_bl;
+    decoded.execute_func = &ARMCPU::execute_arm_bl;
 }
 
 // SWP/SWPB decoders
@@ -220,14 +144,14 @@ void ARMCPU::decode_arm_swp(ARMCachedInstruction& decoded) {
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_swp;
+    decoded.execute_func = &ARMCPU::execute_arm_swp;
 }
 
 void ARMCPU::decode_arm_swpb(ARMCachedInstruction& decoded) {
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_swpb;
+    decoded.execute_func = &ARMCPU::execute_arm_swpb;
 }
 
 // MUL/MLA/UMULL/UMLAL/SMULL/SMLAL decoders
@@ -236,7 +160,7 @@ void ARMCPU::decode_arm_mul(ARMCachedInstruction& decoded) {
     decoded.rm = bits<3,0>(decoded.instruction);
     decoded.rs = bits<11,8>(decoded.instruction);
     decoded.set_flags = (decoded.instruction >> 20) & 1;
-    decoded.execute_func = &ARMCPU::arm_mul;
+    decoded.execute_func = &ARMCPU::execute_arm_mul;
 }
 
 void ARMCPU::decode_arm_mla(ARMCachedInstruction& decoded) {
@@ -246,7 +170,7 @@ void ARMCPU::decode_arm_mla(ARMCachedInstruction& decoded) {
     decoded.rn = bits<15,12>(decoded.instruction);
     decoded.set_flags = (decoded.instruction >> 20) & 1;
     decoded.accumulate = true;
-    decoded.execute_func = &ARMCPU::arm_mla;
+    decoded.execute_func = &ARMCPU::execute_arm_mla;
 }
 
 void ARMCPU::decode_arm_umull(ARMCachedInstruction& decoded) {
@@ -256,7 +180,7 @@ void ARMCPU::decode_arm_umull(ARMCachedInstruction& decoded) {
     decoded.rs = bits<11,8>(decoded.instruction);
     decoded.set_flags = (decoded.instruction >> 20) & 1;
     decoded.signed_op = false;
-    decoded.execute_func = &ARMCPU::arm_umull;
+    decoded.execute_func = &ARMCPU::execute_arm_umull;
 }
 
 void ARMCPU::decode_arm_umlal(ARMCachedInstruction& decoded) {
@@ -267,7 +191,7 @@ void ARMCPU::decode_arm_umlal(ARMCachedInstruction& decoded) {
     decoded.set_flags = (decoded.instruction >> 20) & 1;
     decoded.signed_op = false;
     decoded.accumulate = true;
-    decoded.execute_func = &ARMCPU::arm_umlal;
+    decoded.execute_func = &ARMCPU::execute_arm_umlal;
 }
 
 void ARMCPU::decode_arm_smull(ARMCachedInstruction& decoded) {
@@ -277,7 +201,7 @@ void ARMCPU::decode_arm_smull(ARMCachedInstruction& decoded) {
     decoded.rs = bits<11,8>(decoded.instruction);
     decoded.set_flags = (decoded.instruction >> 20) & 1;
     decoded.signed_op = true;
-    decoded.execute_func = &ARMCPU::arm_smull;
+    decoded.execute_func = &ARMCPU::execute_arm_smull;
 }
 
 void ARMCPU::decode_arm_smlal(ARMCachedInstruction& decoded) {
@@ -288,7 +212,7 @@ void ARMCPU::decode_arm_smlal(ARMCachedInstruction& decoded) {
     decoded.set_flags = (decoded.instruction >> 20) & 1;
     decoded.signed_op = true;
     decoded.accumulate = true;
-    decoded.execute_func = &ARMCPU::arm_smlal;
+    decoded.execute_func = &ARMCPU::execute_arm_smlal;
 }
 
 // LDRH/STRH/LDRSB/LDRSH decoders
@@ -296,28 +220,28 @@ void ARMCPU::decode_arm_ldrh(ARMCachedInstruction& decoded) {
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_ldrh;
+    decoded.execute_func = &ARMCPU::execute_arm_ldrh;
 }
 
 void ARMCPU::decode_arm_strh(ARMCachedInstruction& decoded) {
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_strh;
+    decoded.execute_func = &ARMCPU::execute_arm_strh;
 }
 
 void ARMCPU::decode_arm_ldrsb(ARMCachedInstruction& decoded) {
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_ldrsb;
+    decoded.execute_func = &ARMCPU::execute_arm_ldrsb;
 }
 
 void ARMCPU::decode_arm_ldrsh(ARMCachedInstruction& decoded) {
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::arm_ldrsh;
+    decoded.execute_func = &ARMCPU::execute_arm_ldrsh;
 }
 
 // Undefined decoder
@@ -334,7 +258,7 @@ void ARMCPU::decode_arm_mov_imm(ARMCachedInstruction& decoded) {
     decoded.rotate_imm = bits<11,8>(decoded.instruction); 
     decoded.imm8 = bits<7,0>(decoded.instruction);
     
-    decoded.execute_func = &ARMCPU::arm_mov_imm;
+    decoded.execute_func = &ARMCPU::execute_arm_mov_imm;
 }
 
 // MOV register handler
@@ -348,5 +272,5 @@ void ARMCPU::decode_arm_mov_reg(ARMCachedInstruction& decoded) {
     decoded.reg_shift = bits<4,4>(decoded.instruction); 
     decoded.rm = bits<3,0>(decoded.instruction);
 
-    decoded.execute_func = &ARMCPU::arm_mov_reg;
+    decoded.execute_func = &ARMCPU::execute_arm_mov_reg;
 }
