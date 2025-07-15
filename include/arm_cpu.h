@@ -22,6 +22,7 @@
 class CPU; // Forward declaration
 
 class ARMCPU {
+
 public:
     bool exception_taken = false;
     CPU& parentCPU; // Reference to the parent CPU
@@ -108,8 +109,6 @@ private:
     // ARM7TDMI instruction decode table using bits 27-19 (9 bits, providing finer granularity)
     // For groups or ambiguous cases, a group name is used in the comment.
 
-    void decode_arm_ldr_imm(ARMCachedInstruction& decoded);
-    void decode_arm_ldr_reg(ARMCachedInstruction& decoded);
     void decode_arm_and_reg(ARMCachedInstruction& decoded);
     void decode_arm_and_imm(ARMCachedInstruction& decoded);
     void decode_arm_eor_reg(ARMCachedInstruction& decoded);
@@ -142,7 +141,6 @@ private:
     void decode_arm_bic_imm(ARMCachedInstruction& decoded);
     void decode_arm_mvn_reg(ARMCachedInstruction& decoded);
     void decode_arm_mvn_imm(ARMCachedInstruction& decoded);
-    void decode_arm_branch(ARMCachedInstruction& decoded);
     void decode_arm_mul(ARMCachedInstruction& decoded);
     void decode_arm_mla(ARMCachedInstruction& decoded);
     void decode_arm_umull(ARMCachedInstruction& decoded);
@@ -151,34 +149,26 @@ private:
     void decode_arm_smlal(ARMCachedInstruction& decoded);
     void decode_arm_swp(ARMCachedInstruction& decoded);
     void decode_arm_swpb(ARMCachedInstruction& decoded);
+    void decode_arm_swap_group(ARMCachedInstruction& decoded);
     void decode_arm_ldrh(ARMCachedInstruction& decoded);
-    void decode_arm_strh(ARMCachedInstruction& decoded);
     void decode_arm_ldrsb(ARMCachedInstruction& decoded);
     void decode_arm_ldrsh(ARMCachedInstruction& decoded);
-    void decode_arm_halfword_transfer(ARMCachedInstruction& decoded); 
-    void decode_arm_mull_group(ARMCachedInstruction& decoded); // fallback for ambiguous/undefined
-    void decode_arm_swap_group(ARMCachedInstruction& decoded); // fallback for ambiguous/undefined
-    void decode_arm_stm(ARMCachedInstruction& decoded);
-    void decode_arm_ldm(ARMCachedInstruction& decoded);
+    void decode_arm_strh(ARMCachedInstruction& decoded);
     void decode_arm_undefined(ARMCachedInstruction& decoded);
-    void decode_arm_coprocessor(ARMCachedInstruction& decoded);
-    void decode_arm_software_interrupt(ARMCachedInstruction& decoded);
-    void decode_arm_ldr(ARMCachedInstruction& decoded);
     void decode_arm_str(ARMCachedInstruction& decoded);
-    void decode_arm_ldrb(ARMCachedInstruction& decoded);
-    void decode_arm_strb(ARMCachedInstruction& decoded);
-    void decode_arm_strb_imm(ARMCachedInstruction& decoded);
+    void decode_arm_ldr(ARMCachedInstruction& decoded);
     void decode_arm_strb_reg(ARMCachedInstruction& decoded);
-    void decode_arm_ldrb_imm(ARMCachedInstruction& decoded);
+    void decode_arm_strb_imm(ARMCachedInstruction& decoded);
     void decode_arm_ldrb_reg(ARMCachedInstruction& decoded);
-    void decode_arm_ldm(ARMCachedInstruction& decoded);
+    void decode_arm_ldrb_imm(ARMCachedInstruction& decoded);
     void decode_arm_stm(ARMCachedInstruction& decoded);
+    void decode_arm_ldm(ARMCachedInstruction& decoded);
     void decode_arm_b(ARMCachedInstruction& decoded);
     void decode_arm_bl(ARMCachedInstruction& decoded);
     void decode_arm_cdp(ARMCachedInstruction& decoded);
     void decode_arm_mrc(ARMCachedInstruction& decoded);
     void decode_arm_mcr(ARMCachedInstruction& decoded);
-
+    void decode_arm_software_interrupt(ARMCachedInstruction& decoded);
 
     // Helper macros for cleaner instruction table initialization
     #define ARM_HANDLER(func) &ARMCPU::func
@@ -276,6 +266,67 @@ private:
     #undef REPEAT_64
     #undef REPEAT_128
     #undef REPEAT_ALT_4
+
+        // --- Execute stubs for decode_arm_ functions ---
+    void execute_arm_str_imm(ARMCachedInstruction& decoded);
+    void execute_arm_str_reg(ARMCachedInstruction& decoded) {};
+    void execute_arm_ldr_imm(ARMCachedInstruction& decoded);
+    void execute_arm_ldr_reg(ARMCachedInstruction& decoded);
+    void execute_arm_strb(ARMCachedInstruction& decoded);
+    void execute_arm_strb_imm(ARMCachedInstruction& decoded);
+    void execute_arm_strb_reg(ARMCachedInstruction& decoded);
+    void execute_arm_ldrb(ARMCachedInstruction& decoded);
+    void execute_arm_ldrb_imm(ARMCachedInstruction& decoded);
+    void execute_arm_ldrb_reg(ARMCachedInstruction& decoded);
+    void execute_arm_stm(ARMCachedInstruction& decoded);
+    void execute_arm_ldm(ARMCachedInstruction& decoded);
+    void execute_arm_b(ARMCachedInstruction& decoded);
+    void execute_arm_bl(ARMCachedInstruction& decoded);
+    void execute_arm_swp(ARMCachedInstruction& decoded);
+    void execute_arm_swpb(ARMCachedInstruction& decoded);
+    void execute_arm_mul(ARMCachedInstruction& decoded);
+    void execute_arm_mla(ARMCachedInstruction& decoded);
+    void execute_arm_umull(ARMCachedInstruction& decoded);
+    void execute_arm_umlal(ARMCachedInstruction& decoded);
+    void execute_arm_smull(ARMCachedInstruction& decoded);
+    void execute_arm_smlal(ARMCachedInstruction& decoded);
+    void execute_arm_ldrh(ARMCachedInstruction& decoded);
+    void execute_arm_strh(ARMCachedInstruction& decoded);
+    void execute_arm_ldrsb(ARMCachedInstruction& decoded);
+    void execute_arm_ldrsh(ARMCachedInstruction& decoded);
+    void execute_arm_mov_imm(ARMCachedInstruction& decoded);
+    void execute_arm_mov_reg(ARMCachedInstruction& decoded);
+    // Data processing execute stubs
+    void execute_arm_and_imm(ARMCachedInstruction& decoded);
+    void execute_arm_and_reg(ARMCachedInstruction& decoded);
+    void execute_arm_eor_imm(ARMCachedInstruction& decoded);
+    void execute_arm_eor_reg(ARMCachedInstruction& decoded);
+    void execute_arm_sub_imm(ARMCachedInstruction& decoded);
+    void execute_arm_sub_reg(ARMCachedInstruction& decoded);
+    void execute_arm_rsb_imm(ARMCachedInstruction& decoded);
+    void execute_arm_rsb_reg(ARMCachedInstruction& decoded);
+    void execute_arm_add_imm(ARMCachedInstruction& decoded);
+    void execute_arm_add_reg(ARMCachedInstruction& decoded);
+    void execute_arm_adc_imm(ARMCachedInstruction& decoded);
+    void execute_arm_adc_reg(ARMCachedInstruction& decoded);
+    void execute_arm_sbc_imm(ARMCachedInstruction& decoded);
+    void execute_arm_sbc_reg(ARMCachedInstruction& decoded);
+    void execute_arm_rsc_imm(ARMCachedInstruction& decoded);
+    void execute_arm_rsc_reg(ARMCachedInstruction& decoded);
+    void execute_arm_tst_imm(ARMCachedInstruction& decoded);
+    void execute_arm_tst_reg(ARMCachedInstruction& decoded);
+    void execute_arm_teq_imm(ARMCachedInstruction& decoded);
+    void execute_arm_teq_reg(ARMCachedInstruction& decoded);
+    void execute_arm_cmp_imm(ARMCachedInstruction& decoded);
+    void execute_arm_cmp_reg(ARMCachedInstruction& decoded);
+    void execute_arm_cmn_imm(ARMCachedInstruction& decoded);
+    void execute_arm_cmn_reg(ARMCachedInstruction& decoded);
+    void execute_arm_orr_imm(ARMCachedInstruction& decoded);
+    void execute_arm_orr_reg(ARMCachedInstruction& decoded);
+    void execute_arm_bic_imm(ARMCachedInstruction& decoded);
+    void execute_arm_bic_reg(ARMCachedInstruction& decoded);
+    void execute_arm_mvn_imm(ARMCachedInstruction& decoded);
+    void execute_arm_mvn_reg(ARMCachedInstruction& decoded);
 
 public:
     explicit ARMCPU(CPU& cpu);

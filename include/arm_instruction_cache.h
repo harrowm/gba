@@ -96,7 +96,7 @@ struct ARMCachedInstruction {
     uint8_t addressing_mode;            // Addressing mode bits
     
     // Function pointer for direct execution (critical optimization)
-    void (ARMCPU::*execute_func)(const ARMCachedInstruction&);
+    void (ARMCPU::*execute_func)(ARMCachedInstruction&);
     
     // Default constructor
     ARMCachedInstruction() : valid(false) {}
