@@ -795,27 +795,7 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
     // MOV_REG opcode  index 0x068-0x06B in the 9-bit table
     uint32_t decode_index = (instruction >> 19) & 0x1FF;
     if (decode_index >= 0x068 && decode_index <= 0x06B) {
-        arm_decode_table[decode_index](&decoded);
-        // Fill out ARMCachedInstruction for MOV (match decodeDataProcessing fields)
-        decoded.type = ARMInstructionType::DATA_PROCESSING;
-        decoded.dp_op = static_cast<ARMDataProcessingOp>((instruction >> 21) & 0xF);
-        decoded.immediate = (instruction >> 25) & 1;
-        if (decoded.immediate) {
-            uint32_t imm = instruction & 0xFF;
-            uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
-            if (rotate == 0) {
-                decoded.imm_value = imm;
-                decoded.imm_carry = (parentCPU.CPSR() >> 29) & 1;
-            } else {
-                decoded.imm_value = (imm >> rotate) | (imm << (32 - rotate));
-                decoded.imm_carry = (decoded.imm_value >> 31) & 1;
-            }
-            decoded.imm_valid = true;
-        } else {
-            decoded.rm = instruction & 0xF;
-            decoded.imm_valid = false;
-        }
-        decoded.execute_func = nullptr; // Not used for new decode path yet
+        (this->*arm_decode_table[decode_index])(decoded);
         return decoded;
     }
 

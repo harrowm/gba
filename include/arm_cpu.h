@@ -5,7 +5,6 @@
 #include "cpu.h"
 #include "timing.h"
 #include "arm_timing.h"
-#include "arm_decode.h"
 #include "utility_macros.h"
 #include "arm_instruction_cache.h"
 
@@ -109,6 +108,8 @@ private:
     // ARM7TDMI instruction decode table using bits 27-19 (9 bits, providing finer granularity)
     // For groups or ambiguous cases, a group name is used in the comment.
 
+    void decode_arm_ldr_imm(ARMCachedInstruction& decoded);
+    void decode_arm_ldr_reg(ARMCachedInstruction& decoded);
     void decode_arm_and_reg(ARMCachedInstruction& decoded);
     void decode_arm_and_imm(ARMCachedInstruction& decoded);
     void decode_arm_eor_reg(ARMCachedInstruction& decoded);
@@ -141,10 +142,7 @@ private:
     void decode_arm_bic_imm(ARMCachedInstruction& decoded);
     void decode_arm_mvn_reg(ARMCachedInstruction& decoded);
     void decode_arm_mvn_imm(ARMCachedInstruction& decoded);
-    void decode_arm_data_processing(ARMCachedInstruction& decoded);
-    void decode_arm_load_store(ARMCachedInstruction& decoded);
     void decode_arm_branch(ARMCachedInstruction& decoded);
-    void decode_arm_load_store_multiple(ARMCachedInstruction& decoded);
     void decode_arm_mul(ARMCachedInstruction& decoded);
     void decode_arm_mla(ARMCachedInstruction& decoded);
     void decode_arm_umull(ARMCachedInstruction& decoded);
