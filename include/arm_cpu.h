@@ -28,6 +28,12 @@ public:
     CPU& parentCPU; // Reference to the parent CPU
     ARMInstructionCache instruction_cache; // Instruction decode cache
 
+    template <uint32_t hi, uint32_t lo>
+    static constexpr uint32_t bits(uint32_t instruction) {
+        static_assert(hi >= lo && hi < 32, "Invalid bit range");
+        return ((instruction >> lo) & ((1 << (hi - lo + 1)) - 1));
+    }
+
     // Instruction execution functions
     void executeInstruction(uint32_t instruction);
 
@@ -91,6 +97,9 @@ public:
     FORCE_INLINE void fastALU_CMP(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
     
     // Helper functions - critical ones marked as FORCE_INLINE for optimization
+    FORCE_INLINE uint32_t execOperand2imm(uint32_t imm, uint8_t rotate, uint32_t* carry_out);
+
+
     FORCE_INLINE uint32_t calculateOperand2(uint32_t instruction, uint32_t* carry_out);
     uint32_t calculateOperand2Advanced(uint32_t instruction, uint32_t* carry_out, uint32_t* cycles);
     uint32_t arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t shift_amount, uint32_t* carry_out);
@@ -269,7 +278,7 @@ private:
 
         // --- Execute stubs for decode_arm_ functions ---
     void execute_arm_str_imm(ARMCachedInstruction& decoded);
-    void execute_arm_str_reg(ARMCachedInstruction& decoded) {};
+    void execute_arm_str_reg(ARMCachedInstruction& decoded);
     void execute_arm_ldr_imm(ARMCachedInstruction& decoded);
     void execute_arm_ldr_reg(ARMCachedInstruction& decoded);
     void execute_arm_strb(ARMCachedInstruction& decoded);

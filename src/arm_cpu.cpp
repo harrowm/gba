@@ -119,94 +119,94 @@ uint32_t ARMCPU::calculateInstructionCycles(uint32_t instruction) {
     return arm_calculate_instruction_cycles(instruction, pc, registers, cpsr);
 }
 
-// Add an optimized inline version of calculateOperand2
-FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* carry_out) {
-    // Fast path for common case: immediate operand with minimal rotation
-    if (instruction & 0x02000000) {
-        // Immediate operand
-        uint32_t imm = instruction & 0xFF;
-        uint32_t rotate_field = (instruction >> 8) & 0xF;
-        uint32_t rotate = rotate_field * 2;
-        if (rotate == 0) {
-            *carry_out = (parentCPU.CPSR() >> 29) & 1;
-            return imm;
-        }
-        if (rotate > 0) {
-            uint32_t result = (imm >> rotate) | (imm << (32 - rotate));
-            *carry_out = (result >> 31) & 1;
-            return result;
-        }
-        return imm;
-    } else {
-        uint32_t rm = parentCPU.R()[instruction & 0xF];
-        uint32_t shift_type = (instruction >> 5) & 3;
-        uint32_t shift_amount = 0;
-        if (!(instruction & 0xFF0)) {
-            *carry_out = (parentCPU.CPSR() >> 29) & 1;
-            return rm;
-        }
-        if (instruction & 0x10) {
-            uint32_t rs = (instruction >> 8) & 0xF;
-            shift_amount = parentCPU.R()[rs] & 0xFF;
-            if (shift_amount == 0) {
-                *carry_out = (parentCPU.CPSR() >> 29) & 1;
-                return rm;
-            }
-        } else {
-            shift_amount = (instruction >> 7) & 0x1F;
-            if (shift_amount == 0) {
-                if (shift_type == 0) {
-                    *carry_out = (parentCPU.CPSR() >> 29) & 1;
-                    return rm;
-                } else if (shift_type == 1) { // LSR #0 means LSR #32
-                    shift_amount = 32;
-                } else if (shift_type == 2) { // ASR #0 means ASR #32
-                    shift_amount = 32;
-                } else if (shift_type == 3) {
-                    uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
-                    *carry_out = rm & 1;
-                    return (old_carry << 31) | (rm >> 1);
-                }
-            }
-        }
-        // Debug print for shifter operand
-        switch (shift_type) {
-            case 0: // LSL
-                if (shift_amount >= 32) {
-                    *carry_out = (shift_amount == 32) ? (rm & 1) : 0;
-                    return 0;
-                }
-                *carry_out = (rm >> (32 - shift_amount)) & 1;
-                return rm << shift_amount;
-            case 1: // LSR
-                if (shift_amount == 32) {
-                    *carry_out = (rm >> 31) & 1;
-                    return 0;
-                } else if (shift_amount > 32) {
-                    *carry_out = 0;
-                    return 0;
-                }
-                *carry_out = (rm >> (shift_amount - 1)) & 1;
-                return rm >> shift_amount;
-            case 2: // ASR
-                if (shift_amount >= 32) {
-                    *carry_out = (rm >> 31) & 1;
-                    return (rm & 0x80000000) ? 0xFFFFFFFF : 0;
-                }
-                *carry_out = (rm >> (shift_amount - 1)) & 1;
-                return static_cast<int32_t>(rm) >> shift_amount;
-            case 3: // ROR
-                if (shift_amount == 0) {
-                    *carry_out = (parentCPU.CPSR() >> 29) & 1;
-                    return rm;
-                }
-                shift_amount %= 32;
-                *carry_out = (rm >> (shift_amount - 1)) & 1;
-                return (rm >> shift_amount) | (rm << (32 - shift_amount));
-        }
-        return rm;
-    }
-}
+// // Add an optimized inline version of calculateOperand2
+// FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* carry_out) {
+//     // Fast path for common case: immediate operand with minimal rotation
+//     if (instruction & 0x02000000) {
+//         // Immediate operand
+//         uint32_t imm = instruction & 0xFF;
+//         uint32_t rotate_field = (instruction >> 8) & 0xF;
+//         uint32_t rotate = rotate_field * 2;
+//         if (rotate == 0) {
+//             *carry_out = (parentCPU.CPSR() >> 29) & 1;
+//             return imm;
+//         }
+//         if (rotate > 0) {
+//             uint32_t result = (imm >> rotate) | (imm << (32 - rotate));
+//             *carry_out = (result >> 31) & 1;
+//             return result;
+//         }
+//         return imm;
+//     } else {
+//         uint32_t rm = parentCPU.R()[instruction & 0xF];
+//         uint32_t shift_type = (instruction >> 5) & 3;
+//         uint32_t shift_amount = 0;
+//         if (!(instruction & 0xFF0)) {
+//             *carry_out = (parentCPU.CPSR() >> 29) & 1;
+//             return rm;
+//         }
+//         if (instruction & 0x10) {
+//             uint32_t rs = (instruction >> 8) & 0xF;
+//             shift_amount = parentCPU.R()[rs] & 0xFF;
+//             if (shift_amount == 0) {
+//                 *carry_out = (parentCPU.CPSR() >> 29) & 1;
+//                 return rm;
+//             }
+//         } else {
+//             shift_amount = (instruction >> 7) & 0x1F;
+//             if (shift_amount == 0) {
+//                 if (shift_type == 0) {
+//                     *carry_out = (parentCPU.CPSR() >> 29) & 1;
+//                     return rm;
+//                 } else if (shift_type == 1) { // LSR #0 means LSR #32
+//                     shift_amount = 32;
+//                 } else if (shift_type == 2) { // ASR #0 means ASR #32
+//                     shift_amount = 32;
+//                 } else if (shift_type == 3) {
+//                     uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
+//                     *carry_out = rm & 1;
+//                     return (old_carry << 31) | (rm >> 1);
+//                 }
+//             }
+//         }
+//         // Debug print for shifter operand
+//         switch (shift_type) {
+//             case 0: // LSL
+//                 if (shift_amount >= 32) {
+//                     *carry_out = (shift_amount == 32) ? (rm & 1) : 0;
+//                     return 0;
+//                 }
+//                 *carry_out = (rm >> (32 - shift_amount)) & 1;
+//                 return rm << shift_amount;
+//             case 1: // LSR
+//                 if (shift_amount == 32) {
+//                     *carry_out = (rm >> 31) & 1;
+//                     return 0;
+//                 } else if (shift_amount > 32) {
+//                     *carry_out = 0;
+//                     return 0;
+//                 }
+//                 *carry_out = (rm >> (shift_amount - 1)) & 1;
+//                 return rm >> shift_amount;
+//             case 2: // ASR
+//                 if (shift_amount >= 32) {
+//                     *carry_out = (rm >> 31) & 1;
+//                     return (rm & 0x80000000) ? 0xFFFFFFFF : 0;
+//                 }
+//                 *carry_out = (rm >> (shift_amount - 1)) & 1;
+//                 return static_cast<int32_t>(rm) >> shift_amount;
+//             case 3: // ROR
+//                 if (shift_amount == 0) {
+//                     *carry_out = (parentCPU.CPSR() >> 29) & 1;
+//                     return rm;
+//                 }
+//                 shift_amount %= 32;
+//                 *carry_out = (rm >> (shift_amount - 1)) & 1;
+//                 return (rm >> shift_amount) | (rm << (32 - shift_amount));
+//         }
+//         return rm;
+//     }
+// }
 
 bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
     ARMCachedInstruction* cached = instruction_cache.lookup(pc, instruction);
@@ -778,244 +778,363 @@ void ARMCPU::executeCachedInstruction(const ARMCachedInstruction& cached) {
 ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction) {
     // DEBUG: Log instruction and mask for MSR immediate diagnosis
     ARMCachedInstruction decoded;
-    decoded.instruction = instruction;
-    decoded.condition = (instruction >> 28) & 0xF;
-    decoded.valid = true;
 
-    // Add in common decodes here .. instruction handlers can add to these
-    decoded.set_flags = (instruction & 0x00100000) != 0;
+    // Add in common decodes ..
+    decoded.instruction = instruction;
+    decoded.condition = bits<31, 28>(instruction);
+    decoded.set_flags = bits<20, 20>(instruction);
+    decoded.valid = true;
     decoded.pc_modified = (decoded.rd == 15);
     
-
-
-    // Determine instruction format
-    uint32_t format = ARM_GET_FORMAT(instruction);
-
-    // --- New decode table migration: MOV example ---
-    // MOV_REG opcode  index 0x068-0x06B in the 9-bit table
-    uint32_t decode_index = (instruction >> 19) & 0x1FF;
-    if (decode_index >= 0x068 && decode_index <= 0x06B) {
-        (this->*arm_decode_table[decode_index])(decoded);
-        return decoded;
-    }
-
-    // Special case handling first
-    // Undefined instruction pattern (ARMv4: 0xE7F000F0 and similar)
-    // The correct match is (instruction & 0x0FF000F0) == 0x07F000F0
-    if ((instruction & 0x0FF000F0) == 0x07F000F0) {
-        decoded.type = ARMInstructionType::UNDEFINED;
-        decoded.pc_modified = false;
-        decoded.execute_func = nullptr;
-    }
-    // PSR transfer (MRS/MSR, register or immediate)
-    else if (
-        // MRS (register form)
-        (instruction & 0x0FBF0FFF) == 0x010F0000 ||
-        // MSR (register form, ignore bits 19-16 and 3-0)
-        (instruction & 0x0FBFFFF0) == 0x012FF000 ||
-        // MSR (immediate form)
-        ((instruction & 0x0FB00000) == 0x03200000)
-    ) {
-        decoded.type = ARMInstructionType::PSR_TRANSFER;
-        decoded.rd = (instruction >> 12) & 0xF;
-        decoded.pc_modified = (!(instruction & 0x00200000)) && (decoded.rd == 15); // MRS to PC
-        decoded.execute_func = &ARMCPU::executeCachedPSRTransfer;
-    }
-    // ARM multiply-long: bits 27-23=00001, bits 7-4=1001 (UMULL, UMLAL, SMULL, SMLAL)
-    else if (format == 0 && (instruction & 0x0F8000F0) == 0x00800090) {
-        // Multiply-long instruction
-        DEBUG_INFO("Decoding ARM multiply-long instruction: 0x" + debug_to_hex_string(instruction, 8));
-        decoded.type = ARMInstructionType::MULTIPLY;
-        decoded.rdHi = (instruction >> 16) & 0xF;
-        decoded.rdLo = (instruction >> 12) & 0xF;
-        decoded.rs = (instruction >> 8) & 0xF;
-        decoded.rm = instruction & 0xF;
-        decoded.accumulate = (instruction & 0x00200000) != 0;
-        decoded.set_flags = (instruction & 0x00100000) != 0;
-        decoded.signed_op = (instruction & 0x00400000) != 0;
-        decoded.pc_modified = (decoded.rdHi == 15 || decoded.rdLo == 15);
-        decoded.execute_func = &ARMCPU::executeCachedMultiplyLong;
-    }
-    // ARM multiply/MLA: bits 27-22=000000, bits 7-4=1001 (ignore accumulate/set flags bits)
-    else if (format == 0 && ((instruction & 0x0FE000F0) == 0x00000090 || (instruction & 0x0FE000F0) == 0x00200090)) {
-        // Multiply or MLA instruction
-        decoded.type = ARMInstructionType::MULTIPLY;
-        decoded.rd = (instruction >> 16) & 0xF;
-        decoded.rn = (instruction >> 12) & 0xF;
-        decoded.rs = (instruction >> 8) & 0xF;
-        decoded.rm = instruction & 0xF;
-        decoded.accumulate = (instruction & 0x00200000) != 0;
-        decoded.set_flags = (instruction & 0x00100000) != 0;
-        decoded.pc_modified = (decoded.rd == 15);
-        decoded.execute_func = &ARMCPU::executeCachedMultiply;
-    }
-    else if (format == 0 && (instruction & 0x0FFFFFF0) == 0x012FFF10) {
-        // BX instruction
-        decoded.type = ARMInstructionType::BX;
-        decoded.rm = instruction & 0xF;
-        decoded.pc_modified = true;
-        decoded.execute_func = &ARMCPU::executeCachedBX;
-    }
-    // ...existing code...
-    else {
-        // Standard format-based decoding
-        switch (format) {
-            case 0:
-            case 1:
-                decoded = decodeDataProcessing(pc, instruction);
-                break;
-            case 2:
-            case 3:
-                decoded = decodeSingleDataTransfer(pc, instruction);
-                break;
-            case 4:
-                decoded = decodeBlockDataTransfer(pc, instruction);
-                break;
-            case 5:
-                decoded = decodeBranch(pc, instruction);
-                break;
-            case 6:
-                decoded.type = ARMInstructionType::COPROCESSOR_OP;
-                decoded.pc_modified = false;
-                decoded.execute_func = &ARMCPU::executeCachedCoprocessor;
-                break;
-            case 7:
-                if ((instruction & 0x0F000000) == 0x0F000000) {
-                    decoded.type = ARMInstructionType::SOFTWARE_INTERRUPT;
-                    decoded.pc_modified = true;
-                    decoded.execute_func = &ARMCPU::executeCachedSoftwareInterrupt;
-                } else {
-                    decoded.type = ARMInstructionType::COPROCESSOR_REGISTER;
-                    decoded.load = (instruction >> 20) & 1;
-                    decoded.rd = (instruction >> 12) & 0xF;
-                    decoded.pc_modified = decoded.load && (decoded.rd == 15);
-                    decoded.execute_func = &ARMCPU::executeCachedCoprocessor;
-                }
-                break;
-            default:
-                decoded.type = ARMInstructionType::UNDEFINED;
-                decoded.pc_modified = false;
-                decoded.execute_func = nullptr;
-                break;
-        }
-    }
-    
+    // .. and call the decode handler based on the instruction type to handle the rest
+    (this->*arm_decode_table[bits<27, 20>(instruction)])(decoded);
     return decoded;
+
+    // // Determine instruction format
+    // uint32_t format = ARM_GET_FORMAT(instruction);
+
+    // // --- New decode table migration: MOV example ---
+    // // MOV_REG opcode  index 0x068-0x06B in the 9-bit table
+    // uint32_t decode_index = (instruction >> 19) & 0x1FF;
+    // if (decode_index >= 0x068 && decode_index <= 0x06B) {
+    //     (this->*arm_decode_table[decode_index])(decoded);
+    //     return decoded;
+    // }
+
+    // // Special case handling first
+    // // Undefined instruction pattern (ARMv4: 0xE7F000F0 and similar)
+    // // The correct match is (instruction & 0x0FF000F0) == 0x07F000F0
+    // if ((instruction & 0x0FF000F0) == 0x07F000F0) {
+    //     decoded.type = ARMInstructionType::UNDEFINED;
+    //     decoded.pc_modified = false;
+    //     decoded.execute_func = nullptr;
+    // }
+    // // PSR transfer (MRS/MSR, register or immediate)
+    // else if (
+    //     // MRS (register form)
+    //     (instruction & 0x0FBF0FFF) == 0x010F0000 ||
+    //     // MSR (register form, ignore bits 19-16 and 3-0)
+    //     (instruction & 0x0FBFFFF0) == 0x012FF000 ||
+    //     // MSR (immediate form)
+    //     ((instruction & 0x0FB00000) == 0x03200000)
+    // ) {
+    //     decoded.type = ARMInstructionType::PSR_TRANSFER;
+    //     decoded.rd = (instruction >> 12) & 0xF;
+    //     decoded.pc_modified = (!(instruction & 0x00200000)) && (decoded.rd == 15); // MRS to PC
+    //     decoded.execute_func = &ARMCPU::executeCachedPSRTransfer;
+    // }
+    // // ARM multiply-long: bits 27-23=00001, bits 7-4=1001 (UMULL, UMLAL, SMULL, SMLAL)
+    // else if (format == 0 && (instruction & 0x0F8000F0) == 0x00800090) {
+    //     // Multiply-long instruction
+    //     DEBUG_INFO("Decoding ARM multiply-long instruction: 0x" + debug_to_hex_string(instruction, 8));
+    //     decoded.type = ARMInstructionType::MULTIPLY;
+    //     decoded.rdHi = (instruction >> 16) & 0xF;
+    //     decoded.rdLo = (instruction >> 12) & 0xF;
+    //     decoded.rs = (instruction >> 8) & 0xF;
+    //     decoded.rm = instruction & 0xF;
+    //     decoded.accumulate = (instruction & 0x00200000) != 0;
+    //     decoded.set_flags = (instruction & 0x00100000) != 0;
+    //     decoded.signed_op = (instruction & 0x00400000) != 0;
+    //     decoded.pc_modified = (decoded.rdHi == 15 || decoded.rdLo == 15);
+    //     decoded.execute_func = &ARMCPU::executeCachedMultiplyLong;
+    // }
+    // // ARM multiply/MLA: bits 27-22=000000, bits 7-4=1001 (ignore accumulate/set flags bits)
+    // else if (format == 0 && ((instruction & 0x0FE000F0) == 0x00000090 || (instruction & 0x0FE000F0) == 0x00200090)) {
+    //     // Multiply or MLA instruction
+    //     decoded.type = ARMInstructionType::MULTIPLY;
+    //     decoded.rd = (instruction >> 16) & 0xF;
+    //     decoded.rn = (instruction >> 12) & 0xF;
+    //     decoded.rs = (instruction >> 8) & 0xF;
+    //     decoded.rm = instruction & 0xF;
+    //     decoded.accumulate = (instruction & 0x00200000) != 0;
+    //     decoded.set_flags = (instruction & 0x00100000) != 0;
+    //     decoded.pc_modified = (decoded.rd == 15);
+    //     decoded.execute_func = &ARMCPU::executeCachedMultiply;
+    // }
+    // else if (format == 0 && (instruction & 0x0FFFFFF0) == 0x012FFF10) {
+    //     // BX instruction
+    //     decoded.type = ARMInstructionType::BX;
+    //     decoded.rm = instruction & 0xF;
+    //     decoded.pc_modified = true;
+    //     decoded.execute_func = &ARMCPU::executeCachedBX;
+    // }
+    // // ...existing code...
+    // else {
+    //     // Standard format-based decoding
+    //     switch (format) {
+    //         case 0:
+    //         case 1:
+    //             decoded = decodeDataProcessing(pc, instruction);
+    //             break;
+    //         case 2:
+    //         case 3:
+    //             decoded = decodeSingleDataTransfer(pc, instruction);
+    //             break;
+    //         case 4:
+    //             decoded = decodeBlockDataTransfer(pc, instruction);
+    //             break;
+    //         case 5:
+    //             decoded = decodeBranch(pc, instruction);
+    //             break;
+    //         case 6:
+    //             decoded.type = ARMInstructionType::COPROCESSOR_OP;
+    //             decoded.pc_modified = false;
+    //             decoded.execute_func = &ARMCPU::executeCachedCoprocessor;
+    //             break;
+    //         case 7:
+    //             if ((instruction & 0x0F000000) == 0x0F000000) {
+    //                 decoded.type = ARMInstructionType::SOFTWARE_INTERRUPT;
+    //                 decoded.pc_modified = true;
+    //                 decoded.execute_func = &ARMCPU::executeCachedSoftwareInterrupt;
+    //             } else {
+    //                 decoded.type = ARMInstructionType::COPROCESSOR_REGISTER;
+    //                 decoded.load = (instruction >> 20) & 1;
+    //                 decoded.rd = (instruction >> 12) & 0xF;
+    //                 decoded.pc_modified = decoded.load && (decoded.rd == 15);
+    //                 decoded.execute_func = &ARMCPU::executeCachedCoprocessor;
+    //             }
+    //             break;
+    //         default:
+    //             decoded.type = ARMInstructionType::UNDEFINED;
+    //             decoded.pc_modified = false;
+    //             decoded.execute_func = nullptr;
+    //             break;
+    //     }
+    // }
+    
+    // return decoded;
 }
 
 // Decode data processing instructions with optimizations
-ARMCachedInstruction ARMCPU::decodeDataProcessing(uint32_t pc, uint32_t instruction) {
-    (void)pc; // Parameter used for future extensions
-    ARMCachedInstruction decoded;
-    decoded.instruction = instruction;
-    decoded.condition = (instruction >> 28) & 0xF;
-    decoded.type = ARMInstructionType::DATA_PROCESSING;
-    decoded.valid = true;
+// ARMCachedInstruction ARMCPU::decodeDataProcessing(uint32_t pc, uint32_t instruction) {
+//     (void)pc; // Parameter used for future extensions
+//     ARMCachedInstruction decoded;
+//     decoded.instruction = instruction;
+//     decoded.condition = (instruction >> 28) & 0xF;
+//     decoded.type = ARMInstructionType::DATA_PROCESSING;
+//     decoded.valid = true;
     
-    // Extract common fields
-    decoded.dp_op = static_cast<ARMDataProcessingOp>((instruction >> 21) & 0xF);
-    decoded.set_flags = (instruction >> 20) & 1;
-    decoded.rn = (instruction >> 16) & 0xF;
-    decoded.rd = (instruction >> 12) & 0xF;
-    decoded.immediate = (instruction >> 25) & 1;
+//     // Extract common fields
+//     decoded.dp_op = static_cast<ARMDataProcessingOp>((instruction >> 21) & 0xF);
+//     decoded.set_flags = (instruction >> 20) & 1;
+//     decoded.rn = (instruction >> 16) & 0xF;
+//     decoded.rd = (instruction >> 12) & 0xF;
+//     decoded.immediate = (instruction >> 25) & 1;
     
-    // Determine if PC is modified
-    decoded.pc_modified = (decoded.rd == 15);
+//     // Determine if PC is modified
+//     decoded.pc_modified = (decoded.rd == 15);
     
-    // Pre-compute immediate operand if applicable
-    if (decoded.immediate) {
-        uint32_t imm = instruction & 0xFF;
-        uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
+//     // Pre-compute immediate operand if applicable
+//     if (decoded.immediate) {
+//         uint32_t imm = instruction & 0xFF;
+//         uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
         
+//         if (rotate == 0) {
+//             decoded.imm_value = imm;
+//             decoded.imm_carry = (parentCPU.CPSR() >> 29) & 1; // Preserve carry
+//         } else {
+//             decoded.imm_value = (imm >> rotate) | (imm << (32 - rotate));
+//             decoded.imm_carry = (decoded.imm_value >> 31) & 1;
+//         }
+//         decoded.imm_valid = true;
+//     } else {
+//         decoded.rm = instruction & 0xF;
+//         decoded.imm_valid = false;
+//     }
+    
+//     decoded.execute_func = &ARMCPU::executeCachedDataProcessing;
+//     return decoded;
+// }
+
+// // Decode single data transfer instructions
+// ARMCachedInstruction ARMCPU::decodeSingleDataTransfer(uint32_t pc, uint32_t instruction) {
+//     (void)pc; // Parameter used for future extensions
+//     ARMCachedInstruction decoded;
+//     decoded.instruction = instruction;
+//     decoded.condition = (instruction >> 28) & 0xF;
+//     decoded.type = ARMInstructionType::SINGLE_DATA_TRANSFER;
+//     decoded.valid = true;
+    
+//     decoded.load = (instruction >> 20) & 1;
+//     decoded.rd = (instruction >> 12) & 0xF;
+//     decoded.rn = (instruction >> 16) & 0xF;
+//     decoded.immediate = !((instruction >> 25) & 1); // I bit is inverted for LDR/STR
+    
+//     decoded.pc_modified = decoded.load && (decoded.rd == 15);
+    
+//     // Pre-compute offset for immediate addressing
+//     if (decoded.immediate) {
+//         decoded.offset_value = instruction & 0xFFF;
+//         if (!((instruction >> 23) & 1)) { // U bit
+//             decoded.offset_value = -decoded.offset_value;
+//         }
+//     } else {
+//         decoded.rm = instruction & 0xF;
+//         decoded.offset_type = (instruction >> 5) & 3; // Shift type
+//     }
+    
+//     decoded.execute_func = &ARMCPU::executeCachedSingleDataTransfer;
+//     return decoded;
+// }
+
+// // Decode branch instructions
+// ARMCachedInstruction ARMCPU::decodeBranch(uint32_t pc, uint32_t instruction) {
+//     (void)pc; // Parameter used for future extensions
+//     ARMCachedInstruction decoded;
+//     decoded.instruction = instruction;
+//     decoded.condition = (instruction >> 28) & 0xF;
+//     decoded.type = ARMInstructionType::BRANCH;
+//     decoded.valid = true;
+//     decoded.pc_modified = true;
+    
+//     decoded.link = (instruction >> 24) & 1;
+    
+//     // Pre-compute branch target
+//     int32_t offset = instruction & 0xFFFFFF;
+//     if (offset & 0x800000) { // Sign extend
+//         offset |= 0xFF000000;
+//     }
+//     decoded.branch_offset = (offset << 2) + 8; // ARM branches are relative to PC+8
+    
+//     decoded.execute_func = &ARMCPU::executeCachedBranch;
+//     return decoded;
+// }
+
+// // Decode block data transfer instructions
+// ARMCachedInstruction ARMCPU::decodeBlockDataTransfer(uint32_t pc, uint32_t instruction) {
+//     (void)pc; // Parameter used for future extensions
+//     ARMCachedInstruction decoded;
+//     decoded.instruction = instruction;
+//     decoded.condition = (instruction >> 28) & 0xF;
+//     decoded.type = ARMInstructionType::BLOCK_DATA_TRANSFER;
+//     decoded.valid = true;
+    
+//     decoded.load = (instruction >> 20) & 1;
+//     decoded.rn = (instruction >> 16) & 0xF;
+//     decoded.register_list = instruction & 0xFFFF;
+//     decoded.addressing_mode = (instruction >> 23) & 3; // P and U bits
+    
+//     decoded.pc_modified = decoded.load && (decoded.register_list & (1 << 15));
+    
+//     decoded.execute_func = &ARMCPU::executeCachedBlockDataTransfer;
+//     return decoded;
+// }
+
+
+FORCE_INLINE uint32_t ARMCPU::execOperand2imm(uint32_t imm, uint8_t rotate, uint32_t* carry_out) {
+    if (rotate == 0) {
+        *carry_out = (parentCPU.CPSR() >> 29) & 1;
+        return imm;
+    }
+    if (rotate > 0) {
+        uint32_t result = (imm >> rotate) | (imm << (32 - rotate));
+        *carry_out = (result >> 31) & 1;
+        return result;
+    }
+    return imm;
+}
+
+// Add an optimized inline version of calculateOperand2
+FORCE_INLINE uint32_t ARMCPU::calculateOperand2(uint32_t instruction, uint32_t* carry_out) {
+    // Fast path for common case: immediate operand with minimal rotation
+    if (instruction & 0x02000000) {
+        // Immediate operand
+        uint32_t imm = instruction & 0xFF;
+        uint32_t rotate_field = (instruction >> 8) & 0xF;
+        uint32_t rotate = rotate_field * 2;
         if (rotate == 0) {
-            decoded.imm_value = imm;
-            decoded.imm_carry = (parentCPU.CPSR() >> 29) & 1; // Preserve carry
+            *carry_out = (parentCPU.CPSR() >> 29) & 1;
+            return imm;
+        }
+        if (rotate > 0) {
+            uint32_t result = (imm >> rotate) | (imm << (32 - rotate));
+            *carry_out = (result >> 31) & 1;
+            return result;
+        }
+        return imm;
+    } else {
+        uint32_t rm = parentCPU.R()[instruction & 0xF];
+        uint32_t shift_type = (instruction >> 5) & 3;
+        uint32_t shift_amount = 0;
+        if (!(instruction & 0xFF0)) {
+            *carry_out = (parentCPU.CPSR() >> 29) & 1;
+            return rm;
+        }
+        if (instruction & 0x10) {
+            uint32_t rs = (instruction >> 8) & 0xF;
+            shift_amount = parentCPU.R()[rs] & 0xFF;
+            if (shift_amount == 0) {
+                *carry_out = (parentCPU.CPSR() >> 29) & 1;
+                return rm;
+            }
         } else {
-            decoded.imm_value = (imm >> rotate) | (imm << (32 - rotate));
-            decoded.imm_carry = (decoded.imm_value >> 31) & 1;
+            shift_amount = (instruction >> 7) & 0x1F;
+            if (shift_amount == 0) {
+                if (shift_type == 0) {
+                    *carry_out = (parentCPU.CPSR() >> 29) & 1;
+                    return rm;
+                } else if (shift_type == 1) { // LSR #0 means LSR #32
+                    shift_amount = 32;
+                } else if (shift_type == 2) { // ASR #0 means ASR #32
+                    shift_amount = 32;
+                } else if (shift_type == 3) {
+                    uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
+                    *carry_out = rm & 1;
+                    return (old_carry << 31) | (rm >> 1);
+                }
+            }
         }
-        decoded.imm_valid = true;
-    } else {
-        decoded.rm = instruction & 0xF;
-        decoded.imm_valid = false;
-    }
-    
-    decoded.execute_func = &ARMCPU::executeCachedDataProcessing;
-    return decoded;
-}
-
-// Decode single data transfer instructions
-ARMCachedInstruction ARMCPU::decodeSingleDataTransfer(uint32_t pc, uint32_t instruction) {
-    (void)pc; // Parameter used for future extensions
-    ARMCachedInstruction decoded;
-    decoded.instruction = instruction;
-    decoded.condition = (instruction >> 28) & 0xF;
-    decoded.type = ARMInstructionType::SINGLE_DATA_TRANSFER;
-    decoded.valid = true;
-    
-    decoded.load = (instruction >> 20) & 1;
-    decoded.rd = (instruction >> 12) & 0xF;
-    decoded.rn = (instruction >> 16) & 0xF;
-    decoded.immediate = !((instruction >> 25) & 1); // I bit is inverted for LDR/STR
-    
-    decoded.pc_modified = decoded.load && (decoded.rd == 15);
-    
-    // Pre-compute offset for immediate addressing
-    if (decoded.immediate) {
-        decoded.offset_value = instruction & 0xFFF;
-        if (!((instruction >> 23) & 1)) { // U bit
-            decoded.offset_value = -decoded.offset_value;
+        // Debug print for shifter operand
+        switch (shift_type) {
+            case 0: // LSL
+                if (shift_amount >= 32) {
+                    *carry_out = (shift_amount == 32) ? (rm & 1) : 0;
+                    return 0;
+                }
+                *carry_out = (rm >> (32 - shift_amount)) & 1;
+                return rm << shift_amount;
+            case 1: // LSR
+                if (shift_amount == 32) {
+                    *carry_out = (rm >> 31) & 1;
+                    return 0;
+                } else if (shift_amount > 32) {
+                    *carry_out = 0;
+                    return 0;
+                }
+                *carry_out = (rm >> (shift_amount - 1)) & 1;
+                return rm >> shift_amount;
+            case 2: // ASR
+                if (shift_amount >= 32) {
+                    *carry_out = (rm >> 31) & 1;
+                    return (rm & 0x80000000) ? 0xFFFFFFFF : 0;
+                }
+                *carry_out = (rm >> (shift_amount - 1)) & 1;
+                return static_cast<int32_t>(rm) >> shift_amount;
+            case 3: // ROR
+                if (shift_amount == 0) {
+                    *carry_out = (parentCPU.CPSR() >> 29) & 1;
+                    return rm;
+                }
+                shift_amount %= 32;
+                *carry_out = (rm >> (shift_amount - 1)) & 1;
+                return (rm >> shift_amount) | (rm << (32 - shift_amount));
         }
-    } else {
-        decoded.rm = instruction & 0xF;
-        decoded.offset_type = (instruction >> 5) & 3; // Shift type
+        return rm;
     }
-    
-    decoded.execute_func = &ARMCPU::executeCachedSingleDataTransfer;
-    return decoded;
 }
 
-// Decode branch instructions
-ARMCachedInstruction ARMCPU::decodeBranch(uint32_t pc, uint32_t instruction) {
-    (void)pc; // Parameter used for future extensions
-    ARMCachedInstruction decoded;
-    decoded.instruction = instruction;
-    decoded.condition = (instruction >> 28) & 0xF;
-    decoded.type = ARMInstructionType::BRANCH;
-    decoded.valid = true;
-    decoded.pc_modified = true;
-    
-    decoded.link = (instruction >> 24) & 1;
-    
-    // Pre-compute branch target
-    int32_t offset = instruction & 0xFFFFFF;
-    if (offset & 0x800000) { // Sign extend
-        offset |= 0xFF000000;
-    }
-    decoded.branch_offset = (offset << 2) + 8; // ARM branches are relative to PC+8
-    
-    decoded.execute_func = &ARMCPU::executeCachedBranch;
-    return decoded;
-}
 
-// Decode block data transfer instructions
-ARMCachedInstruction ARMCPU::decodeBlockDataTransfer(uint32_t pc, uint32_t instruction) {
-    (void)pc; // Parameter used for future extensions
-    ARMCachedInstruction decoded;
-    decoded.instruction = instruction;
-    decoded.condition = (instruction >> 28) & 0xF;
-    decoded.type = ARMInstructionType::BLOCK_DATA_TRANSFER;
-    decoded.valid = true;
+// New execution functions for cached instructions
+void ARMCPU::execute_arm_and_imm(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_and_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
-    decoded.load = (instruction >> 20) & 1;
-    decoded.rn = (instruction >> 16) & 0xF;
-    decoded.register_list = instruction & 0xFFFF;
-    decoded.addressing_mode = (instruction >> 23) & 3; // P and U bits
-    
-    decoded.pc_modified = decoded.load && (decoded.register_list & (1 << 15));
-    
-    decoded.execute_func = &ARMCPU::executeCachedBlockDataTransfer;
-    return decoded;
+    uint32_t carry_out = 0;
+    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
+
+    parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] & result;
+    if (cached.set_flags && cached.rd != 15) {
+        updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
+    }
 }
 
 // Placeholder cached execution functions (these would call the original implementations)
