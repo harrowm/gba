@@ -52,51 +52,28 @@ enum class ARMInstructionType : uint8_t {
  * Optimized for common ARM instruction patterns
  */
 struct ARMCachedInstruction {
-    // Cache validity and identification
+    // Order by type size to encourage packing
+    void (ARMCPU::*execute_func)(ARMCachedInstruction&); // Function pointer to execution function
+
     uint32_t pc_tag;                    // Upper bits of PC for cache validation
     uint32_t instruction;               // Original instruction word
-    bool valid;                         // Cache entry validity
-    
+    int32_t branch_offset;              // Pre-computed branch offset
+    int32_t offset_value;               // Pre-computed offset for immediate addressing
+    uint16_t register_list;             // Register list for LDM/STM block transfers
+    uint8_t rotate;                     // 4 bit rotate value in operand2 multiplied by 2
     uint8_t shift_type;                 // 2 bit shift type in operand2
-    bool reg_shift;                     // true if the shift treats rs as a register, false if rs is actually an imm value
-    uint8_t rotate_imm;                 // 4 bit rotate value in operand2
-    uint8_t imm8;                       // 8 bit immediate va;ue in operand2
-    
-    // Pre-decoded instruction information
-    ARMInstructionType type;            // Instruction category
-    uint8_t condition;                  // Condition code (4 bits)
-    bool pc_modified;                   // Whether instruction modifies PC
-    
-    // Data processing specific fields
-    ARMDataProcessingOp dp_op;          // Data processing operation
     uint8_t rd, rn, rm, rs;             // Register indices (add rs for multiply)
-    // Multiply-long specific fields
     uint8_t rdLo, rdHi;                 // Destination registers for multiply-long
+    uint8_t addressing_mode;            // Addressing mode bits
+    uint8_t condition;                  // Condition code (4 bits)
+    uint8_t imm;                        // 8 bit immediate value in operand2
+    uint8_t offset_type;                // Offset addressing mode
+    bool accumulate;                    // Accumulate bit for multiply/MLA
+    bool pc_modified;                   // Whether instruction modifies PC
+    bool reg_shift;                     // true if the shift treats rs as a register, false if rs is actually an imm value
+    bool valid;                         // Cache entry validity    
     bool signed_op;                     // Signed/unsigned op for multiply-long
     bool set_flags;                     // S bit (data proc or multiply)
-    bool accumulate;                    // Accumulate bit for multiply/MLA
-    bool immediate;                     // Immediate operand flag
-    
-    // Pre-computed operand2 information for immediate operands
-    uint32_t imm_value;                 // Pre-rotated immediate value
-    uint32_t imm_carry;                 // Carry out from immediate rotation
-    bool imm_valid;                     // Whether immediate values are pre-computed
-    
-    // Memory transfer specific fields
-    bool load;                          // Load vs store
-    uint8_t offset_type;                // Offset addressing mode
-    int32_t offset_value;               // Pre-computed offset for immediate addressing
-    
-    // Branch specific fields
-    int32_t branch_offset;              // Pre-computed branch offset
-    bool link;                          // Branch with link flag
-    
-    // Block transfer specific fields
-    uint16_t register_list;             // Register list for LDM/STM
-    uint8_t addressing_mode;            // Addressing mode bits
-    
-    // Function pointer for direct execution (critical optimization)
-    void (ARMCPU::*execute_func)(ARMCachedInstruction&);
     
     // Default constructor
     ARMCachedInstruction() : valid(false) {}
