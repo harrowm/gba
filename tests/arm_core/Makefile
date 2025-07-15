@@ -2,8 +2,8 @@
 
 CXX = g++
 CC = gcc
-CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -g -O2 -DDXXEBUG_BUILD $(GTEST_INCLUDE_FLAGS)
-CFLAGS = -std=c23 -Wall -Wextra -I../../include -g -O2 -DDXXEBUG_BUILD
+CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -g -O2 -DDEBUG_BUILD $(GTEST_INCLUDE_FLAGS)
+CFLAGS = -std=c23 -Wall -Wextra -I../../include -g -O2 -DDEBUG_BUILD
 BUILD_DIR = build
 
 # Google Test paths (if available)
