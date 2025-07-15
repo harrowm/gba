@@ -51,15 +51,7 @@ private:
     // Cache-aware execution method
     bool executeWithCache(uint32_t pc, uint32_t instruction);
 
-    // Instruction handlers by category
-    void arm_data_processing(uint32_t instruction);
-    void arm_multiply(uint32_t instruction);
-    void arm_bx(uint32_t instruction);
-    void arm_single_data_transfer(uint32_t instruction);
-    void arm_block_data_transfer(uint32_t instruction);
-    void arm_branch(uint32_t instruction);
     void arm_software_interrupt(uint32_t instruction);
-    void arm_psr_transfer(uint32_t instruction);
     void arm_coprocessor_operation(uint32_t instruction);
     void arm_coprocessor_transfer(uint32_t instruction);
     void arm_coprocessor_register(uint32_t instruction);
@@ -102,7 +94,6 @@ public:
     uint32_t arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t shift_amount, uint32_t* carry_out);
     FORCE_INLINE void updateFlags(uint32_t result, bool carry, bool overflow);
     FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry_out);
-    bool checkCondition(uint32_t instruction);
     FORCE_INLINE bool checkConditionCached(uint8_t condition);
     FORCE_INLINE void executeCachedInstruction(const ARMCachedInstruction& cached);
     
@@ -111,18 +102,6 @@ public:
     bool isPrivilegedMode();
     void switchToMode(uint32_t new_mode);
     bool checkMemoryAccess(uint32_t address, bool is_write, bool is_privileged);
-    
-    // Instruction decoding table
-    static constexpr void (ARMCPU::*arm_instruction_table[8])(uint32_t) = {
-        &ARMCPU::arm_data_processing,      // 000: Data processing/multiply
-        &ARMCPU::arm_data_processing,      // 001: Data processing/misc
-        &ARMCPU::arm_single_data_transfer, // 010: Single data transfer
-        &ARMCPU::arm_single_data_transfer, // 011: Single data transfer (undefined)
-        &ARMCPU::arm_block_data_transfer,  // 100: Block data transfer
-        &ARMCPU::arm_branch,               // 101: Branch/Branch with link
-        &ARMCPU::arm_coprocessor_operation,// 110: Coprocessor
-        &ARMCPU::arm_software_interrupt    // 111: Coprocessor/SWI
-    };
 
 public:
     explicit ARMCPU(CPU& cpu);
