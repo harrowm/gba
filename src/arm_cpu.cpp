@@ -49,6 +49,8 @@ void ARMCPU::execute(uint32_t cycles) {
             parentCPU.R()[15] = pc + 4;
             DEBUG_INFO("Incremented PC to: 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
         }
+        // Debug: Print R[0] and R[1] after instruction execution
+        DEBUG_INFO("After instruction: R[0]=0x" + debug_to_hex_string(parentCPU.R()[0], 8) + ", R[1]=0x" + debug_to_hex_string(parentCPU.R()[1], 8));
         cycles -= 1; // Placeholder for cycle deduction
     }
 }
@@ -218,8 +220,10 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
         DEBUG_INFO("CACHE MISS: PC=0x" + debug_to_hex_string(pc, 8) + 
                    " Instruction=0x" + debug_to_hex_string(instruction, 8));
         ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
-        if (!checkConditionCached(decoded.condition)) return false;
         instruction_cache.insert(pc, decoded);
+        if (!checkConditionCached(decoded.condition)) return false;
+        DEBUG_INFO("Executing decoded instruction: PC=0x" + debug_to_hex_string(pc, 8) + 
+                   " Instruction=0x" + debug_to_hex_string(decoded.instruction, 8));
         executeCachedInstruction(decoded);
         if (exception_taken) return true;
         return decoded.pc_modified;
@@ -915,6 +919,21 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
         decoded.pc_modified = (!(instruction & 0x00200000)) && (decoded.rd == 15); // MRS to PC
         decoded.execute_func = &ARMCPU::executeCachedPSRTransfer;
     }
+    // ARM multiply-long: bits 27-23=00001, bits 7-4=1001 (UMULL, UMLAL, SMULL, SMLAL)
+    else if (format == 0 && (instruction & 0x0F8000F0) == 0x00800090) {
+        // Multiply-long instruction
+        DEBUG_INFO("Decoding ARM multiply-long instruction: 0x" + debug_to_hex_string(instruction, 8));
+        decoded.type = ARMInstructionType::MULTIPLY;
+        decoded.rdHi = (instruction >> 16) & 0xF;
+        decoded.rdLo = (instruction >> 12) & 0xF;
+        decoded.rs = (instruction >> 8) & 0xF;
+        decoded.rm = instruction & 0xF;
+        decoded.accumulate = (instruction & 0x00200000) != 0;
+        decoded.set_flags = (instruction & 0x00100000) != 0;
+        decoded.signed_op = (instruction & 0x00400000) != 0;
+        decoded.pc_modified = (decoded.rdHi == 15 || decoded.rdLo == 15);
+        decoded.execute_func = &ARMCPU::executeCachedMultiplyLong;
+    }
     // ARM multiply/MLA: bits 27-22=000000, bits 7-4=1001 (ignore accumulate/set flags bits)
     else if (format == 0 && ((instruction & 0x0FE000F0) == 0x00000090 || (instruction & 0x0FE000F0) == 0x00200090)) {
         // Multiply or MLA instruction
@@ -1099,6 +1118,7 @@ ARMCachedInstruction ARMCPU::decodeBlockDataTransfer(uint32_t pc, uint32_t instr
 
 // Placeholder cached execution functions (these would call the original implementations)
 void ARMCPU::executeCachedDataProcessing(const ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("executeCachedDataProcessing: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     // Use pre-decoded cached values to avoid redundant bit extraction
     const uint32_t opcode = static_cast<uint32_t>(cached.dp_op);
     const uint32_t rd = cached.rd;
@@ -1214,6 +1234,7 @@ void ARMCPU::executeCachedDataProcessing(const ARMCachedInstruction& cached) {
 }
 
 void ARMCPU::executeCachedSingleDataTransfer(const ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("executeCachedSingleDataTransfer: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     // Use cached fields to perform single data transfer without re-decoding
     const bool load = cached.load;
     const uint32_t rd = cached.rd;
@@ -1248,6 +1269,7 @@ void ARMCPU::executeCachedSingleDataTransfer(const ARMCachedInstruction& cached)
 }
 
 void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("executeCachedBranch: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     // Use pre-decoded branch_offset and link from cache
     if (cached.link) {
         parentCPU.R()[14] = parentCPU.R()[15] + 4;
@@ -1256,6 +1278,7 @@ void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
 }
 
 void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("executeCachedBlockDataTransfer: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     // Use pre-decoded cached values to avoid redundant bit extraction
     const uint32_t rn = cached.rn;
     const uint16_t register_list = cached.register_list;
@@ -1349,6 +1372,7 @@ void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) 
 }
 
 void ARMCPU::executeCachedMultiply(const ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("executeCachedMultiply: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     // Use cached fields to perform multiply/MLA without re-decoding
     uint32_t rd = cached.rd;
     uint32_t rn = cached.rn;
@@ -1376,7 +1400,58 @@ void ARMCPU::executeCachedMultiply(const ARMCachedInstruction& cached) {
     }
 }
 
+void ARMCPU::executeCachedMultiplyLong(const ARMCachedInstruction& cached) {
+    DEBUG_LOG("executeCachedMultiplyLong: pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    // For UMULL, UMLAL, SMULL, SMLAL
+    uint32_t rdLo = cached.rdLo;
+    uint32_t rdHi = cached.rdHi;
+    uint32_t rm = cached.rm;
+    uint32_t rs = cached.rs;
+    bool accumulate = cached.accumulate;
+    bool set_flags = cached.set_flags;
+    bool signed_op = cached.signed_op;
+
+    if (signed_op) {
+        int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs];
+        if (accumulate) {
+            int64_t acc = ((int64_t)((uint64_t)parentCPU.R()[rdHi] << 32 | parentCPU.R()[rdLo]));
+            result += acc;
+        }
+        if (rdLo == rdHi) {
+            parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+            parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+        } else {
+            parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+            parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+        }
+        DEBUG_LOG("[MUL-LONG] (signed) RdLo=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdLo], 8) + ", RdHi=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdHi], 8));
+    } else {
+        uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs];
+        if (accumulate) {
+            uint64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | parentCPU.R()[rdLo];
+            result += acc;
+        }
+        if (rdLo == rdHi) {
+            parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+            parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+        } else {
+            parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+            parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+        }
+        DEBUG_LOG("[MUL-LONG] (unsigned) RdLo=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdLo], 8) + ", RdHi=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdHi], 8));
+    }
+
+    if (set_flags) {
+        uint32_t cpsr = parentCPU.CPSR();
+        cpsr &= ~(0x80000000 | 0x40000000); // Clear N and Z
+        if (parentCPU.R()[rdHi] & 0x80000000) cpsr |= 0x80000000; // N
+        if (parentCPU.R()[rdHi] == 0 && parentCPU.R()[rdLo] == 0) cpsr |= 0x40000000; // Z
+        parentCPU.CPSR() = cpsr;
+    }
+}
+
 void ARMCPU::executeCachedBX(const ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("executeCachedBX: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     // Use cached.rm for BX
     uint32_t target_address = parentCPU.R()[cached.rm];
     bool switch_to_thumb = (target_address & 1) != 0;
@@ -1390,6 +1465,7 @@ void ARMCPU::executeCachedBX(const ARMCachedInstruction& cached) {
 }
 
 void ARMCPU::executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("executeCachedSoftwareInterrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     // Use cached.instruction for SWI number
     uint32_t swi_number = cached.instruction & 0x00FFFFFF;
     uint32_t return_address = parentCPU.R()[15] + 4;
@@ -1402,6 +1478,7 @@ void ARMCPU::executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached) 
 }
 
 void ARMCPU::executeCachedPSRTransfer(const ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("executeCachedPSRTransfer: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     // Inline arm_psr_transfer logic using only cached fields
     bool is_cpsr = ((cached.instruction & 0x00400000) == 0); // 1=CPSR (bit 22=0), 0=SPSR (bit 22=1)
     bool is_mrs = (cached.instruction & 0x00200000) == 0; // 0=MSR, 1=MRS
@@ -1446,6 +1523,7 @@ void ARMCPU::executeCachedPSRTransfer(const ARMCachedInstruction& cached) {
 }
 
 void ARMCPU::executeCachedCoprocessor(const ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("executeCachedCoprocessor: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     switch (cached.type) {
         case ARMInstructionType::COPROCESSOR_OP:
             arm_coprocessor_operation(cached.instruction);

@@ -65,6 +65,9 @@ struct ARMCachedInstruction {
     // Data processing specific fields
     ARMDataProcessingOp dp_op;          // Data processing operation
     uint8_t rd, rn, rm, rs;             // Register indices (add rs for multiply)
+    // Multiply-long specific fields
+    uint8_t rdLo, rdHi;                 // Destination registers for multiply-long
+    bool signed_op;                     // Signed/unsigned op for multiply-long
     bool set_flags;                     // S bit (data proc or multiply)
     bool accumulate;                    // Accumulate bit for multiply/MLA
     bool immediate;                     // Immediate operand flag

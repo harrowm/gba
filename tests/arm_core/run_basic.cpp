@@ -711,3 +711,133 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 6u) << "MUL R0, R1=2, R2=3 at max RAM failed";
 }
+
+TEST_F(ArmCoreTest, MultiplyLongInstructions) {
+    // Clear all registers and flags
+    for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
+    cpu.CPSR() = 0x10; // User mode, no flags
+    cpu.R()[15] = 0x00000000;
+
+    // --- UMULL: Unsigned multiply long ---
+    cpu.R()[2] = 0x12345678;
+    cpu.R()[3] = 0x9ABCDEF0;
+    cpu.R()[0] = 0;
+    cpu.R()[1] = 0;
+    uint32_t umull_inst = 0xE0820392; // UMULL R0, R1, R2, R3
+    memory.write32(0x00000000, umull_inst);
+    uint32_t src2_umull = cpu.R()[2];
+    uint32_t src3_umull = cpu.R()[3];
+    uint64_t expected_umull = (uint64_t)src2_umull * (uint64_t)src3_umull;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], (uint32_t)expected_umull) << "UMULL low failed";
+    EXPECT_EQ(cpu.R()[1], (uint32_t)(expected_umull >> 32)) << "UMULL high failed";
+
+    // --- UMLAL: Unsigned multiply-accumulate long ---
+    cpu.R()[2] = 0x1000;
+    cpu.R()[3] = 0x2000;
+    cpu.R()[0] = 0x1;
+    cpu.R()[1] = 0x2;
+    uint32_t umlal_inst = 0xE0A20392; // UMLAL R0, R1, R2, R3
+    memory.write32(0x00000004, umlal_inst);
+    cpu.R()[15] = 0x00000004;
+    uint32_t src2_umlal = cpu.R()[2];
+    uint32_t src3_umlal = cpu.R()[3];
+    uint32_t acc_lo_umlal = cpu.R()[0];
+    uint32_t acc_hi_umlal = cpu.R()[1];
+    uint64_t acc = ((uint64_t)acc_hi_umlal << 32) | acc_lo_umlal;
+    uint64_t expected_umlal = acc + (uint64_t)src2_umlal * (uint64_t)src3_umlal;
+    arm_cpu.execute(1);
+    EXPECT_EQ(((uint64_t)cpu.R()[1] << 32 | cpu.R()[0]), expected_umlal) << "UMLAL failed";
+
+    // --- SMULL: Signed multiply long ---
+    cpu.R()[2] = (uint32_t)-1234;
+    cpu.R()[3] = (uint32_t)5678;
+    cpu.R()[0] = 0;
+    cpu.R()[1] = 0;
+    uint32_t smull_inst = 0xE0C20392; // SMULL R0, R1, R2, R3
+    memory.write32(0x00000008, smull_inst);
+    cpu.R()[15] = 0x00000008;
+    int32_t src2_smull = (int32_t)cpu.R()[2];
+    int32_t src3_smull = (int32_t)cpu.R()[3];
+    int64_t expected_smull = (int64_t)src2_smull * (int64_t)src3_smull;
+    arm_cpu.execute(1);
+    std::cout << "[TEST DEBUG] After SMULL: R0=" << std::hex << cpu.R()[0] << ", R1=" << cpu.R()[1] << std::dec << std::endl;
+    EXPECT_EQ(cpu.R()[0], (uint32_t)expected_smull) << "SMULL low failed";
+    EXPECT_EQ(cpu.R()[1], (uint32_t)(expected_smull >> 32)) << "SMULL high failed";
+
+    // --- SMLAL: Signed multiply-accumulate long ---
+    cpu.R()[2] = (uint32_t)-100;
+    cpu.R()[3] = (uint32_t)50;
+    cpu.R()[0] = 0xFFFFFFFF;
+    cpu.R()[1] = 0x7FFFFFFF;
+    uint32_t smlal_inst = 0xE0E20392; // SMLAL R0, R1, R2, R3
+    memory.write32(0x0000000C, smlal_inst);
+    cpu.R()[15] = 0x0000000C;
+    int32_t src2_smlal = (int32_t)cpu.R()[2];
+    int32_t src3_smlal = (int32_t)cpu.R()[3];
+    int64_t acc_smlal = ((int64_t)cpu.R()[1] << 32) | cpu.R()[0];
+    int64_t expected_smlal = acc_smlal + (int64_t)src2_smlal * (int64_t)src3_smlal;
+    arm_cpu.execute(1);
+    EXPECT_EQ(((uint64_t)cpu.R()[1] << 32 | cpu.R()[0]), (uint64_t)expected_smlal) << "SMLAL failed";
+
+    // --- UMULL with zero ---
+    cpu.R()[2] = 0;
+    cpu.R()[3] = 0xFFFFFFFF;
+    cpu.R()[0] = 0xDEADBEEF;
+    cpu.R()[1] = 0xCAFEBABE;
+    uint32_t src2_umull0 = cpu.R()[2];
+    uint32_t src3_umull0 = cpu.R()[3];
+    uint64_t expected_umull0 = (uint64_t)src2_umull0 * (uint64_t)src3_umull0;
+    memory.write32(0x00000010, umull_inst);
+    cpu.R()[15] = 0x00000010;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], (uint32_t)expected_umull0) << "UMULL with zero low failed";
+    EXPECT_EQ(cpu.R()[1], (uint32_t)(expected_umull0 >> 32)) << "UMULL with zero high failed";
+
+    // --- SMULL with negative numbers ---
+    cpu.R()[2] = (uint32_t)-1;
+    cpu.R()[3] = (uint32_t)-1;
+    cpu.R()[0] = 0;
+    cpu.R()[1] = 0;
+    int32_t src2_smull_neg = (int32_t)cpu.R()[2];
+    int32_t src3_smull_neg = (int32_t)cpu.R()[3];
+    int64_t expected_neg = (int64_t)src2_smull_neg * (int64_t)src3_smull_neg;
+    memory.write32(0x00000014, smull_inst);
+    cpu.R()[15] = 0x00000014;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], (uint32_t)expected_neg) << "SMULL negative low failed";
+    EXPECT_EQ(cpu.R()[1], (uint32_t)(expected_neg >> 32)) << "SMULL negative high failed";
+
+    // --- S bit: UMULLS, SMULLS, UMLALS, SMLALS (check flags) ---
+    uint32_t umulls_inst = 0xE0920392; // UMULLS R0, R1, R2, R3 (S bit set)
+    cpu.R()[2] = 0xFFFFFFFF;
+    cpu.R()[3] = 2;
+    cpu.R()[0] = 0;
+    cpu.R()[1] = 0;
+    uint32_t src2_umulls = cpu.R()[2];
+    uint32_t src3_umulls = cpu.R()[3];
+    uint64_t expected_umulls = (uint64_t)src2_umulls * (uint64_t)src3_umulls;
+    memory.write32(0x00000018, umulls_inst);
+    cpu.R()[15] = 0x00000018;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], (uint32_t)expected_umulls) << "UMULLS low failed";
+    EXPECT_EQ(cpu.R()[1], (uint32_t)(expected_umulls >> 32)) << "UMULLS high failed";
+    // N flag should be set if high result MSB is 1
+    EXPECT_EQ((cpu.CPSR() & CPU::FLAG_N) != 0, (cpu.R()[1] & 0x80000000) != 0) << "UMULLS N flag incorrect";
+    // Z flag should be set if both high and low are zero
+    EXPECT_EQ((cpu.CPSR() & CPU::FLAG_Z) != 0, expected_umulls == 0) << "UMULLS Z flag incorrect";
+
+    // --- RAM boundary test ---
+    cpu.R()[2] = 2;
+    cpu.R()[3] = 3;
+    cpu.R()[0] = 0;
+    cpu.R()[1] = 0;
+    uint32_t src2_umull_ram = cpu.R()[2];
+    uint32_t src3_umull_ram = cpu.R()[3];
+    uint64_t expected_umull_ram = (uint64_t)src2_umull_ram * (uint64_t)src3_umull_ram;
+    memory.write32(0x1FFC, umull_inst);
+    cpu.R()[15] = 0x1FFC;
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], (uint32_t)expected_umull_ram) << "UMULL at max RAM low failed";
+    EXPECT_EQ(cpu.R()[1], (uint32_t)(expected_umull_ram >> 32)) << "UMULL at max RAM high failed";
+}
