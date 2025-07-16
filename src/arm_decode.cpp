@@ -1,3 +1,44 @@
+void ARMCPU::decode_arm_str_imm(ARMCachedInstruction& decoded) {
+    decoded.rd = bits<15,12>(decoded.instruction);
+    decoded.rn = bits<19,16>(decoded.instruction);
+    decoded.imm = bits<11,0>(decoded.instruction);
+    decoded.pre_index = bits<24,24>(decoded.instruction);
+    decoded.up = bits<23,23>(decoded.instruction);
+    decoded.writeback = bits<21,21>(decoded.instruction);
+    decoded.execute_func = &ARMCPU::execute_arm_str_imm;
+}
+
+void ARMCPU::decode_arm_str_reg(ARMCachedInstruction& decoded) {
+    decoded.rd = bits<15,12>(decoded.instruction);
+    decoded.rn = bits<19,16>(decoded.instruction);
+    decoded.rm = bits<3,0>(decoded.instruction);
+    decoded.offset_type = bits<6,5>(decoded.instruction);
+    decoded.pre_index = bits<24,24>(decoded.instruction);
+    decoded.up = bits<23,23>(decoded.instruction);
+    decoded.writeback = bits<21,21>(decoded.instruction);
+    decoded.execute_func = &ARMCPU::execute_arm_str_reg;
+}
+
+void ARMCPU::decode_arm_ldr_imm(ARMCachedInstruction& decoded) {
+    decoded.rd = bits<15,12>(decoded.instruction);
+    decoded.rn = bits<19,16>(decoded.instruction);
+    decoded.imm = bits<11,0>(decoded.instruction);
+    decoded.pre_index = bits<24,24>(decoded.instruction);
+    decoded.up = bits<23,23>(decoded.instruction);
+    decoded.writeback = bits<21,21>(decoded.instruction);
+    decoded.execute_func = &ARMCPU::execute_arm_ldr_imm;
+}
+
+void ARMCPU::decode_arm_ldr_reg(ARMCachedInstruction& decoded) {
+    decoded.rd = bits<15,12>(decoded.instruction);
+    decoded.rn = bits<19,16>(decoded.instruction);
+    decoded.rm = bits<3,0>(decoded.instruction);
+    decoded.offset_type = bits<6,5>(decoded.instruction);
+    decoded.pre_index = bits<24,24>(decoded.instruction);
+    decoded.up = bits<23,23>(decoded.instruction);
+    decoded.writeback = bits<21,21>(decoded.instruction);
+    decoded.execute_func = &ARMCPU::execute_arm_ldr_reg;
+}
 #include "arm_cpu.h"
 #include <cstdio>
 
@@ -64,7 +105,10 @@ ARM_DP_DECODER_REG(mvn)
 void ARMCPU::decode_arm_strb_imm(ARMCachedInstruction& decoded) {
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.offset_value = bits<11,0>(decoded.instruction);
+    decoded.imm = bits<11,0>(decoded.instruction);
+    decoded.pre_index = bits<24,24>(decoded.instruction);
+    decoded.up = bits<23,23>(decoded.instruction);
+    decoded.writeback = bits<21,21>(decoded.instruction);
     decoded.execute_func = &ARMCPU::execute_arm_strb_imm;
 }
 
@@ -73,13 +117,19 @@ void ARMCPU::decode_arm_strb_reg(ARMCachedInstruction& decoded) {
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.rm = bits<3,0>(decoded.instruction);
     decoded.offset_type = bits<6,5>(decoded.instruction);
+    decoded.pre_index = bits<24,24>(decoded.instruction);
+    decoded.up = bits<23,23>(decoded.instruction);
+    decoded.writeback = bits<21,21>(decoded.instruction);
     decoded.execute_func = &ARMCPU::execute_arm_strb_reg;
 }
 
 void ARMCPU::decode_arm_ldrb_imm(ARMCachedInstruction& decoded) {
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.offset_value = bits<11,0>(decoded.instruction);
+    decoded.imm = bits<11,0>(decoded.instruction);
+    decoded.pre_index = bits<24,24>(decoded.instruction);
+    decoded.up = bits<23,23>(decoded.instruction);
+    decoded.writeback = bits<21,21>(decoded.instruction);
     decoded.execute_func = &ARMCPU::execute_arm_ldrb_imm;
 }
 
@@ -88,6 +138,9 @@ void ARMCPU::decode_arm_ldrb_reg(ARMCachedInstruction& decoded) {
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.rm = bits<3,0>(decoded.instruction);
     decoded.offset_type = bits<6,5>(decoded.instruction);
+    decoded.pre_index = bits<24,24>(decoded.instruction);
+    decoded.up = bits<23,23>(decoded.instruction);
+    decoded.writeback = bits<21,21>(decoded.instruction);
     decoded.execute_func = &ARMCPU::execute_arm_ldrb_reg;
 }
 

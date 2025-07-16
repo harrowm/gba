@@ -52,6 +52,10 @@ enum class ARMInstructionType : uint8_t {
  * Optimized for common ARM instruction patterns
  */
 struct ARMCachedInstruction {
+    // Addressing mode fields for single data transfer
+    bool pre_index = true;   // true = pre-indexed, false = post-indexed
+    bool up = true;          // true = add offset, false = subtract offset
+    bool writeback = false;  // true = writeback base register
     // Order by type size to encourage packing
     void (ARMCPU::*execute_func)(ARMCachedInstruction&); // Function pointer to execution function
 
