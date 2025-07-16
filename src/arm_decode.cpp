@@ -1,3 +1,5 @@
+#include "arm_cpu.h"
+
 void ARMCPU::decode_arm_str_imm(ARMCachedInstruction& decoded) {
     decoded.rd = bits<15,12>(decoded.instruction);
     decoded.rn = bits<19,16>(decoded.instruction);
@@ -278,6 +280,28 @@ void ARMCPU::decode_arm_undefined(ARMCachedInstruction& decoded) {
     decoded.execute_func = nullptr;
 }
 
+
+// CDP (Coprocessor Data Processing) decoder stub
+void ARMCPU::decode_arm_cdp(ARMCachedInstruction& decoded) {
+    // Reuse rs field for coprocessor number (bits 11-8)
+    decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
+    decoded.execute_func = nullptr; // Not implemented
+}
+
+// MCR (Move to Coprocessor from ARM Register) decoder stub
+void ARMCPU::decode_arm_mcr(ARMCachedInstruction& decoded) {
+    // Reuse rs field for coprocessor number (bits 11-8)
+    decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
+    decoded.execute_func = nullptr; // Not implemented
+}
+
+// MRC (Move to ARM Register from Coprocessor) decoder stub
+void ARMCPU::decode_arm_mrc(ARMCachedInstruction& decoded) {
+    // Reuse rs field for coprocessor number (bits 11-8)
+    decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
+    decoded.execute_func = nullptr; // Not implemented
+}
+
 void ARMCPU::decode_arm_mov_imm(ARMCachedInstruction& decoded) {
     decoded.rn = bits<19,16>(decoded.instruction);
     decoded.rd = bits<15,12>(decoded.instruction);
@@ -297,3 +321,10 @@ void ARMCPU::decode_arm_mov_reg(ARMCachedInstruction& decoded) {
 
     decoded.execute_func = &ARMCPU::execute_arm_mov_reg;
 }
+
+void ARMCPU::decode_arm_software_interrupt(ARMCachedInstruction& decoded) {
+    // SWI immediate is bits 23-0
+    decoded.imm = bits<23,0>(decoded.instruction);
+    decoded.execute_func = nullptr; // Not implemented, or set to handler if available
+}
+

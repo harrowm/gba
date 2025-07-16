@@ -122,17 +122,16 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
     if (cached) {
         if (!checkConditionCached(cached->condition)) return false;
         (this->*(cached->execute_func))(*cached);
-        if (exception_taken) return true; // treat as PC modified
+        if (exception_taken) return true;
         return cached->pc_modified;
     } else {
         DEBUG_INFO("CACHE MISS: PC=0x" + debug_to_hex_string(pc, 8) + 
                    " Instruction=0x" + debug_to_hex_string(instruction, 8));
         ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
         instruction_cache.insert(pc, decoded);
-        if (!checkConditionCached(decoded.condition)) return false;
         DEBUG_INFO("Executing decoded instruction: PC=0x" + debug_to_hex_string(pc, 8) + 
                    " Instruction=0x" + debug_to_hex_string(decoded.instruction, 8));
-        executeCachedInstruction(decoded);
+        (this->*(cached->execute_func))(*cached);
         if (exception_taken) return true;
         return decoded.pc_modified;
     }
