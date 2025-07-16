@@ -150,6 +150,11 @@ private:
     void decode_arm_bic_imm(ARMCachedInstruction& decoded);
     void decode_arm_mvn_reg(ARMCachedInstruction& decoded);
     void decode_arm_mvn_imm(ARMCachedInstruction& decoded);
+    // Single data transfer decoders (word)
+    void decode_arm_str_imm(ARMCachedInstruction& decoded);
+    void decode_arm_str_reg(ARMCachedInstruction& decoded);
+    void decode_arm_ldr_imm(ARMCachedInstruction& decoded);
+    void decode_arm_ldr_reg(ARMCachedInstruction& decoded);
     void decode_arm_mul(ARMCachedInstruction& decoded);
     void decode_arm_mla(ARMCachedInstruction& decoded);
     void decode_arm_umull(ARMCachedInstruction& decoded);

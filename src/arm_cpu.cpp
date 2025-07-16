@@ -1650,77 +1650,192 @@ void ARMCPU::execute_arm_mov_reg(ARMCachedInstruction& cached) {
 void ARMCPU::execute_arm_str_imm(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_str_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
-    // Store the value in the register to memory
-    uint32_t address = parentCPU.R()[cached.rn] + cached.imm;
+    // ARM single data transfer: STR (immediate offset, all addressing modes)
+    uint32_t base = parentCPU.R()[cached.rn];
+    uint32_t offset = cached.imm;
+    bool pre = cached.pre_index;
+    bool up = cached.up;
+    bool writeback = cached.writeback;
+    uint32_t address = base;
+    if (pre) {
+        address = up ? (base + offset) : (base - offset);
+    }
     parentCPU.getMemory().write32(address, parentCPU.R()[cached.rd]);
+    if (!pre) {
+        address = up ? (base + offset) : (base - offset);
+        parentCPU.getMemory().write32(address, parentCPU.R()[cached.rd]);
+    }
+    if (writeback) {
+        parentCPU.R()[cached.rn] = address;
+    }
+    // PC-relative STR is not meaningful, so no special handling needed
+    // Unaligned access: ARMv4 allows, but result is rotated; not implemented here
 }
 
 void ARMCPU::execute_arm_str_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_str_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
-    // Calculate the address using the register and optional shift
-    uint32_t operand2 = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
-    uint32_t address = parentCPU.R()[cached.rn] + operand2;
-    
-    // Store the value in the register to memory
+    // ARM single data transfer: STR (register offset, all addressing modes)
+    uint32_t base = parentCPU.R()[cached.rn];
+    uint32_t offset = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
+    bool pre = cached.pre_index;
+    bool up = cached.up;
+    bool writeback = cached.writeback;
+    uint32_t address = base;
+    if (pre) {
+        address = up ? (base + offset) : (base - offset);
+    }
     parentCPU.getMemory().write32(address, parentCPU.R()[cached.rd]);
+    if (!pre) {
+        address = up ? (base + offset) : (base - offset);
+        parentCPU.getMemory().write32(address, parentCPU.R()[cached.rd]);
+    }
+    if (writeback) {
+        parentCPU.R()[cached.rn] = address;
+    }
 }
 
 void ARMCPU::execute_arm_ldr_imm(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_ldr_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
-    // Load the value from memory into the register
-    uint32_t address = parentCPU.R()[cached.rn] + cached.imm;
+    // ARM single data transfer: LDR (immediate offset, all addressing modes)
+    uint32_t base = parentCPU.R()[cached.rn];
+    uint32_t offset = cached.imm;
+    bool pre = cached.pre_index;
+    bool up = cached.up;
+    bool writeback = cached.writeback;
+    uint32_t address = base;
+    if (pre) {
+        address = up ? (base + offset) : (base - offset);
+    }
+    // PC-relative load (literal pool)
+    if (cached.rn == 15) {
+        address = (parentCPU.R()[15] & ~3) + offset;
+    }
     parentCPU.R()[cached.rd] = parentCPU.getMemory().read32(address);
+    if (!pre) {
+        address = up ? (base + offset) : (base - offset);
+        parentCPU.R()[cached.rd] = parentCPU.getMemory().read32(address);
+    }
+    if (writeback) {
+        parentCPU.R()[cached.rn] = address;
+    }
+    // Unaligned access: ARMv4 allows, but result is rotated; not implemented here
 }
 
 void ARMCPU::execute_arm_ldr_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_ldr_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
-    // Calculate the address using the register and optional shift
-    uint32_t operand2 = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
-    uint32_t address = parentCPU.R()[cached.rn] + operand2;
-    
-    // Load the value from memory into the register
+    // ARM single data transfer: LDR (register offset, all addressing modes)
+    uint32_t base = parentCPU.R()[cached.rn];
+    uint32_t offset = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
+    bool pre = cached.pre_index;
+    bool up = cached.up;
+    bool writeback = cached.writeback;
+    uint32_t address = base;
+    if (pre) {
+        address = up ? (base + offset) : (base - offset);
+    }
     parentCPU.R()[cached.rd] = parentCPU.getMemory().read32(address);
+    if (!pre) {
+        address = up ? (base + offset) : (base - offset);
+        parentCPU.R()[cached.rd] = parentCPU.getMemory().read32(address);
+    }
+    if (writeback) {
+        parentCPU.R()[cached.rn] = address;
+    }
 }
 
 void ARMCPU::execute_arm_strb_imm(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_strb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
-    // Store the byte in the register to memory
-    uint32_t address = parentCPU.R()[cached.rn] + cached.imm;
+    // ARM single data transfer: STRB (immediate offset, all addressing modes)
+    uint32_t base = parentCPU.R()[cached.rn];
+    uint32_t offset = cached.imm;
+    bool pre = cached.pre_index;
+    bool up = cached.up;
+    bool writeback = cached.writeback;
+    uint32_t address = base;
+    if (pre) {
+        address = up ? (base + offset) : (base - offset);
+    }
     parentCPU.getMemory().write8(address, static_cast<uint8_t>(parentCPU.R()[cached.rd]));
+    if (!pre) {
+        address = up ? (base + offset) : (base - offset);
+        parentCPU.getMemory().write8(address, static_cast<uint8_t>(parentCPU.R()[cached.rd]));
+    }
+    if (writeback) {
+        parentCPU.R()[cached.rn] = address;
+    }
 }
 
 void ARMCPU::execute_arm_strb_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_strb_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
-    // Calculate the address using the register and optional shift
-    uint32_t operand2 = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
-    uint32_t address = parentCPU.R()[cached.rn] + operand2;
-    
-    // Store the byte in the register to memory
+    // ARM single data transfer: STRB (register offset, all addressing modes)
+    uint32_t base = parentCPU.R()[cached.rn];
+    uint32_t offset = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
+    bool pre = cached.pre_index;
+    bool up = cached.up;
+    bool writeback = cached.writeback;
+    uint32_t address = base;
+    if (pre) {
+        address = up ? (base + offset) : (base - offset);
+    }
     parentCPU.getMemory().write8(address, static_cast<uint8_t>(parentCPU.R()[cached.rd]));
+    if (!pre) {
+        address = up ? (base + offset) : (base - offset);
+        parentCPU.getMemory().write8(address, static_cast<uint8_t>(parentCPU.R()[cached.rd]));
+    }
+    if (writeback) {
+        parentCPU.R()[cached.rn] = address;
+    }
 }
 
 void ARMCPU::execute_arm_ldrb_imm(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_ldr_b_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
-    // Load the byte from memory into the register
-    uint32_t address = parentCPU.R()[cached.rn] + cached.imm;
+    // ARM single data transfer: LDRB (immediate offset, all addressing modes)
+    uint32_t base = parentCPU.R()[cached.rn];
+    uint32_t offset = cached.imm;
+    bool pre = cached.pre_index;
+    bool up = cached.up;
+    bool writeback = cached.writeback;
+    uint32_t address = base;
+    if (pre) {
+        address = up ? (base + offset) : (base - offset);
+    }
     parentCPU.R()[cached.rd] = static_cast<uint32_t>(parentCPU.getMemory().read8(address));
+    if (!pre) {
+        address = up ? (base + offset) : (base - offset);
+        parentCPU.R()[cached.rd] = static_cast<uint32_t>(parentCPU.getMemory().read8(address));
+    }
+    if (writeback) {
+        parentCPU.R()[cached.rn] = address;
+    }
 }
 
 void ARMCPU::execute_arm_ldrb_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_ldr_b_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
-    // Calculate the address using the register and optional shift
-    uint32_t operand2 = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
-    uint32_t address = parentCPU.R()[cached.rn] + operand2;
-    
-    // Load the byte from memory into the register
+    // ARM single data transfer: LDRB (register offset, all addressing modes)
+    uint32_t base = parentCPU.R()[cached.rn];
+    uint32_t offset = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
+    bool pre = cached.pre_index;
+    bool up = cached.up;
+    bool writeback = cached.writeback;
+    uint32_t address = base;
+    if (pre) {
+        address = up ? (base + offset) : (base - offset);
+    }
     parentCPU.R()[cached.rd] = static_cast<uint32_t>(parentCPU.getMemory().read8(address));
+    if (!pre) {
+        address = up ? (base + offset) : (base - offset);
+        parentCPU.R()[cached.rd] = static_cast<uint32_t>(parentCPU.getMemory().read8(address));
+    }
+    if (writeback) {
+        parentCPU.R()[cached.rn] = address;
+    }
 }
 
 void ARMCPU::execute_arm_stm(ARMCachedInstruction& decoded) {
@@ -2087,108 +2202,108 @@ void ARMCPU::executeCachedSingleDataTransfer(const ARMCachedInstruction& cached)
     }
 }
 
-void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
-    DEBUG_LOG(std::string("executeCachedBranch: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
-    // Use pre-decoded branch_offset and link from cache
-    if (cached.link) {
-        parentCPU.R()[14] = parentCPU.R()[15] + 4;
-    }
-    parentCPU.R()[15] = parentCPU.R()[15] + cached.branch_offset;
-}
+// void ARMCPU::executeCachedBranch(const ARMCachedInstruction& cached) {
+//     DEBUG_LOG(std::string("executeCachedBranch: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+//     // Use pre-decoded branch_offset and link from cache
+//     if (cached.link) {
+//         parentCPU.R()[14] = parentCPU.R()[15] + 4;
+//     }
+//     parentCPU.R()[15] = parentCPU.R()[15] + cached.branch_offset;
+// }
 
-void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) {
-    DEBUG_LOG(std::string("executeCachedBlockDataTransfer: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
-    // Use pre-decoded cached values to avoid redundant bit extraction
-    const uint32_t rn = cached.rn;
-    const uint16_t register_list = cached.register_list;
-    const uint8_t addressing_mode = cached.addressing_mode;
-    const bool load = cached.load;
+// void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) {
+//     DEBUG_LOG(std::string("executeCachedBlockDataTransfer: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+//     // Use pre-decoded cached values to avoid redundant bit extraction
+//     const uint32_t rn = cached.rn;
+//     const uint16_t register_list = cached.register_list;
+//     const uint8_t addressing_mode = cached.addressing_mode;
+//     const bool load = cached.load;
     
-    // Extract addressing mode bits (pre-computed in cache)
-    const bool pre_indexing = (addressing_mode & 0x2) != 0;  // P bit
-    const bool add_offset = (addressing_mode & 0x1) != 0;    // U bit
-    const bool write_back = (cached.instruction & 0x00200000) != 0; // W bit
+//     // Extract addressing mode bits (pre-computed in cache)
+//     const bool pre_indexing = (addressing_mode & 0x2) != 0;  // P bit
+//     const bool add_offset = (addressing_mode & 0x1) != 0;    // U bit
+//     const bool write_back = (cached.instruction & 0x00200000) != 0; // W bit
     
-    uint32_t address = parentCPU.R()[rn];
-    const uint32_t old_address = address;
+//     uint32_t address = parentCPU.R()[rn];
+//     const uint32_t old_address = address;
     
-    // Fast path for empty register list (edge case)
-    if (register_list == 0) {
-        if (write_back) {
-            parentCPU.R()[rn] = old_address + (add_offset ? 0x40 : -0x40);
-        }
-        return;
-    }
+//     // Fast path for empty register list (edge case)
+//     if (register_list == 0) {
+//         if (write_back) {
+//             parentCPU.R()[rn] = old_address + (add_offset ? 0x40 : -0x40);
+//         }
+//         return;
+//     }
     
-    // Pre-calculate register count
-    const uint32_t num_registers = __builtin_popcount(register_list);
-    const int32_t address_step = add_offset ? 4 : -4;
+//     // Pre-calculate register count
+//     const uint32_t num_registers = __builtin_popcount(register_list);
+//     const int32_t address_step = add_offset ? 4 : -4;
     
-    // Pre-indexing address adjustment (combine with address increment)
-    if (pre_indexing) {
-        address += address_step;
-    }
+//     // Pre-indexing address adjustment (combine with address increment)
+//     if (pre_indexing) {
+//         address += address_step;
+//     }
     
-    // Specialized paths for load vs store to improve branch prediction
-    if (load) {
-        // Fast paths for common register combinations
-        if (num_registers >= 4 && add_offset) {
-            // Process registers sequentially in chunks of 4 if possible
-            // This optimizes cache access patterns
-            Memory& memory = parentCPU.getMemory();
-            uint16_t remaining_registers = register_list;
+//     // Specialized paths for load vs store to improve branch prediction
+//     if (load) {
+//         // Fast paths for common register combinations
+//         if (num_registers >= 4 && add_offset) {
+//             // Process registers sequentially in chunks of 4 if possible
+//             // This optimizes cache access patterns
+//             Memory& memory = parentCPU.getMemory();
+//             uint16_t remaining_registers = register_list;
             
-            while (remaining_registers != 0) {
-                const uint32_t reg_index = __builtin_ctz(remaining_registers);
-                const uint32_t loaded_value = memory.read32(address);
+//             while (remaining_registers != 0) {
+//                 const uint32_t reg_index = __builtin_ctz(remaining_registers);
+//                 const uint32_t loaded_value = memory.read32(address);
                 
-                // Avoid overwriting base register during load with writeback
-                if (reg_index != rn || !write_back) {
-                    parentCPU.R()[reg_index] = loaded_value;
-                }
+//                 // Avoid overwriting base register during load with writeback
+//                 if (reg_index != rn || !write_back) {
+//                     parentCPU.R()[reg_index] = loaded_value;
+//                 }
                 
-                // Update address and clear the processed bit in one step
-                address += address_step;
-                remaining_registers &= ~(1 << reg_index);
-            }
-        } else {
-            // General case for load operations
-            uint16_t remaining_registers = register_list;
-            while (remaining_registers != 0) {
-                const uint32_t reg_index = __builtin_ctz(remaining_registers);
-                const uint32_t loaded_value = parentCPU.getMemory().read32(address);
+//                 // Update address and clear the processed bit in one step
+//                 address += address_step;
+//                 remaining_registers &= ~(1 << reg_index);
+//             }
+//         } else {
+//             // General case for load operations
+//             uint16_t remaining_registers = register_list;
+//             while (remaining_registers != 0) {
+//                 const uint32_t reg_index = __builtin_ctz(remaining_registers);
+//                 const uint32_t loaded_value = parentCPU.getMemory().read32(address);
                 
-                if (reg_index != rn || !write_back) {
-                    parentCPU.R()[reg_index] = loaded_value;
-                }
+//                 if (reg_index != rn || !write_back) {
+//                     parentCPU.R()[reg_index] = loaded_value;
+//                 }
                 
-                address += address_step;
-                remaining_registers &= ~(1 << reg_index);
-            }
-        }
-    } else {
-        // Store operations - no need to check for base register writeback conflicts
-        Memory& memory = parentCPU.getMemory();
-        uint16_t remaining_registers = register_list;
+//                 address += address_step;
+//                 remaining_registers &= ~(1 << reg_index);
+//             }
+//         }
+//     } else {
+//         // Store operations - no need to check for base register writeback conflicts
+//         Memory& memory = parentCPU.getMemory();
+//         uint16_t remaining_registers = register_list;
         
-        while (remaining_registers != 0) {
-            const uint32_t reg_index = __builtin_ctz(remaining_registers);
-            memory.write32(address, parentCPU.R()[reg_index]);
+//         while (remaining_registers != 0) {
+//             const uint32_t reg_index = __builtin_ctz(remaining_registers);
+//             memory.write32(address, parentCPU.R()[reg_index]);
             
-            address += address_step;
-            remaining_registers &= ~(1 << reg_index);
-        }
-    }
+//             address += address_step;
+//             remaining_registers &= ~(1 << reg_index);
+//         }
+//     }
     
-    // Write-back optimization - avoid the second condition check when possible
-    if (write_back) {
-        if (!load || !(register_list & (1 << rn))) {
-            parentCPU.R()[rn] = add_offset ? 
-                old_address + (num_registers << 2) : 
-                old_address - (num_registers << 2);
-        }
-    }
-}
+//     // Write-back optimization - avoid the second condition check when possible
+//     if (write_back) {
+//         if (!load || !(register_list & (1 << rn))) {
+//             parentCPU.R()[rn] = add_offset ? 
+//                 old_address + (num_registers << 2) : 
+//                 old_address - (num_registers << 2);
+//         }
+//     }
+// }
 
 // void ARMCPU::executeCachedMultiply(const ARMCachedInstruction& cached) {
 //     DEBUG_LOG(std::string("executeCachedMultiply: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
@@ -2219,62 +2334,62 @@ void ARMCPU::executeCachedBlockDataTransfer(const ARMCachedInstruction& cached) 
 //     }
 // }
 
-void ARMCPU::executeCachedMultiplyLong(const ARMCachedInstruction& cached) {
-    DEBUG_LOG("executeCachedMultiplyLong: pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
-    // For UMULL, UMLAL, SMULL, SMLAL
-    uint32_t rdLo = cached.rdLo;
-    uint32_t rdHi = cached.rdHi;
-    uint32_t rm = cached.rm;
-    uint32_t rs = cached.rs;
-    bool accumulate = cached.accumulate;
-    bool set_flags = cached.set_flags;
-    bool signed_op = cached.signed_op;
+// void ARMCPU::executeCachedMultiplyLong(const ARMCachedInstruction& cached) {
+//     DEBUG_LOG("executeCachedMultiplyLong: pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+//     // For UMULL, UMLAL, SMULL, SMLAL
+//     uint32_t rdLo = cached.rdLo;
+//     uint32_t rdHi = cached.rdHi;
+//     uint32_t rm = cached.rm;
+//     uint32_t rs = cached.rs;
+//     bool accumulate = cached.accumulate;
+//     bool set_flags = cached.set_flags;
+//     bool signed_op = cached.signed_op;
 
-    if (signed_op) {
-        int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs];
-        if (accumulate) {
-            int64_t acc = ((int64_t)((uint64_t)parentCPU.R()[rdHi] << 32 | parentCPU.R()[rdLo]));
-            result += acc;
-        }
-        if (rdLo == rdHi) {
-            parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
-            parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
-        } else {
-            parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
-            parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
-        }
-        DEBUG_LOG("[MUL-LONG] (signed) RdLo=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdLo], 8) + ", RdHi=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdHi], 8));
-    } else {
-        uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs];
-        if (accumulate) {
-            uint64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | parentCPU.R()[rdLo];
-            result += acc;
-        }
-        if (rdLo == rdHi) {
-            parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
-            parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
-        } else {
-            parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
-            parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
-        }
-        DEBUG_LOG("[MUL-LONG] (unsigned) RdLo=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdLo], 8) + ", RdHi=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdHi], 8));
-    }
+//     if (signed_op) {
+//         int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs];
+//         if (accumulate) {
+//             int64_t acc = ((int64_t)((uint64_t)parentCPU.R()[rdHi] << 32 | parentCPU.R()[rdLo]));
+//             result += acc;
+//         }
+//         if (rdLo == rdHi) {
+//             parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+//             parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+//         } else {
+//             parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+//             parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+//         }
+//         DEBUG_LOG("[MUL-LONG] (signed) RdLo=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdLo], 8) + ", RdHi=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdHi], 8));
+//     } else {
+//         uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs];
+//         if (accumulate) {
+//             uint64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | parentCPU.R()[rdLo];
+//             result += acc;
+//         }
+//         if (rdLo == rdHi) {
+//             parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+//             parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+//         } else {
+//             parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+//             parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+//         }
+//         DEBUG_LOG("[MUL-LONG] (unsigned) RdLo=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdLo], 8) + ", RdHi=" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdHi], 8));
+//     }
 
-    if (set_flags) {
-        uint32_t cpsr = parentCPU.CPSR();
-        cpsr &= ~(0x80000000 | 0x40000000); // Clear N and Z
-        if (parentCPU.R()[rdHi] & 0x80000000) cpsr |= 0x80000000; // N
-        if (parentCPU.R()[rdHi] == 0 && parentCPU.R()[rdLo] == 0) cpsr |= 0x40000000; // Z
-        parentCPU.CPSR() = cpsr;
-    }
-}
+//     if (set_flags) {
+//         uint32_t cpsr = parentCPU.CPSR();
+//         cpsr &= ~(0x80000000 | 0x40000000); // Clear N and Z
+//         if (parentCPU.R()[rdHi] & 0x80000000) cpsr |= 0x80000000; // N
+//         if (parentCPU.R()[rdHi] == 0 && parentCPU.R()[rdLo] == 0) cpsr |= 0x40000000; // Z
+//         parentCPU.CPSR() = cpsr;
+//     }
+// }
 
-void ARMCPU::executeCachedBX(const ARMCachedInstruction& cached) {
-    DEBUG_LOG(std::string("executeCachedBX: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+void ARMCPU::execute_arm_bx(ARMCachedInstruction& cached) {
+    DEBUG_LOG(std::string("execute_arm_bx: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     // Use cached.rm for BX
     uint32_t target_address = parentCPU.R()[cached.rm];
     bool switch_to_thumb = (target_address & 1) != 0;
-    target_address &= ~1U;
+    target_address &= ~1U; // Clear the LSB for ARM mode
     if (switch_to_thumb) {
         uint32_t cpsr = parentCPU.CPSR();
         cpsr |= 0x00000020; // Set T flag (bit 5)
@@ -2283,79 +2398,50 @@ void ARMCPU::executeCachedBX(const ARMCachedInstruction& cached) {
     parentCPU.R()[15] = target_address;
 }
 
-void ARMCPU::executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached) {
-    DEBUG_LOG(std::string("executeCachedSoftwareInterrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
-    // Use cached.instruction for SWI number
-    uint32_t swi_number = cached.instruction & 0x00FFFFFF;
-    uint32_t return_address = parentCPU.R()[15] + 4;
-    handleException(0x00000008, 0x13, true, false);
-    DEBUG_INFO("ARM Software Interrupt: number=0x" + 
-               debug_to_hex_string(swi_number, 6) + 
-               " return_address=0x" + debug_to_hex_string(return_address, 8));
-    UNUSED(swi_number);
-    UNUSED(return_address);
-}
+// void ARMCPU::executeCachedPSRTransfer(const ARMCachedInstruction& cached) {
+//     DEBUG_LOG(std::string("executeCachedPSRTransfer: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+//     // Inline arm_psr_transfer logic using only cached fields
+//     bool is_cpsr = ((cached.instruction & 0x00400000) == 0); // 1=CPSR (bit 22=0), 0=SPSR (bit 22=1)
+//     bool is_mrs = (cached.instruction & 0x00200000) == 0; // 0=MSR, 1=MRS
 
-void ARMCPU::executeCachedPSRTransfer(const ARMCachedInstruction& cached) {
-    DEBUG_LOG(std::string("executeCachedPSRTransfer: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
-    // Inline arm_psr_transfer logic using only cached fields
-    bool is_cpsr = ((cached.instruction & 0x00400000) == 0); // 1=CPSR (bit 22=0), 0=SPSR (bit 22=1)
-    bool is_mrs = (cached.instruction & 0x00200000) == 0; // 0=MSR, 1=MRS
+//     if (!is_mrs) {
+//         // MSR: Move from register/immediate to PSR
+//         uint32_t field_mask = (cached.instruction >> 16) & 0xF;
+//         uint32_t value;
+//         if (cached.instruction & 0x02000000) {
+//             // Immediate operand
+//             uint32_t imm = cached.instruction & 0xFF;
+//             uint32_t rotate_field = (cached.instruction >> 8) & 0xF;
+//             uint32_t rotate = rotate_field * 2;
+//             value = imm;
+//             if (rotate) {
+//                 value = ror32(value, rotate);
+//             }
+//         } else {
+//             // Register operand
+//             uint32_t rm = cached.instruction & 0xF;
+//             value = parentCPU.R()[rm];
+//         }
+//         uint32_t psr = parentCPU.CPSR();
+//         if (field_mask & 1) psr = (psr & ~0x000000FF) | ((value & 0xFF) << 0);
+//         if (field_mask & 2) psr = (psr & ~0x0000FF00) | (((value >> 8) & 0xFF) << 8);
+//         if (field_mask & 4) psr = (psr & ~0x00FF0000) | (((value >> 16) & 0xFF) << 16);
+//         if (field_mask & 8) psr = (psr & ~0xF0000000) | (((value >> 28) & 0xF) << 28);
+//         if (is_cpsr) {
+//             parentCPU.CPSR() = psr;
+//         }
+//         // SPSR not supported
+//     } else {
+//         // MRS: Move from PSR to register
+//         uint32_t rd = (cached.instruction >> 12) & 0xF;
+//         uint32_t cpsr_val = parentCPU.CPSR();
+//         if (is_cpsr) {
+//             parentCPU.R()[rd] = cpsr_val;
+//         } else {
+//             parentCPU.R()[rd] = cpsr_val; // SPSR not supported
+//         }
+//     }
+// }
 
-    if (!is_mrs) {
-        // MSR: Move from register/immediate to PSR
-        uint32_t field_mask = (cached.instruction >> 16) & 0xF;
-        uint32_t value;
-        if (cached.instruction & 0x02000000) {
-            // Immediate operand
-            uint32_t imm = cached.instruction & 0xFF;
-            uint32_t rotate_field = (cached.instruction >> 8) & 0xF;
-            uint32_t rotate = rotate_field * 2;
-            value = imm;
-            if (rotate) {
-                value = ror32(value, rotate);
-            }
-        } else {
-            // Register operand
-            uint32_t rm = cached.instruction & 0xF;
-            value = parentCPU.R()[rm];
-        }
-        uint32_t psr = parentCPU.CPSR();
-        if (field_mask & 1) psr = (psr & ~0x000000FF) | ((value & 0xFF) << 0);
-        if (field_mask & 2) psr = (psr & ~0x0000FF00) | (((value >> 8) & 0xFF) << 8);
-        if (field_mask & 4) psr = (psr & ~0x00FF0000) | (((value >> 16) & 0xFF) << 16);
-        if (field_mask & 8) psr = (psr & ~0xF0000000) | (((value >> 28) & 0xF) << 28);
-        if (is_cpsr) {
-            parentCPU.CPSR() = psr;
-        }
-        // SPSR not supported
-    } else {
-        // MRS: Move from PSR to register
-        uint32_t rd = (cached.instruction >> 12) & 0xF;
-        uint32_t cpsr_val = parentCPU.CPSR();
-        if (is_cpsr) {
-            parentCPU.R()[rd] = cpsr_val;
-        } else {
-            parentCPU.R()[rd] = cpsr_val; // SPSR not supported
-        }
-    }
-}
 
-void ARMCPU::executeCachedCoprocessor(const ARMCachedInstruction& cached) {
-    DEBUG_LOG(std::string("executeCachedCoprocessor: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
-    switch (cached.type) {
-        case ARMInstructionType::COPROCESSOR_OP:
-            arm_coprocessor_operation(cached.instruction);
-            break;
-        case ARMInstructionType::COPROCESSOR_TRANSFER:
-            arm_coprocessor_transfer(cached.instruction);
-            break;
-        case ARMInstructionType::COPROCESSOR_REGISTER:
-            arm_coprocessor_register(cached.instruction);
-            break;
-        default:
-            arm_undefined(cached.instruction);
-            break;
-    }
-}
 
