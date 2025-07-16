@@ -141,6 +141,7 @@ public:
         cache[index] = decoded;
         cache[index].pc_tag = tag;
         cache[index].valid = true;
+        
     }
     
     // Invalidate cache entries for a memory range (for self-modifying code)

@@ -27,6 +27,9 @@ class CPU; // Forward declaration
 class ARMCPU {
 
 public:
+    // Must be declared before use in static decode table macros
+    FORCE_INLINE void decode_arm_data_proc_or_mul(ARMCachedInstruction& decoded);
+    // Must be declared before use in static decode table macros
     bool exception_taken = false;
     CPU& parentCPU; // Reference to the parent CPU
     ARMInstructionCache instruction_cache; // Instruction decode cache
@@ -200,10 +203,8 @@ private:
     
     // Table of 512 entries indexed by bits 27-19 (9 bits)
     static constexpr void (ARMCPU::*arm_decode_table[512])(ARMCachedInstruction& decoded) = {
-        // 0x000-0x007: AND (reg, imm alternating)
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_and_reg), ARM_HANDLER(decode_arm_and_imm)),
-        // 0x008-0x00F: EOR
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_eor_reg), ARM_HANDLER(decode_arm_eor_imm)),
+        // 0x000-0x00F: Data processing/MUL/MLA ambiguous region, use secondary decode
+        REPEAT_16(ARM_HANDLER(decode_arm_data_proc_or_mul)),
         // 0x010-0x017: SUB
         REPEAT_ALT_4(ARM_HANDLER(decode_arm_sub_reg), ARM_HANDLER(decode_arm_sub_imm)),
         // 0x018-0x01F: RSB
@@ -271,6 +272,10 @@ private:
         // 0x300 - 0x31F: Software Interrupt
         REPEAT_32(ARM_HANDLER(decode_arm_software_interrupt))
     };
+    
+    // --- Secondary decode table for ambiguous data processing/MUL/MLA region ---
+    typedef void (ARMCPU::*arm_secondary_decode_func_t)(ARMCachedInstruction& decoded);
+    static const arm_secondary_decode_func_t arm_secondary_decode_table[16];
 
     // Cleanup macros to avoid polluting the namespace
     #undef ARM_HANDLER
