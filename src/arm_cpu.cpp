@@ -21,7 +21,6 @@ ARMCPU::~ARMCPU() {
 }
 
 void ARMCPU::execute(uint32_t cycles) {
-    // Use lazy evaluation for debug logs
     DEBUG_INFO("Executing ARM instructions for " + std::to_string(cycles) + " cycles. Memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
         
     exception_taken = false;
@@ -35,7 +34,6 @@ void ARMCPU::execute(uint32_t cycles) {
         uint32_t pc = parentCPU.R()[15]; // Get current PC
         uint32_t instruction = parentCPU.getMemory().read32(pc); // Fetch instruction
 
-        // Use lazy evaluation for instruction fetch debug logs
         DEBUG_INFO("Fetched ARM instruction: " + debug_to_hex_string(instruction, 8) + " at PC: " + debug_to_hex_string(pc, 8));
 
         // Use cached execution path
@@ -123,7 +121,7 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
     
     if (cached) {
         if (!checkConditionCached(cached->condition)) return false;
-        executeCachedInstruction(*cached);
+        (this->*(cached->execute_func))(*cached);
         if (exception_taken) return true; // treat as PC modified
         return cached->pc_modified;
     } else {
@@ -401,22 +399,6 @@ FORCE_INLINE bool ARMCPU::checkConditionCached(uint8_t condition) {
     }
 }
 
-// Execute cached instruction using function pointer dispatch (optimized)
-void ARMCPU::executeCachedInstruction(const ARMCachedInstruction& cached) {
-    // Always handle undefined instructions via exception handler
-    if (cached.type == ARMInstructionType::UNDEFINED) {
-        arm_undefined(cached.instruction);
-        return;
-    }
-    // Use function pointer for direct dispatch - eliminates switch overhead
-    if (cached.execute_func) {
-        (this->*cached.execute_func)(cached);
-    } else {
-        // Fallback to original instruction execution for undefined instructions
-        arm_undefined(cached.instruction);
-    }
-}
-
 // Main instruction decoder
 ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction) {
     // DEBUG: Log instruction and mask for MSR immediate diagnosis
@@ -430,7 +412,7 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
     decoded.pc_modified = (decoded.rd == 15);
     
     // .. and call the decode handler based on the instruction type to handle the rest
-    (this->*arm_decode_table[bits<27, 20>(instruction)])(decoded);
+    (this->*arm_decode_table[bits<27,19>(instruction)])(decoded);
     return decoded;
 }
 
@@ -737,7 +719,7 @@ void ARMCPU::execute_arm_and_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_and_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, cached.carry_out);
+    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
    
     uint32_t result = parentCPU.R()[cached.rn] & result;
     parentCPU.R()[cached.rd] = result;
@@ -1363,11 +1345,11 @@ void ARMCPU::execute_arm_swpb(ARMCachedInstruction& cached) {
     parentCPU.R()[cached.rd] = static_cast<uint32_t>(old_value); // Store old value back in rd
 }   
 
-void APRCPU::execute_arm_illegal(ARMCachedInstruction& cached) {
+void ARMCPU::execute_arm_undefined(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_illegal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     // Handle illegal instruction
-    parentCPU.setException(ARMException::IllegalInstruction);
+    // parentCPU.setException(ARMException::IllegalInstruction);
 }
 
 void ARMCPU::execute_arm_bx(ARMCachedInstruction& cached) {
