@@ -1,3 +1,6 @@
+#define REPEAT_ALT_8(h1, h2) h1, h2, h1, h2, h1, h2, h1, h2
+#define REPEAT_ALT_16(h1, h2) REPEAT_ALT_8(h1, h2), REPEAT_ALT_8(h1, h2)
+#define REPEAT_ALT_32(h1, h2) REPEAT_ALT_16(h1, h2), REPEAT_ALT_16(h1, h2)
 #ifndef ARM_CPU_H
 #define ARM_CPU_H
 
@@ -170,8 +173,6 @@ private:
     void decode_arm_ldrsh(ARMCachedInstruction& decoded);
     void decode_arm_strh(ARMCachedInstruction& decoded);
     void decode_arm_undefined(ARMCachedInstruction& decoded);
-    void decode_arm_str(ARMCachedInstruction& decoded);
-    void decode_arm_ldr(ARMCachedInstruction& decoded);
     void decode_arm_strb_reg(ARMCachedInstruction& decoded);
     void decode_arm_strb_imm(ARMCachedInstruction& decoded);
     void decode_arm_ldrb_reg(ARMCachedInstruction& decoded);
@@ -246,9 +247,9 @@ private:
         // 0x090 - 0x0FF: Undefined or reserved
         REPEAT_64(ARM_HANDLER(decode_arm_undefined)), REPEAT_32(ARM_HANDLER(decode_arm_undefined)), REPEAT_16(ARM_HANDLER(decode_arm_undefined)),
         // 0x100 - 0x13F: STR (store word)
-        REPEAT_64(ARM_HANDLER(decode_arm_str)),
+        REPEAT_ALT_32(ARM_HANDLER(decode_arm_str_imm), ARM_HANDLER(decode_arm_str_reg)),
         // 0x140 - 0x17F: LDR (load word)
-        REPEAT_64(ARM_HANDLER(decode_arm_ldr)),
+        REPEAT_ALT_32(ARM_HANDLER(decode_arm_ldr_imm), ARM_HANDLER(decode_arm_ldr_reg)),
         // 0x180 - 0x19F: STRB (store byte, reg/imm alternating)
         REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)),
         REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)),
@@ -293,7 +294,7 @@ private:
     void execute_arm_ldrb_reg(ARMCachedInstruction& decoded);
     void execute_arm_stm(ARMCachedInstruction& decoded);
     void execute_arm_ldm(ARMCachedInstruction& decoded);
-    
+
     void execute_arm_b(ARMCachedInstruction& decoded);
     void execute_arm_bl(ARMCachedInstruction& decoded);
     void execute_arm_bx(ARMCachedInstruction& cached);
