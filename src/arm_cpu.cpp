@@ -367,7 +367,7 @@ uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t s
                     // Carry unchanged
                 } else {
                     *carry_out = (value >> (shift_amount - 1)) & 1;
-                    return (value >> shift_amount) | (value << (32 - shift_amount));
+                    return ror32(value, shift_amount);
                 }
             }
     }
@@ -401,7 +401,7 @@ FORCE_INLINE bool ARMCPU::checkConditionCached(uint8_t condition) {
 
 // Main instruction decoder
 ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction) {
-    // DEBUG: Log instruction and mask for MSR immediate diagnosis
+    UNUSED(pc); // PC is not used in this decode function, but could be useful for debugging
     ARMCachedInstruction decoded;
 
     // Add in common decodes ..
@@ -422,7 +422,7 @@ FORCE_INLINE uint32_t ARMCPU::execOperand2imm(uint32_t imm, uint8_t rotate, uint
         return imm;
     }
     if (rotate > 0) {
-        uint32_t result = (imm >> rotate) | (imm << (32 - rotate));
+        uint32_t result = ror32(imm, rotate);
         *carry_out = (result >> 31) & 1;
         return result;
     }
@@ -491,7 +491,7 @@ FORCE_INLINE uint32_t ARMCPU::execOperand2reg(uint8_t rm, uint8_t rs, uint8_t sh
             }
             shift_amount %= 32;
             *carry_out = (rm >> (shift_amount - 1)) & 1;
-            return (rm >> shift_amount) | (rm << (32 - shift_amount));
+            return ror32(rm, shift_amount);
     }
     return rm;
 }
@@ -721,8 +721,7 @@ void ARMCPU::execute_arm_and_reg(ARMCachedInstruction& cached) {
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
    
-    uint32_t result = parentCPU.R()[cached.rn] & result;
-    parentCPU.R()[cached.rd] = result;
+    parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] & result;
     if (cached.set_flags && cached.rd != 15) {
         updateFlagsLogical(result, carry_out);
     }
@@ -916,22 +915,6 @@ void ARMCPU::execute_arm_mvn_reg(ARMCachedInstruction& cached) {
     if (cached.set_flags && cached.rd != 15) {
         updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
     }
-}
-
-void ARMCPU::execute_arm_mov_imm(ARMCachedInstruction& cached) {
-    DEBUG_LOG(std::string("execute_arm_mov_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
-    
-    uint32_t carry_out = 0;
-    uint32_t result = execOperand2imm(cached.imm, cached.rotate, &carry_out);
-
-    if (cached.set_flags && cached.rd != 15) {
-        uint32_t cpsr = parentCPU.CPSR();
-        cpsr &= ~(0x80000000 | 0x40000000); // Clear N, Z
-        if (result == 0) cpsr |= 0x40000000;   // Set Z if zero
-        if (carry_out) cpsr |= 0x20000000;     // Set C from rotation
-        parentCPU.CPSR() = cpsr;
-    }
-    parentCPU.R()[cached.rd] = result;
 }
 
 void ARMCPU::execute_arm_mov_reg(ARMCachedInstruction& cached) {
