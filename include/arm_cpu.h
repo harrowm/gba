@@ -115,6 +115,8 @@ public:
     bool checkMemoryAccess(uint32_t address, bool is_write, bool is_privileged);
 
 private:
+    ARMCachedInstruction decodeInstruction(uint32_t pc, uint32_t instruction);
+    
     // ARM7TDMI instruction decode table using bits 27-19 (9 bits, providing finer granularity)
     // For groups or ambiguous cases, a group name is used in the comment.
 
@@ -291,8 +293,10 @@ private:
     void execute_arm_ldrb_reg(ARMCachedInstruction& decoded);
     void execute_arm_stm(ARMCachedInstruction& decoded);
     void execute_arm_ldm(ARMCachedInstruction& decoded);
+    
     void execute_arm_b(ARMCachedInstruction& decoded);
     void execute_arm_bl(ARMCachedInstruction& decoded);
+    void execute_arm_bx(ARMCachedInstruction& cached);
 
     void execute_arm_mul(ARMCachedInstruction& decoded);
     void execute_arm_mla(ARMCachedInstruction& decoded);
