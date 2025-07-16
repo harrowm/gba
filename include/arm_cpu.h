@@ -38,23 +38,23 @@ public:
     void executeInstruction(uint32_t instruction);
 
     // Cached instruction execution functions - optimized for cache hits
-    FORCE_INLINE void executeCachedDataProcessing(const ARMCachedInstruction& cached);
-    void executeCachedSingleDataTransfer(const ARMCachedInstruction& cached);
-    void executeCachedBranch(const ARMCachedInstruction& cached);
-    FORCE_INLINE void executeCachedBlockDataTransfer(const ARMCachedInstruction& cached);
-    void executeCachedMultiply(const ARMCachedInstruction& cached);
-    void executeCachedMultiplyLong(const ARMCachedInstruction& cached);
-    void executeCachedBX(const ARMCachedInstruction& cached);
-    void executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached);
-    void executeCachedPSRTransfer(const ARMCachedInstruction& cached);
-    void executeCachedCoprocessor(const ARMCachedInstruction& cached);
+    // FORCE_INLINE void executeCachedDataProcessing(const ARMCachedInstruction& cached);
+    // void executeCachedSingleDataTransfer(const ARMCachedInstruction& cached);
+    // void executeCachedBranch(const ARMCachedInstruction& cached);
+    // FORCE_INLINE void executeCachedBlockDataTransfer(const ARMCachedInstruction& cached);
+    // void executeCachedMultiply(const ARMCachedInstruction& cached);
+    // void executeCachedMultiplyLong(const ARMCachedInstruction& cached);
+    // void executeCachedBX(const ARMCachedInstruction& cached);
+    // void executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached);
+    // void executeCachedPSRTransfer(const ARMCachedInstruction& cached);
+    // void executeCachedCoprocessor(const ARMCachedInstruction& cached);
 
     // Instruction decoding functions
-    ARMCachedInstruction decodeInstruction(uint32_t pc, uint32_t instruction);
-    ARMCachedInstruction decodeDataProcessing(uint32_t pc, uint32_t instruction);
-    ARMCachedInstruction decodeSingleDataTransfer(uint32_t pc, uint32_t instruction);
-    ARMCachedInstruction decodeBranch(uint32_t pc, uint32_t instruction);
-    ARMCachedInstruction decodeBlockDataTransfer(uint32_t pc, uint32_t instruction);
+    // ARMCachedInstruction decodeInstruction(uint32_t pc, uint32_t instruction);
+    // ARMCachedInstruction decodeDataProcessing(uint32_t pc, uint32_t instruction);
+    // ARMCachedInstruction decodeSingleDataTransfer(uint32_t pc, uint32_t instruction);
+    // ARMCachedInstruction decodeBranch(uint32_t pc, uint32_t instruction);
+    // ARMCachedInstruction decodeBlockDataTransfer(uint32_t pc, uint32_t instruction);
 
     // Cache-aware execution method
     bool executeWithCache(uint32_t pc, uint32_t instruction);
@@ -66,41 +66,41 @@ public:
     void arm_undefined(uint32_t instruction);
 
     // Data processing operation handlers - critical ones marked as FORCE_INLINE for optimization
-    void arm_and(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_eor(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    FORCE_INLINE void arm_sub(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_rsb(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    FORCE_INLINE void arm_add(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_adc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_sbc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_rsc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_tst(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_teq(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    FORCE_INLINE void arm_cmp(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_cmn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_orr(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_and(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_eor(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // FORCE_INLINE void arm_sub(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_rsb(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // FORCE_INLINE void arm_add(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_adc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_sbc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_rsc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_tst(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_teq(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // FORCE_INLINE void arm_cmp(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_cmn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_orr(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
 
 public:
     // Clear the instruction cache (for testing)
     void clearInstructionCache() { instruction_cache.clear(); }
     // ...existing public methods...
-    FORCE_INLINE void arm_mov(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_bic(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    void arm_mvn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // FORCE_INLINE void arm_mov(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_bic(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
+    // void arm_mvn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
     
     // Fast-path ALU operations for function pointer dispatch optimization
-    FORCE_INLINE void fastALU_ADD(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    FORCE_INLINE void fastALU_SUB(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    FORCE_INLINE void fastALU_MOV(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    FORCE_INLINE void fastALU_ORR(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    FORCE_INLINE void fastALU_AND(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    FORCE_INLINE void fastALU_CMP(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    // FORCE_INLINE void fastALU_ADD(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    // FORCE_INLINE void fastALU_SUB(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    // FORCE_INLINE void fastALU_MOV(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    // FORCE_INLINE void fastALU_ORR(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    // FORCE_INLINE void fastALU_AND(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
+    // FORCE_INLINE void fastALU_CMP(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
     
     // Helper functions - critical ones marked as FORCE_INLINE for optimization
     FORCE_INLINE uint32_t execOperand2imm(uint32_t imm, uint8_t rotate, uint32_t* carry_out);
+    FORCE_INLINE uint32_t execOperand2reg(uint8_t rm, uint8_t rs, uint8_t shift_type, bool reg_shift, uint32_t* carry_out);
 
-
-    FORCE_INLINE uint32_t calculateOperand2(uint32_t instruction, uint32_t* carry_out);
+    // FORCE_INLINE uint32_t calculateOperand2(uint32_t instruction, uint32_t* carry_out);
     uint32_t calculateOperand2Advanced(uint32_t instruction, uint32_t* carry_out, uint32_t* cycles);
     uint32_t arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t shift_amount, uint32_t* carry_out);
     FORCE_INLINE void updateFlags(uint32_t result, bool carry, bool overflow);
@@ -158,7 +158,6 @@ private:
     void decode_arm_smlal(ARMCachedInstruction& decoded);
     void decode_arm_swp(ARMCachedInstruction& decoded);
     void decode_arm_swpb(ARMCachedInstruction& decoded);
-    void decode_arm_swap_group(ARMCachedInstruction& decoded);
     void decode_arm_ldrh(ARMCachedInstruction& decoded);
     void decode_arm_ldrsb(ARMCachedInstruction& decoded);
     void decode_arm_ldrsh(ARMCachedInstruction& decoded);
@@ -233,8 +232,8 @@ private:
         ARM_HANDLER(decode_arm_umull), ARM_HANDLER(decode_arm_umlal), ARM_HANDLER(decode_arm_smull), ARM_HANDLER(decode_arm_smlal),
         // 0x088 - 0x089: SWP, SWPB
         ARM_HANDLER(decode_arm_swp), ARM_HANDLER(decode_arm_swpb),
-        // 0x08A - 0x08B: Reserved/undefined (swap group fallback)
-        ARM_HANDLER(decode_arm_swap_group), ARM_HANDLER(decode_arm_swap_group),
+        // 0x08A - 0x08B: Reserved/undefined
+        ARM_HANDLER(decode_arm_undefined), ARM_HANDLER(decode_arm_undefined),
         // 0x08C - 0x08F: LDRH, LDRSB, LDRSH, STRH
         ARM_HANDLER(decode_arm_ldrh), ARM_HANDLER(decode_arm_ldrsb), ARM_HANDLER(decode_arm_ldrsh), ARM_HANDLER(decode_arm_strh),
         // 0x090 - 0x0FF: Undefined or reserved
@@ -281,28 +280,31 @@ private:
     void execute_arm_str_reg(ARMCachedInstruction& decoded);
     void execute_arm_ldr_imm(ARMCachedInstruction& decoded);
     void execute_arm_ldr_reg(ARMCachedInstruction& decoded);
-    void execute_arm_strb(ARMCachedInstruction& decoded);
     void execute_arm_strb_imm(ARMCachedInstruction& decoded);
     void execute_arm_strb_reg(ARMCachedInstruction& decoded);
-    void execute_arm_ldrb(ARMCachedInstruction& decoded);
     void execute_arm_ldrb_imm(ARMCachedInstruction& decoded);
     void execute_arm_ldrb_reg(ARMCachedInstruction& decoded);
     void execute_arm_stm(ARMCachedInstruction& decoded);
     void execute_arm_ldm(ARMCachedInstruction& decoded);
     void execute_arm_b(ARMCachedInstruction& decoded);
     void execute_arm_bl(ARMCachedInstruction& decoded);
-    void execute_arm_swp(ARMCachedInstruction& decoded);
-    void execute_arm_swpb(ARMCachedInstruction& decoded);
+
     void execute_arm_mul(ARMCachedInstruction& decoded);
     void execute_arm_mla(ARMCachedInstruction& decoded);
     void execute_arm_umull(ARMCachedInstruction& decoded);
     void execute_arm_umlal(ARMCachedInstruction& decoded);
     void execute_arm_smull(ARMCachedInstruction& decoded);
     void execute_arm_smlal(ARMCachedInstruction& decoded);
+
     void execute_arm_ldrh(ARMCachedInstruction& decoded);
     void execute_arm_strh(ARMCachedInstruction& decoded);
     void execute_arm_ldrsb(ARMCachedInstruction& decoded);
     void execute_arm_ldrsh(ARMCachedInstruction& decoded);
+
+    void execute_arm_swp(ARMCachedInstruction& decoded);
+    void execute_arm_swpb(ARMCachedInstruction& decoded);
+    void execute_arm_undefined(ARMCachedInstruction& decoded);
+    
     void execute_arm_mov_imm(ARMCachedInstruction& decoded);
     void execute_arm_mov_reg(ARMCachedInstruction& decoded);
     // Data processing execute stubs
