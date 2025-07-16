@@ -36,7 +36,7 @@ Memory::Memory(bool initializeTestMode) {
 Memory::~Memory() {}
 
 int Memory::mapAddress(uint32_t gbaAddress, bool isWrite /* = false */) const {
-    DEBUG_INFO("Mapping address: 0x" + debug_to_hex_string(gbaAddress, 8) + " isWrite: " + (isWrite ? "true" : "false"));
+    // DEBUG_INFO("Mapping address: 0x" + debug_to_hex_string(gbaAddress, 8) + " isWrite: " + (isWrite ? "true" : "false"));
 
     // Check if the address is within the cached region
     if (lastRegion && gbaAddress >= lastRegion->start_address && gbaAddress <= lastRegion->end_address) {
@@ -50,6 +50,7 @@ int Memory::mapAddress(uint32_t gbaAddress, bool isWrite /* = false */) const {
                 return region.second < addr;
             });
         if (romIt != romRegions.end() && gbaAddress >= romIt->first && gbaAddress <= romIt->second) {
+            DEBUG_LOG("Attempted write to ROM address: 0x" + debug_to_hex_string(gbaAddress, 8) + ", write ignored.");  
             return -2; // Write-protected address
         }
     }
@@ -64,10 +65,11 @@ int Memory::mapAddress(uint32_t gbaAddress, bool isWrite /* = false */) const {
         lastRegionIndex = std::distance(regions.begin(), it);
         
         // Direct debug output
-        DEBUG_INFO("Mapped to address: 0x" + debug_to_hex_string(gbaAddress - it->start_address + it->offsetInMemoryArray, 8));
+        // DEBUG_INFO("Mapped to address: 0x" + debug_to_hex_string(gbaAddress - it->start_address + it->offsetInMemoryArray, 8));
         
         return gbaAddress - it->start_address + it->offsetInMemoryArray;
     }
+    DEBUG_LOG("Address 0x" + debug_to_hex_string(gbaAddress, 8) + " is out of bounds or not mapped.");
     return -1; // Invalid address
 }
 
@@ -260,7 +262,7 @@ void Memory::initializeTestRegions() {
     }
     data.resize(totalSize, 0);
     
-    DEBUG_INFO("Test regions initialized: Start = 0x00000000, End = 0x00001FFF, Type = RAM, Width = 32 bits");
+    DEBUG_LOG("Test regions initialized: Start = 0x00000000, End = 0x00001FFF, Type = RAM, Width = 32 bits");
 }
 
 uint32_t Memory::getSize() const {

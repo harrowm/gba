@@ -11,9 +11,7 @@ constexpr void (ThumbCPU::*ThumbCPU::thumb_instruction_table[256])(uint16_t);
 constexpr void (ThumbCPU::*ThumbCPU::thumb_alu_operations_table[16])(uint8_t, uint8_t);
 
 ThumbCPU::ThumbCPU(CPU& cpu) : parentCPU(cpu) {
-    DEBUG_INFO("Initializing ThumbCPU with parent CPU");
     // Initialize any Thumb-specific state or resources here
-    DEBUG_INFO("ThumbCPU initialized. Instruction table is compile-time constant.");
 }
 
 ThumbCPU::~ThumbCPU() {

@@ -5,13 +5,10 @@
 #include "timing.h"
 
 CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptController(ic) {
-    DEBUG_INFO("Initializing CPU with default CPSR value for ARM mode");
     thumbCPU = new ThumbCPU(*this); // Pass itself as the parent reference
-    DEBUG_INFO("ThumbCPU instance created");
     armCPU = new ARMCPU(*this);     // Pass itself as the parent reference
-    DEBUG_INFO("ARMCPU instance created");
     std::fill(std::begin(registers), std::end(registers), 0); // Reset all registers to zero using std::fill
-    DEBUG_INFO("Registers initialized to zero");
+    DEBUG_LOG("Thumb and ARM instances created, CPU registers initialized to zero");
     cpsr = 0; // Sets us up in ARM mode and little endian by default
 
     // Initialize all banked registers to zero
@@ -24,7 +21,7 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
 
     // Initialize timing system
     timing_init(&timing);
-    DEBUG_INFO("Timing system initialized");
+    DEBUG_LOG("Timing system initialized");
 
     // Register ARM instruction cache invalidation callback
     memory.registerCacheInvalidationCallback([this](uint32_t start_addr, uint32_t end_addr) {

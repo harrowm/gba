@@ -12,6 +12,38 @@ static inline uint32_t ror32(uint32_t value, unsigned int amount) {
     return (value >> amount) | (value << (32 - amount));
 }
 
+
+// --- Compact 16-entry secondary decode table for ambiguous region ---
+constexpr ARMCPU::arm_secondary_decode_func_t ARMCPU::arm_secondary_decode_table[16] = {
+    // 0x0: AND reg
+    &ARMCPU::decode_arm_and_reg,
+    // 0x1: AND imm
+    &ARMCPU::decode_arm_and_imm,
+    // 0x2: EOR reg
+    &ARMCPU::decode_arm_eor_reg,
+    // 0x3: EOR imm
+    &ARMCPU::decode_arm_eor_imm,
+    // 0x4-0x8: undefined
+    &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
+    &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
+    &ARMCPU::decode_arm_undefined,
+    // 0x9: MUL
+    &ARMCPU::decode_arm_mul,
+    // 0xA: undefined
+    &ARMCPU::decode_arm_undefined,
+    // 0xB: MLA
+    &ARMCPU::decode_arm_mla,
+    // 0xC-0xF: undefined
+    &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
+    &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined
+};
+
+// Secondary decode function for ambiguous region (data processing/MUL/MLA overlap)
+FORCE_INLINE void ARMCPU::decode_arm_data_proc_or_mul(ARMCachedInstruction& decoded) {
+    uint32_t op = (decoded.instruction >> 4) & 0xF;
+    (this->*arm_secondary_decode_table[op])(decoded);
+}
+
 ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu) {
     DEBUG_INFO("Initializing ARMCPU with parent CPU");
 }
@@ -131,7 +163,11 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
         instruction_cache.insert(pc, decoded);
         DEBUG_INFO("Executing decoded instruction: PC=0x" + debug_to_hex_string(pc, 8) + 
                    " Instruction=0x" + debug_to_hex_string(decoded.instruction, 8));
-        (this->*(cached->execute_func))(*cached);
+        if (!checkConditionCached(decoded.condition)) return false;
+        // Call the execute function pointer directly
+        (this->*(decoded.execute_func))(decoded);
+        DEBUG_LOG("Executed instruction: PC=0x" + debug_to_hex_string(pc, 8) + 
+                   " Instruction=0x" + debug_to_hex_string(decoded.instruction, 8));
         if (exception_taken) return true;
         return decoded.pc_modified;
     }
@@ -410,8 +446,15 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
     decoded.valid = true;
     decoded.pc_modified = (decoded.rd == 15);
     
+    
     // .. and call the decode handler based on the instruction type to handle the rest
-    (this->*arm_decode_table[bits<27,19>(instruction)])(decoded);
+    auto decode_func = arm_decode_table[bits<27,19>(instruction)];
+    if (decode_func == nullptr) {
+        DEBUG_ERROR("[FATAL] arm_decode_table entry is nullptr for instruction 0x" + debug_to_hex_string(instruction, 8));
+        // Optionally, set decoded.valid = false or handle error as needed
+        return decoded;
+    }
+    (this->*decode_func)(decoded);
     return decoded;
 }
 
