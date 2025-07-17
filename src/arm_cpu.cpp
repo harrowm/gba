@@ -12,32 +12,6 @@ static inline uint32_t ror32(uint32_t value, unsigned int amount) {
     return (value >> amount) | (value << (32 - amount));
 }
 
-
-// --- Compact 16-entry secondary decode table for ambiguous region ---
-// constexpr ARMCPU::arm_secondary_decode_func_t ARMCPU::arm_secondary_decode_table[16] = {
-//     // 0x0: AND reg
-//     &ARMCPU::decode_arm_and_reg,
-//     // 0x1: AND imm
-//     &ARMCPU::decode_arm_and_imm,
-//     // 0x2: EOR reg
-//     &ARMCPU::decode_arm_eor_reg,
-//     // 0x3: EOR imm
-//     &ARMCPU::decode_arm_eor_imm,
-//     // 0x4-0x8: undefined
-//     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
-//     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
-//     &ARMCPU::decode_arm_undefined,
-//     // 0x9: undefined (no longer used)
-//     &ARMCPU::decode_arm_undefined,
-//     // 0xA: undefined
-//     &ARMCPU::decode_arm_undefined,
-//     // 0xB: undefined (not MLA)
-//     &ARMCPU::decode_arm_undefined,
-//     // 0xC-0xF: undefined
-//     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
-//     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined
-// };
-
 // Secondary decode function for ambiguous region (data processing/MUL/MLA overlap)
 // Phase 1: New entry point for ambiguous region
 ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu) {
@@ -49,8 +23,6 @@ ARMCPU::~ARMCPU() {
 }
 
 void ARMCPU::execute(uint32_t cycles) {
-    DEBUG_INFO("Executing ARM instructions for " + std::to_string(cycles) + " cycles. Memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
-        
     exception_taken = false;
     while (cycles > 0) {
         // Check if we're still in ARM mode - if not, break out early
@@ -62,8 +34,6 @@ void ARMCPU::execute(uint32_t cycles) {
         uint32_t pc = parentCPU.R()[15]; // Get current PC
         uint32_t instruction = parentCPU.getMemory().read32(pc); // Fetch instruction
 
-        DEBUG_INFO("Fetched ARM instruction: " + debug_to_hex_string(instruction, 8) + " at PC: " + debug_to_hex_string(pc, 8));
-
         // Use cached execution path
         bool pc_modified = executeWithCache(pc, instruction);
         if (exception_taken) {
@@ -74,8 +44,6 @@ void ARMCPU::execute(uint32_t cycles) {
             parentCPU.R()[15] = pc + 4;
             DEBUG_INFO("Incremented PC to: 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
         }
-        // Debug: Print R[0] and R[1] after instruction execution
-        DEBUG_INFO("After instruction: R[0]=0x" + debug_to_hex_string(parentCPU.R()[0], 8) + ", R[1]=0x" + debug_to_hex_string(parentCPU.R()[1], 8));
         cycles -= 1; // Placeholder for cycle deduction
     }
 }
@@ -83,7 +51,6 @@ void ARMCPU::execute(uint32_t cycles) {
 // New timing-aware execution method
 void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
     // Use macro-based debug system
-    DEBUG_INFO("Executing ARM instructions with timing for " + std::to_string(cycles) + " cycles");
     
     while (cycles > 0) {
         exception_taken = false;
@@ -154,15 +121,11 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
         return cached->pc_modified;
     } else {
         DEBUG_INFO("CACHE MISS: PC=0x" + debug_to_hex_string(pc, 8) + 
-                   " Instruction=0x" + debug_to_hex_string(instruction, 8));
+                   " Instruction=0x" + debug_to_hex_string(instruction, 8) + "going to use function table index: 0x" + debug_to_hex_string((bits<27,20>(instruction) << 1) & (bits<7,4>(instruction) == 0x9), 3));
         ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
         instruction_cache.insert(pc, decoded);
-        DEBUG_INFO("Executing decoded instruction: PC=0x" + debug_to_hex_string(pc, 8) + 
-                   " Instruction=0x" + debug_to_hex_string(decoded.instruction, 8));
         if (!checkConditionCached(decoded.condition)) return false;
         (this->*(decoded.execute_func))(decoded);
-        DEBUG_LOG("Executed instruction: PC=0x" + debug_to_hex_string(pc, 8) + 
-                   " Instruction=0x" + debug_to_hex_string(decoded.instruction, 8));
         if (exception_taken) return true;
         return decoded.pc_modified;
     }
@@ -431,27 +394,19 @@ FORCE_INLINE bool ARMCPU::checkConditionCached(uint8_t condition) {
 
 // Main instruction decoder
 ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction) {
-    DEBUG_LOG(std::string("[decodeInstruction] instruction: 0x") + debug_to_hex_string(instruction, 8));
-    DEBUG_LOG(std::string("[decodeInstruction] bits<27,19>: ") + std::to_string(bits<27,19>(instruction)));
     UNUSED(pc); // PC is not used in this decode function, but could be useful for debugging
     ARMCachedInstruction decoded;
 
     // Add in common decodes ..
     decoded.instruction = instruction;
     
-    DEBUG_LOG(std::string("[decodeInstruction] instruction: 0x") + debug_to_hex_string(decoded.instruction, 8));
-    DEBUG_LOG(std::string("[decodeInstruction] bits<27,19>: ") + std::to_string(bits<27,19>(0xE0810002)));
-    
-
     decoded.condition = bits<31, 28>(instruction);
     decoded.set_flags = bits<20, 20>(instruction);
     decoded.valid = true;
     decoded.pc_modified = (decoded.rd == 15);
 
-    // Print the function name from the decode table for debug
-    uint32_t index = bits<27,19>(instruction);
-
     // .. and call the decode handler based on the instruction type to handle the rest
+    uint32_t index = (bits<27,20>(instruction) << 1) & (bits<7,4>(instruction) == 0x9); // bits 7-4 = "1001"
     auto decode_func = arm_decode_table[index];
     if (decode_func == nullptr) {
         DEBUG_ERROR("[FATAL] arm_decode_table entry is nullptr for instruction 0x" + debug_to_hex_string(instruction, 8));

@@ -15,9 +15,7 @@
  * - Function pointer table for fast opcode dispatch
  * - Fast paths for common instructions (MOV, ADD, SUB, CMP)
  * - FORCE_INLINE for critical functions
- * - Optimized calculateOperand2 with fast paths for common cases
  * - Optimized flag updates to minimize register reads/writes
- * - Reduced debug overhead with lazy evaluation
  */
 
 class CPU; // Forward declaration
@@ -25,28 +23,6 @@ class CPU; // Forward declaration
 class ARMCPU {
 
 public:
-    // Must be declared before use in static decode table macros
-    FORCE_INLINE void decode_arm_data_proc_or_mul(ARMCachedInstruction& decoded) {
-        uint32_t op = bits<7,4>(decoded.instruction);
-        if (op == 0x9) {
-            // bits 7–4 == 1001: MUL/MLA
-            if (bits<21,21>(decoded.instruction)) {
-                decode_arm_mla(decoded);
-            } else {
-                decode_arm_mul(decoded);
-            }
-        } else {
-            // bits 7–4 != 1001: AND/EOR/SUB/RSB reg
-            static constexpr arm_secondary_decode_func_t and_eor_sub_rsb_table[4] = {
-                &ARMCPU::decode_arm_and_reg,
-                &ARMCPU::decode_arm_eor_reg,
-                &ARMCPU::decode_arm_sub_reg,
-                &ARMCPU::decode_arm_rsb_reg,
-            };
-            DEBUG_LOG("Decoding AND/EOR/SUB/RSB reg instruction: 0x" + debug_to_hex_string(decoded.instruction, 8) + "index: " + std::to_string(bits<24, 21>(decoded.instruction)));
-            (this->*and_eor_sub_rsb_table[bits<22,21>(decoded.instruction)])(decoded);
-        }
-    }
     // Must be declared before use in static decode table macros
     bool exception_taken = false;
     CPU& parentCPU; // Reference to the parent CPU
@@ -60,26 +36,7 @@ public:
 
     // Instruction execution functions
     void executeInstruction(uint32_t instruction);
-
-    // Cached instruction execution functions - optimized for cache hits
-    // FORCE_INLINE void executeCachedDataProcessing(const ARMCachedInstruction& cached);
-    // void executeCachedSingleDataTransfer(const ARMCachedInstruction& cached);
-    // void executeCachedBranch(const ARMCachedInstruction& cached);
-    // FORCE_INLINE void executeCachedBlockDataTransfer(const ARMCachedInstruction& cached);
-    // void executeCachedMultiply(const ARMCachedInstruction& cached);
-    // void executeCachedMultiplyLong(const ARMCachedInstruction& cached);
-    // void executeCachedBX(const ARMCachedInstruction& cached);
-    // void executeCachedSoftwareInterrupt(const ARMCachedInstruction& cached);
-    // void executeCachedPSRTransfer(const ARMCachedInstruction& cached);
-    // void executeCachedCoprocessor(const ARMCachedInstruction& cached);
-
-    // Instruction decoding functions
-    // ARMCachedInstruction decodeInstruction(uint32_t pc, uint32_t instruction);
-    // ARMCachedInstruction decodeDataProcessing(uint32_t pc, uint32_t instruction);
-    // ARMCachedInstruction decodeSingleDataTransfer(uint32_t pc, uint32_t instruction);
-    // ARMCachedInstruction decodeBranch(uint32_t pc, uint32_t instruction);
-    // ARMCachedInstruction decodeBlockDataTransfer(uint32_t pc, uint32_t instruction);
-
+    
     // Cache-aware execution method
     bool executeWithCache(uint32_t pc, uint32_t instruction);
 
@@ -89,36 +46,9 @@ public:
     void arm_coprocessor_register(uint32_t instruction);
     void arm_undefined(uint32_t instruction);
 
-    // Data processing operation handlers - critical ones marked as FORCE_INLINE for optimization
-    // void arm_and(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_eor(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // FORCE_INLINE void arm_sub(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_rsb(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // FORCE_INLINE void arm_add(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_adc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_sbc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_rsc(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_tst(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_teq(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // FORCE_INLINE void arm_cmp(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_cmn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_orr(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-
 public:
     // Clear the instruction cache (for testing)
     void clearInstructionCache() { instruction_cache.clear(); }
-    // ...existing public methods...
-    // FORCE_INLINE void arm_mov(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_bic(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    // void arm_mvn(uint32_t rd, uint32_t rn, uint32_t operand2, bool set_flags, uint32_t carry_out);
-    
-    // Fast-path ALU operations for function pointer dispatch optimization
-    // FORCE_INLINE void fastALU_ADD(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    // FORCE_INLINE void fastALU_SUB(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    // FORCE_INLINE void fastALU_MOV(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    // FORCE_INLINE void fastALU_ORR(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    // FORCE_INLINE void fastALU_AND(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
-    // FORCE_INLINE void fastALU_CMP(uint32_t rd, uint32_t rn, uint32_t op1, uint32_t rm, bool set_flags, uint32_t carry);
     
     // Helper functions - critical ones marked as FORCE_INLINE for optimization
     FORCE_INLINE uint32_t execOperand2imm(uint32_t imm, uint8_t rotate, uint32_t* carry_out);
@@ -141,8 +71,8 @@ public:
 private:
     ARMCachedInstruction decodeInstruction(uint32_t pc, uint32_t instruction);
     
-    // ARM7TDMI instruction decode table using bits 27-19 (9 bits, providing finer granularity)
-    // For groups or ambiguous cases, a group name is used in the comment.
+    // ARM7TDMI instruction decode table using bits 27-20 and a check to see if 
+    // bits 7-4 are "1001" (9 bits total).  This avoids any secondary decoding
 
     void decode_arm_and_reg(ARMCachedInstruction& decoded);
     void decode_arm_and_imm(ARMCachedInstruction& decoded);
@@ -176,7 +106,6 @@ private:
     void decode_arm_bic_imm(ARMCachedInstruction& decoded);
     void decode_arm_mvn_reg(ARMCachedInstruction& decoded);
     void decode_arm_mvn_imm(ARMCachedInstruction& decoded);
-    // Single data transfer decoders (word)
     void decode_arm_str_imm(ARMCachedInstruction& decoded);
     void decode_arm_str_reg(ARMCachedInstruction& decoded);
     void decode_arm_ldr_imm(ARMCachedInstruction& decoded);
@@ -206,7 +135,12 @@ private:
     void decode_arm_mrc(ARMCachedInstruction& decoded);
     void decode_arm_mcr(ARMCachedInstruction& decoded);
     void decode_arm_software_interrupt(ARMCachedInstruction& decoded);
+    void decode_arm_ldc_imm(ARMCachedInstruction& decoded);
+    void decode_arm_ldc_reg(ARMCachedInstruction& decoded);
+    void decode_arm_stc_imm(ARMCachedInstruction& decoded);
+    void decode_arm_stc_reg(ARMCachedInstruction& decoded);
 
+    // The following code is generated by inst_table.py
     // Helper macros for cleaner instruction table initialization
     #define ARM_HANDLER(func) &ARMCPU::func
     #define REPEAT_2(handler) handler, handler
@@ -216,88 +150,318 @@ private:
     #define REPEAT_32(handler) REPEAT_16(handler), REPEAT_16(handler)
     #define REPEAT_64(handler) REPEAT_32(handler), REPEAT_32(handler)
     #define REPEAT_128(handler) REPEAT_64(handler), REPEAT_64(handler)
-    #define REPEAT_ALT_8(h1, h2) h1, h2, h1, h2, h1, h2, h1, h2
-    #define REPEAT_ALT_16(h1, h2) REPEAT_ALT_8(h1, h2), REPEAT_ALT_8(h1, h2)
-    #define REPEAT_ALT_32(h1, h2) REPEAT_ALT_16(h1, h2), REPEAT_ALT_16(h1, h2)
-    
-    #define REPEAT_ALT_4(h1, h2) h1, h2, h1, h2
-    
+
     // Table of 512 entries indexed by bits 27-19 (9 bits)
     static constexpr void (ARMCPU::*arm_decode_table[512])(ARMCachedInstruction& decoded) = {
-        // 0x000-0x00F: Data processing/MUL/MLA ambiguous region, use secondary decode
-        REPEAT_16(ARM_HANDLER(decode_arm_data_proc_or_mul)),
-       // REPEAT_4(ARM_HANDLER(decode_arm_sub_reg)), // 0x008-0x00B: SUB
-       // REPEAT_4(ARM_HANDLER(decode_arm_rsb_reg)), // 0x00C-0x00F: RSB
-        REPEAT_4(ARM_HANDLER(decode_arm_add_reg)), // 0x010-0x013: ADD
-        REPEAT_4(ARM_HANDLER(decode_arm_adc_reg)), // 0x014-0x017: ADC
-        REPEAT_4(ARM_HANDLER(decode_arm_sbc_reg)), // 0x018-0x01B: SBC
-        REPEAT_4(ARM_HANDLER(decode_arm_rsc_reg)), // 0x01C-0x01F: RSC
-        REPEAT_4(ARM_HANDLER(decode_arm_tst_reg)), // 0x020-0x023: TST
-        REPEAT_4(ARM_HANDLER(decode_arm_teq_reg)), // 0x024-0x027: TEQ
-        REPEAT_4(ARM_HANDLER(decode_arm_cmp_reg)), // 0x028-0x02B: CMP
-        REPEAT_4(ARM_HANDLER(decode_arm_cmn_reg)), // 0x02C-0x02F: CMN
-        REPEAT_4(ARM_HANDLER(decode_arm_orr_reg)), // 0x030-0x033: ORR
-        REPEAT_4(ARM_HANDLER(decode_arm_mov_reg)), // 0x034-0x037: MOV register
-        REPEAT_4(ARM_HANDLER(decode_arm_bic_reg)), // 0x038-0x03B: BIC
-        REPEAT_4(ARM_HANDLER(decode_arm_mvn_reg)), // 0x03C-0x03F: MVN
-
-        REPEAT_4(ARM_HANDLER(decode_arm_and_imm)), // 0x040-0x043: AND immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_eor_imm)), // 0x044-0x047: EOR immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_sub_imm)), // 0x048-0x04B: SUB immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_rsb_imm)), // 0x04C-0x04F: RSB immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_add_imm)), // 0x050-0x053: ADD immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_adc_imm)), // 0x054-0x057: ADC immediate  
-        REPEAT_4(ARM_HANDLER(decode_arm_sbc_imm)), // 0x058-0x05B: SBC immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_rsc_imm)), // 0x05C-0x05F: RSC immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_tst_imm)), // 0x060-0x063: TST immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_teq_imm)), // 0x064-0x067: TEQ immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_cmp_imm)), // 0x068-0x06B: CMP immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_cmn_imm)), // 0x06C-0x06F: CMN immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_orr_imm)), // 0x070-0x073: ORR immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_mov_imm)), // 0x074-0x077: MOV immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_bic_imm)), // 0x078-0x07B: BIC immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_mvn_imm)), // 0x07C-0x07F: MVN immediate
-        // 0x080 - 0x083: MUL, MLA
-        ARM_HANDLER(decode_arm_mul), ARM_HANDLER(decode_arm_mul), ARM_HANDLER(decode_arm_mla), ARM_HANDLER(decode_arm_mla),
-        // 0x084 - 0x087: UMULL, UMLAL, SMULL, SMLAL
-        ARM_HANDLER(decode_arm_umull), ARM_HANDLER(decode_arm_umlal), ARM_HANDLER(decode_arm_smull), ARM_HANDLER(decode_arm_smlal),
-        // 0x088 - 0x089: SWP, SWPB
-        ARM_HANDLER(decode_arm_swp), ARM_HANDLER(decode_arm_swpb),
-        // 0x08A - 0x08B: Reserved/undefined
-        ARM_HANDLER(decode_arm_undefined), ARM_HANDLER(decode_arm_undefined),
-        // 0x08C - 0x08F: LDRH, LDRSB, LDRSH, STRH
-        ARM_HANDLER(decode_arm_ldrh), ARM_HANDLER(decode_arm_ldrsb), ARM_HANDLER(decode_arm_ldrsh), ARM_HANDLER(decode_arm_strh),
-        // 0x090 - 0x0FF: Undefined or reserved
-        REPEAT_64(ARM_HANDLER(decode_arm_undefined)), REPEAT_32(ARM_HANDLER(decode_arm_undefined)), REPEAT_16(ARM_HANDLER(decode_arm_undefined)),
-        // 0x100 - 0x13F: STR (store word)
-        REPEAT_ALT_32(ARM_HANDLER(decode_arm_str_imm), ARM_HANDLER(decode_arm_str_reg)),
-        // 0x140 - 0x17F: LDR (load word)
-        REPEAT_ALT_32(ARM_HANDLER(decode_arm_ldr_imm), ARM_HANDLER(decode_arm_ldr_reg)),
-        // 0x180 - 0x19F: STRB (store byte, reg/imm alternating)
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)),
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_strb_reg), ARM_HANDLER(decode_arm_strb_imm)),
-        // 0x1A0 - 0x1DF: LDRB (load byte, reg/imm alternating)
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_ldrb_reg), ARM_HANDLER(decode_arm_ldrb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_ldrb_reg), ARM_HANDLER(decode_arm_ldrb_imm)),
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_ldrb_reg), ARM_HANDLER(decode_arm_ldrb_imm)), REPEAT_ALT_4(ARM_HANDLER(decode_arm_ldrb_reg), ARM_HANDLER(decode_arm_ldrb_imm)),
-        // 0x1E0 - 0x1FF: Reserved/undefined
-        REPEAT_16(ARM_HANDLER(decode_arm_undefined)), REPEAT_16(ARM_HANDLER(decode_arm_undefined)),
-        // 0x180 - 0x187: STM
-        REPEAT_8(ARM_HANDLER(decode_arm_stm)),
-        // 0x188 - 0x18F: LDM
-        REPEAT_8(ARM_HANDLER(decode_arm_ldm)),
-        // 0x1C0 - 0x1DF: Reserved/undefined
-        REPEAT_16(ARM_HANDLER(decode_arm_undefined)),
-        // 0x1E0 - 0x1FF: Branch (B, BL)
-        REPEAT_8(ARM_HANDLER(decode_arm_b)), REPEAT_8(ARM_HANDLER(decode_arm_bl)),
-        // 0x200 - 0x2FF: Coprocessor (CDP, MRC, MCR)
-        REPEAT_8(ARM_HANDLER(decode_arm_cdp)), REPEAT_8(ARM_HANDLER(decode_arm_mrc)), REPEAT_8(ARM_HANDLER(decode_arm_mcr)),
-        // 0x300 - 0x31F: Software Interrupt
-        REPEAT_32(ARM_HANDLER(decode_arm_software_interrupt))
+        ARM_HANDLER(decode_arm_and_reg),                // 0x000: decode_arm_and_reg
+        ARM_HANDLER(decode_arm_mul),                    // 0x001: decode_arm_mul
+        ARM_HANDLER(decode_arm_and_reg),                // 0x002: decode_arm_and_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x003: decode_arm_undefined
+        ARM_HANDLER(decode_arm_eor_reg),                // 0x004: decode_arm_eor_reg
+        ARM_HANDLER(decode_arm_mla),                    // 0x005: decode_arm_mla
+        ARM_HANDLER(decode_arm_eor_reg),                // 0x006: decode_arm_eor_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x007: decode_arm_undefined
+        ARM_HANDLER(decode_arm_sub_reg),                // 0x008: decode_arm_sub_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x009: decode_arm_undefined
+        ARM_HANDLER(decode_arm_sub_reg),                // 0x00A: decode_arm_sub_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x00B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_rsb_reg),                // 0x00C: decode_arm_rsb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x00D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_rsb_reg),                // 0x00E: decode_arm_rsb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x00F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_add_reg),                // 0x010: decode_arm_add_reg
+        ARM_HANDLER(decode_arm_umull),                  // 0x011: decode_arm_umull
+        ARM_HANDLER(decode_arm_add_reg),                // 0x012: decode_arm_add_reg
+        ARM_HANDLER(decode_arm_umull),                  // 0x013: decode_arm_umull
+        ARM_HANDLER(decode_arm_adc_reg),                // 0x014: decode_arm_adc_reg
+        ARM_HANDLER(decode_arm_umlal),                  // 0x015: decode_arm_umlal
+        ARM_HANDLER(decode_arm_adc_reg),                // 0x016: decode_arm_adc_reg
+        ARM_HANDLER(decode_arm_umlal),                  // 0x017: decode_arm_umlal
+        ARM_HANDLER(decode_arm_sbc_reg),                // 0x018: decode_arm_sbc_reg
+        ARM_HANDLER(decode_arm_smull),                  // 0x019: decode_arm_smull
+        ARM_HANDLER(decode_arm_sbc_reg),                // 0x01A: decode_arm_sbc_reg
+        ARM_HANDLER(decode_arm_smull),                  // 0x01B: decode_arm_smull
+        ARM_HANDLER(decode_arm_rsc_reg),                // 0x01C: decode_arm_rsc_reg
+        ARM_HANDLER(decode_arm_smlal),                  // 0x01D: decode_arm_smlal
+        ARM_HANDLER(decode_arm_rsc_reg),                // 0x01E: decode_arm_rsc_reg
+        ARM_HANDLER(decode_arm_smlal),                  // 0x01F: decode_arm_smlal
+        ARM_HANDLER(decode_arm_tst_reg),                // 0x020: decode_arm_tst_reg
+        ARM_HANDLER(decode_arm_swp),                    // 0x021: decode_arm_swp
+        ARM_HANDLER(decode_arm_tst_reg),                // 0x022: decode_arm_tst_reg
+        ARM_HANDLER(decode_arm_swp),                    // 0x023: decode_arm_swp
+        ARM_HANDLER(decode_arm_teq_reg),                // 0x024: decode_arm_teq_reg
+        ARM_HANDLER(decode_arm_swp),                    // 0x025: decode_arm_swp
+        ARM_HANDLER(decode_arm_teq_reg),                // 0x026: decode_arm_teq_reg
+        ARM_HANDLER(decode_arm_swp),                    // 0x027: decode_arm_swp
+        ARM_HANDLER(decode_arm_cmp_reg),                // 0x028: decode_arm_cmp_reg
+        ARM_HANDLER(decode_arm_swpb),                   // 0x029: decode_arm_swpb
+        ARM_HANDLER(decode_arm_cmp_reg),                // 0x02A: decode_arm_cmp_reg
+        ARM_HANDLER(decode_arm_swpb),                   // 0x02B: decode_arm_swpb
+        ARM_HANDLER(decode_arm_cmn_reg),                // 0x02C: decode_arm_cmn_reg
+        ARM_HANDLER(decode_arm_swpb),                   // 0x02D: decode_arm_swpb
+        ARM_HANDLER(decode_arm_cmn_reg),                // 0x02E: decode_arm_cmn_reg
+        ARM_HANDLER(decode_arm_swpb),                   // 0x02F: decode_arm_swpb
+        ARM_HANDLER(decode_arm_orr_reg),                // 0x030: decode_arm_orr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x031: decode_arm_undefined
+        ARM_HANDLER(decode_arm_orr_reg),                // 0x032: decode_arm_orr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x033: decode_arm_undefined
+        ARM_HANDLER(decode_arm_mov_reg),                // 0x034: decode_arm_mov_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x035: decode_arm_undefined
+        ARM_HANDLER(decode_arm_mov_reg),                // 0x036: decode_arm_mov_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x037: decode_arm_undefined
+        ARM_HANDLER(decode_arm_bic_reg),                // 0x038: decode_arm_bic_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x039: decode_arm_undefined
+        ARM_HANDLER(decode_arm_bic_reg),                // 0x03A: decode_arm_bic_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x03B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_mvn_reg),                // 0x03C: decode_arm_mvn_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x03D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_mvn_reg),                // 0x03E: decode_arm_mvn_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x03F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_and_imm),                // 0x040: decode_arm_and_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x041: decode_arm_undefined
+        ARM_HANDLER(decode_arm_and_imm),                // 0x042: decode_arm_and_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x043: decode_arm_undefined
+        ARM_HANDLER(decode_arm_eor_imm),                // 0x044: decode_arm_eor_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x045: decode_arm_undefined
+        ARM_HANDLER(decode_arm_eor_imm),                // 0x046: decode_arm_eor_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x047: decode_arm_undefined
+        ARM_HANDLER(decode_arm_sub_imm),                // 0x048: decode_arm_sub_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x049: decode_arm_undefined
+        ARM_HANDLER(decode_arm_sub_imm),                // 0x04A: decode_arm_sub_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x04B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_rsb_imm),                // 0x04C: decode_arm_rsb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x04D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_rsb_imm),                // 0x04E: decode_arm_rsb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x04F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_add_imm),                // 0x050: decode_arm_add_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x051: decode_arm_undefined
+        ARM_HANDLER(decode_arm_add_imm),                // 0x052: decode_arm_add_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x053: decode_arm_undefined
+        ARM_HANDLER(decode_arm_adc_imm),                // 0x054: decode_arm_adc_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x055: decode_arm_undefined
+        ARM_HANDLER(decode_arm_adc_imm),                // 0x056: decode_arm_adc_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x057: decode_arm_undefined
+        ARM_HANDLER(decode_arm_sbc_imm),                // 0x058: decode_arm_sbc_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x059: decode_arm_undefined
+        ARM_HANDLER(decode_arm_sbc_imm),                // 0x05A: decode_arm_sbc_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x05B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_rsc_imm),                // 0x05C: decode_arm_rsc_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x05D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_rsc_imm),                // 0x05E: decode_arm_rsc_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x05F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_tst_reg),                // 0x060: decode_arm_tst_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x061: decode_arm_undefined
+        ARM_HANDLER(decode_arm_tst_reg),                // 0x062: decode_arm_tst_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x063: decode_arm_undefined
+        ARM_HANDLER(decode_arm_teq_reg),                // 0x064: decode_arm_teq_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x065: decode_arm_undefined
+        ARM_HANDLER(decode_arm_teq_reg),                // 0x066: decode_arm_teq_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x067: decode_arm_undefined
+        ARM_HANDLER(decode_arm_cmp_reg),                // 0x068: decode_arm_cmp_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x069: decode_arm_undefined
+        ARM_HANDLER(decode_arm_cmp_reg),                // 0x06A: decode_arm_cmp_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x06B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_cmn_reg),                // 0x06C: decode_arm_cmn_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x06D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_cmn_reg),                // 0x06E: decode_arm_cmn_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x06F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_orr_imm),                // 0x070: decode_arm_orr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x071: decode_arm_undefined
+        ARM_HANDLER(decode_arm_orr_imm),                // 0x072: decode_arm_orr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x073: decode_arm_undefined
+        ARM_HANDLER(decode_arm_mov_imm),                // 0x074: decode_arm_mov_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x075: decode_arm_undefined
+        ARM_HANDLER(decode_arm_mov_imm),                // 0x076: decode_arm_mov_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x077: decode_arm_undefined
+        ARM_HANDLER(decode_arm_bic_imm),                // 0x078: decode_arm_bic_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x079: decode_arm_undefined
+        ARM_HANDLER(decode_arm_bic_imm),                // 0x07A: decode_arm_bic_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x07B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_mvn_imm),                // 0x07C: decode_arm_mvn_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x07D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_mvn_imm),                // 0x07E: decode_arm_mvn_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x07F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),                // 0x080: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x081: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),                // 0x082: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x083: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),                // 0x084: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x085: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),                // 0x086: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x087: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),               // 0x088: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x089: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x08A: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x08B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),               // 0x08C: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x08D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x08E: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x08F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),                // 0x090: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x091: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),                // 0x092: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x093: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),                // 0x094: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x095: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),                // 0x096: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x097: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),               // 0x098: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x099: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x09A: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x09B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),               // 0x09C: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x09D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x09E: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x09F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),                // 0x0A0: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0A1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),                // 0x0A2: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0A3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),                // 0x0A4: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0A5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),                // 0x0A6: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0A7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),               // 0x0A8: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0A9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x0AA: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0AB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),               // 0x0AC: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0AD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x0AE: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0AF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),                // 0x0B0: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0B1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),                // 0x0B2: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0B3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),                // 0x0B4: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0B5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),                // 0x0B6: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0B7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),               // 0x0B8: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0B9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x0BA: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0BB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),               // 0x0BC: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0BD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x0BE: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),              // 0x0BF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),                // 0x0C0: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0C1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0C2: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0C3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),                // 0x0C4: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0C5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0C6: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0C7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),               // 0x0C8: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0C9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0CA: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0CB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),               // 0x0CC: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0CD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0CE: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0CF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),                // 0x0D0: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0D1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0D2: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0D3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),                // 0x0D4: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0D5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0D6: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0D7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),               // 0x0D8: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0D9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0DA: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0DB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),               // 0x0DC: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0DD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0DE: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0DF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),                // 0x0E0: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0E1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0E2: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0E3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),                // 0x0E4: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0E5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0E6: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0E7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),               // 0x0E8: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0E9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0EA: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0EB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),               // 0x0EC: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0ED: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0EE: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0EF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),                // 0x0F0: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0F1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0F2: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0F3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),                // 0x0F4: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0F5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0F6: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0F7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),               // 0x0F8: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0F9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0FA: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0FB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),               // 0x0FC: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0FD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0FE: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),              // 0x0FF: decode_arm_undefined
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x100-0x101: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x102-0x103: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x104-0x105: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x106-0x107: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x108-0x109: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x10A-0x10B: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x10C-0x10D: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x10E-0x10F: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x110-0x111: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x112-0x113: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x114-0x115: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x116-0x117: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x118-0x119: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x11A-0x11B: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x11C-0x11D: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x11E-0x11F: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x120-0x121: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x122-0x123: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x124-0x125: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x126-0x127: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x128-0x129: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x12A-0x12B: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x12C-0x12D: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x12E-0x12F: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x130-0x131: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x132-0x133: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x134-0x135: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x136-0x137: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x138-0x139: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x13A-0x13B: decode_arm_ldm
+        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x13C-0x13D: decode_arm_stm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x13E-0x13F: decode_arm_ldm
+        REPEAT_32(ARM_HANDLER(decode_arm_b)),           // 0x140-0x15F: decode_arm_b
+        REPEAT_32(ARM_HANDLER(decode_arm_bl)),          // 0x160-0x17F: decode_arm_bl
+        REPEAT_64(ARM_HANDLER(decode_arm_undefined)),   // 0x180-0x1BF: decode_arm_undefined
+        REPEAT_2(ARM_HANDLER(decode_arm_stc_reg)),      // 0x1C0-0x1C1: decode_arm_stc_reg
+        REPEAT_2(ARM_HANDLER(decode_arm_ldc_reg)),      // 0x1C2-0x1C3: decode_arm_ldc_reg
+        REPEAT_2(ARM_HANDLER(decode_arm_stc_reg)),      // 0x1C4-0x1C5: decode_arm_stc_reg
+        REPEAT_2(ARM_HANDLER(decode_arm_ldc_reg)),      // 0x1C6-0x1C7: decode_arm_ldc_reg
+        REPEAT_2(ARM_HANDLER(decode_arm_stc_imm)),      // 0x1C8-0x1C9: decode_arm_stc_imm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldc_imm)),      // 0x1CA-0x1CB: decode_arm_ldc_imm
+        REPEAT_2(ARM_HANDLER(decode_arm_stc_imm)),      // 0x1CC-0x1CD: decode_arm_stc_imm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldc_imm)),      // 0x1CE-0x1CF: decode_arm_ldc_imm
+        REPEAT_2(ARM_HANDLER(decode_arm_stc_reg)),      // 0x1D0-0x1D1: decode_arm_stc_reg
+        REPEAT_2(ARM_HANDLER(decode_arm_ldc_reg)),      // 0x1D2-0x1D3: decode_arm_ldc_reg
+        REPEAT_2(ARM_HANDLER(decode_arm_stc_reg)),      // 0x1D4-0x1D5: decode_arm_stc_reg
+        REPEAT_2(ARM_HANDLER(decode_arm_ldc_reg)),      // 0x1D6-0x1D7: decode_arm_ldc_reg
+        REPEAT_2(ARM_HANDLER(decode_arm_stc_imm)),      // 0x1D8-0x1D9: decode_arm_stc_imm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldc_imm)),      // 0x1DA-0x1DB: decode_arm_ldc_imm
+        REPEAT_2(ARM_HANDLER(decode_arm_stc_imm)),      // 0x1DC-0x1DD: decode_arm_stc_imm
+        REPEAT_2(ARM_HANDLER(decode_arm_ldc_imm)),      // 0x1DE-0x1DF: decode_arm_ldc_imm
+        REPEAT_32(ARM_HANDLER(decode_arm_software_interrupt)), // 0x1E0-0x1FF: decode_arm_software_interrupt
     };
-    
-    // --- Secondary decode table for ambiguous data processing/MUL/MLA region ---
-    typedef void (ARMCPU::*arm_secondary_decode_func_t)(ARMCachedInstruction& decoded);
-    static const arm_secondary_decode_func_t arm_secondary_decode_table[16];
 
     // Cleanup macros to avoid polluting the namespace
     #undef ARM_HANDLER
@@ -308,10 +472,6 @@ private:
     #undef REPEAT_32
     #undef REPEAT_64
     #undef REPEAT_128
-    #undef REPEAT_ALT_4
-    #undef REPEAT_ALT_8
-    #undef REPEAT_ALT_16
-    #undef REPEAT_ALT_32
 
         // --- Execute stubs for decode_arm_ functions ---
     void execute_arm_str_imm(ARMCachedInstruction& decoded);
