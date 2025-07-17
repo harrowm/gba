@@ -27,25 +27,28 @@ constexpr ARMCPU::arm_secondary_decode_func_t ARMCPU::arm_secondary_decode_table
     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
     &ARMCPU::decode_arm_undefined,
-    // 0x9: MUL
-    &ARMCPU::decode_arm_mul,
+    // 0x9: undefined (no longer used)
+    &ARMCPU::decode_arm_undefined,
     // 0xA: undefined
     &ARMCPU::decode_arm_undefined,
-    // 0xB: MLA
-    &ARMCPU::decode_arm_mla,
+    // 0xB: undefined (not MLA)
+    &ARMCPU::decode_arm_undefined,
     // 0xC-0xF: undefined
     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined
 };
 
 // Secondary decode function for ambiguous region (data processing/MUL/MLA overlap)
-FORCE_INLINE void ARMCPU::decode_arm_data_proc_or_mul(ARMCachedInstruction& decoded) {
-    uint32_t op = (decoded.instruction >> 4) & 0xF;
-    (this->*arm_secondary_decode_table[op])(decoded);
-}
+// Phase 1: New entry point for ambiguous region
 
 ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu) {
     DEBUG_INFO("Initializing ARMCPU with parent CPU");
+
+    // // Debug: Dump the first 40 entries of the decode table
+    // for (int i = 0; i < 40; ++i) {
+    //     uintptr_t fn = *reinterpret_cast<const uintptr_t*>(&arm_decode_table[i]);
+    //     printf("arm_decode_table[%02d] = 0x%016lx\n", i, fn);
+    // }
 }
 
 ARMCPU::~ARMCPU() {
@@ -164,7 +167,6 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
         DEBUG_INFO("Executing decoded instruction: PC=0x" + debug_to_hex_string(pc, 8) + 
                    " Instruction=0x" + debug_to_hex_string(decoded.instruction, 8));
         if (!checkConditionCached(decoded.condition)) return false;
-        // Call the execute function pointer directly
         (this->*(decoded.execute_func))(decoded);
         DEBUG_LOG("Executed instruction: PC=0x" + debug_to_hex_string(pc, 8) + 
                    " Instruction=0x" + debug_to_hex_string(decoded.instruction, 8));
@@ -436,19 +438,28 @@ FORCE_INLINE bool ARMCPU::checkConditionCached(uint8_t condition) {
 
 // Main instruction decoder
 ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction) {
+    DEBUG_LOG(std::string("[decodeInstruction] instruction: 0x") + debug_to_hex_string(instruction, 8));
+    DEBUG_LOG(std::string("[decodeInstruction] bits<27,19>: ") + std::to_string(bits<27,19>(instruction)));
     UNUSED(pc); // PC is not used in this decode function, but could be useful for debugging
     ARMCachedInstruction decoded;
 
     // Add in common decodes ..
     decoded.instruction = instruction;
+    
+    DEBUG_LOG(std::string("[decodeInstruction] instruction: 0x") + debug_to_hex_string(decoded.instruction, 8));
+    DEBUG_LOG(std::string("[decodeInstruction] bits<27,19>: ") + std::to_string(bits<27,19>(0xE0810002)));
+    
+
     decoded.condition = bits<31, 28>(instruction);
     decoded.set_flags = bits<20, 20>(instruction);
     decoded.valid = true;
     decoded.pc_modified = (decoded.rd == 15);
-    
-    
+
+    // Print the function name from the decode table for debug
+    uint32_t index = bits<27,19>(instruction);
+
     // .. and call the decode handler based on the instruction type to handle the rest
-    auto decode_func = arm_decode_table[bits<27,19>(instruction)];
+    auto decode_func = arm_decode_table[index];
     if (decode_func == nullptr) {
         DEBUG_ERROR("[FATAL] arm_decode_table entry is nullptr for instruction 0x" + debug_to_hex_string(instruction, 8));
         // Optionally, set decoded.valid = false or handle error as needed
@@ -762,7 +773,8 @@ void ARMCPU::execute_arm_and_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-   
+    result = parentCPU.R()[result];
+
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] & result;
     if (cached.set_flags && cached.rd != 15) {
         updateFlagsLogical(result, carry_out);
@@ -774,6 +786,7 @@ void ARMCPU::execute_arm_eor_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] ^ result;
     if (cached.set_flags && cached.rd != 15) {
@@ -786,6 +799,7 @@ void ARMCPU::execute_arm_sub_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] - result;
     if (cached.set_flags && cached.rd != 15) {
@@ -800,6 +814,7 @@ void ARMCPU::execute_arm_rsb_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     parentCPU.R()[cached.rd] = result - parentCPU.R()[cached.rn];
     if (cached.set_flags && cached.rd != 15) {
@@ -814,7 +829,8 @@ void ARMCPU::execute_arm_add_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-
+    result = parentCPU.R()[result];
+        
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] + result;
     if (cached.set_flags && cached.rd != 15) {
         bool c = parentCPU.R()[cached.rd] < parentCPU.R()[cached.rn];
@@ -828,6 +844,7 @@ void ARMCPU::execute_arm_adc_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     uint32_t op1 = parentCPU.R()[cached.rn] + carry_out; // Include carry from CPSR
     parentCPU.R()[cached.rd] = op1 + result;
@@ -843,6 +860,7 @@ void ARMCPU::execute_arm_sbc_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     uint32_t op1 = parentCPU.R()[cached.rn] - carry_out; // Include carry from CPSR
     parentCPU.R()[cached.rd] = op1 - result;
@@ -858,6 +876,7 @@ void ARMCPU::execute_arm_rsc_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     parentCPU.R()[cached.rd] = result - parentCPU.R()[cached.rn];
     if (cached.set_flags && cached.rd != 15) {
@@ -872,6 +891,7 @@ void ARMCPU::execute_arm_tst_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     uint32_t op1 = parentCPU.R()[cached.rn];
     uint32_t res = op1 & result;
@@ -885,6 +905,7 @@ void ARMCPU::execute_arm_teq_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     uint32_t op1 = parentCPU.R()[cached.rn];
     uint32_t res = op1 ^ result;
@@ -898,6 +919,7 @@ void ARMCPU::execute_arm_cmp_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     uint32_t op1 = parentCPU.R()[cached.rn];
     uint32_t res = op1 - result;
@@ -913,6 +935,7 @@ void ARMCPU::execute_arm_cmn_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     uint32_t op1 = parentCPU.R()[cached.rn];
     uint32_t res = op1 + result;
@@ -928,6 +951,7 @@ void ARMCPU::execute_arm_orr_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] | result;
     if (cached.set_flags && cached.rd != 15) {
@@ -940,6 +964,7 @@ void ARMCPU::execute_arm_bic_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] & ~result;
     if (cached.set_flags && cached.rd != 15) {
@@ -952,6 +977,7 @@ void ARMCPU::execute_arm_mvn_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     parentCPU.R()[cached.rd] = ~result;
     if (cached.set_flags && cached.rd != 15) {
@@ -964,6 +990,7 @@ void ARMCPU::execute_arm_mov_reg(ARMCachedInstruction& cached) {
     
     uint32_t carry_out = 0;
     uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    result = parentCPU.R()[result];
 
     if (cached.set_flags && cached.rd != 15) {
         uint32_t cpsr = parentCPU.CPSR();

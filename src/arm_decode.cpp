@@ -44,11 +44,11 @@ void ARMCPU::decode_arm_ldr_reg(ARMCachedInstruction& decoded) {
 #include "arm_cpu.h"
 #include <cstdio>
 
-template <uint32_t hi, uint32_t lo>
-constexpr uint32_t bits(uint32_t instruction) {
-    static_assert(hi >= lo && hi < 32, "Invalid bit range");
-    return ((instruction >> lo) & ((1 << (hi - lo + 1)) - 1));
-}
+// template <uint32_t hi, uint32_t lo>
+// constexpr uint32_t bits(uint32_t instruction) {
+//     static_assert(hi >= lo && hi < 32, "Invalid bit range");
+//     return ((instruction >> lo) & ((1 << (hi - lo + 1)) - 1));
+// }
 
 // ARM Data Processing decoders (AND, EOR, SUB, RSB, ADD, ADC, SBC, RSC, TST, TEQ, CMP, CMN, ORR, BIC, MVN)
 
