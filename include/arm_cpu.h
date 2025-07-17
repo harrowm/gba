@@ -37,25 +37,14 @@ public:
             }
         } else {
             // bits 7–4 != 1001: AND/EOR/SUB/RSB reg
-            static constexpr arm_secondary_decode_func_t and_eor_sub_rsb_table[16] = {
-                &ARMCPU::decode_arm_and_reg,
-                &ARMCPU::decode_arm_and_reg,
-                &ARMCPU::decode_arm_and_reg,
+            static constexpr arm_secondary_decode_func_t and_eor_sub_rsb_table[4] = {
                 &ARMCPU::decode_arm_and_reg,
                 &ARMCPU::decode_arm_eor_reg,
-                &ARMCPU::decode_arm_eor_reg,
-                &ARMCPU::decode_arm_eor_reg,
-                &ARMCPU::decode_arm_eor_reg,
-                &ARMCPU::decode_arm_sub_reg,
-                &ARMCPU::decode_arm_sub_reg,
-                &ARMCPU::decode_arm_sub_reg,
                 &ARMCPU::decode_arm_sub_reg,
                 &ARMCPU::decode_arm_rsb_reg,
-                &ARMCPU::decode_arm_rsb_reg,
-                &ARMCPU::decode_arm_rsb_reg,
-                &ARMCPU::decode_arm_rsb_reg
             };
-            (this->*and_eor_sub_rsb_table[bits<24,21>(decoded.instruction)])(decoded);
+            DEBUG_LOG("Decoding AND/EOR/SUB/RSB reg instruction: 0x" + debug_to_hex_string(decoded.instruction, 8) + "index: " + std::to_string(bits<24, 21>(decoded.instruction)));
+            (this->*and_eor_sub_rsb_table[bits<22,21>(decoded.instruction)])(decoded);
         }
     }
     // Must be declared before use in static decode table macros
@@ -133,7 +122,7 @@ public:
     
     // Helper functions - critical ones marked as FORCE_INLINE for optimization
     FORCE_INLINE uint32_t execOperand2imm(uint32_t imm, uint8_t rotate, uint32_t* carry_out);
-    FORCE_INLINE uint32_t execOperand2reg(uint8_t rm, uint8_t rs, uint8_t shift_type, bool reg_shift, uint32_t* carry_out);
+    FORCE_INLINE uint32_t calcShiftedResult(uint8_t rm, uint8_t rs, uint8_t shift_type, bool reg_shift, uint32_t* carry_out);
 
     // FORCE_INLINE uint32_t calculateOperand2(uint32_t instruction, uint32_t* carry_out);
     uint32_t calculateOperand2Advanced(uint32_t instruction, uint32_t* carry_out, uint32_t* cycles);

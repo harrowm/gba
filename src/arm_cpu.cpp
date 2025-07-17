@@ -475,22 +475,22 @@ FORCE_INLINE uint32_t ARMCPU::execOperand2imm(uint32_t imm, uint8_t rotate, uint
     return imm;
 }
 
-FORCE_INLINE uint32_t ARMCPU::execOperand2reg(uint8_t rm, uint8_t rs, uint8_t shift_type, 
+FORCE_INLINE uint32_t ARMCPU::calcShiftedResult(uint8_t rm, uint8_t rs, uint8_t shift_type, 
     bool reg_shift, uint32_t* carry_out) {
     
     uint32_t shift_amount = 0;
     if (rs == 0 && shift_type == 0) { // LSL #0
         *carry_out = (parentCPU.CPSR() >> 29) & 1;
-        return rm;
+        return parentCPU.R()[rm]; // No shift, return rm directly
     }
     if (reg_shift) {
         shift_amount = parentCPU.R()[rs] & 0xFF;
         if (shift_amount == 0) {
             *carry_out = (parentCPU.CPSR() >> 29) & 1;
-            return rm;
+            return parentCPU.R()[rm]; // No shift, return rm directly
         }
     } else {
-        shift_amount = rs;
+        shift_amount = rs; // the shift amount is directly given is the slow named rs .. this is not a regsiter
         if (shift_amount == 0) {
             // (shift_type == 0) handled above
             if (shift_type == 1) { // LSR #0 means LSR #32
@@ -499,8 +499,8 @@ FORCE_INLINE uint32_t ARMCPU::execOperand2reg(uint8_t rm, uint8_t rs, uint8_t sh
                 shift_amount = 32;
             } else if (shift_type == 3) {
                 uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
-                *carry_out = rm & 1;
-                return (old_carry << 31) | (rm >> 1);
+                *carry_out = parentCPU.R()[rm] & 1;
+                return (old_carry << 31) | (parentCPU.R()[rm] >> 1);
             }
         }
     }
@@ -508,38 +508,38 @@ FORCE_INLINE uint32_t ARMCPU::execOperand2reg(uint8_t rm, uint8_t rs, uint8_t sh
     switch (shift_type) {
         case 0: // LSL
             if (shift_amount >= 32) {
-                *carry_out = (shift_amount == 32) ? (rm & 1) : 0;
+                *carry_out = (shift_amount == 32) ? (parentCPU.R()[rm] & 1) : 0;
                 return 0;
             }
-            *carry_out = (rm >> (32 - shift_amount)) & 1;
-            return rm << shift_amount;
+            *carry_out = (parentCPU.R()[rm] >> (32 - shift_amount)) & 1;
+            return parentCPU.R()[rm] << shift_amount;
         case 1: // LSR
             if (shift_amount == 32) {
-                *carry_out = (rm >> 31) & 1;
+                *carry_out = (parentCPU.R()[rm] >> 31) & 1;
                 return 0;
             } else if (shift_amount > 32) {
                 *carry_out = 0;
                 return 0;
             }
-            *carry_out = (rm >> (shift_amount - 1)) & 1;
+            *carry_out = (parentCPU.R()[rm] >> (shift_amount - 1)) & 1;
             return rm >> shift_amount;
         case 2: // ASR
             if (shift_amount >= 32) {
-                *carry_out = (rm >> 31) & 1;
-                return (rm & 0x80000000) ? 0xFFFFFFFF : 0;
+                *carry_out = (parentCPU.R()[rm] >> 31) & 1;
+                return (parentCPU.R()[rm] & 0x80000000) ? 0xFFFFFFFF : 0;
             }
-            *carry_out = (rm >> (shift_amount - 1)) & 1;
-            return static_cast<int32_t>(rm) >> shift_amount;
+            *carry_out = (parentCPU.R()[rm] >> (shift_amount - 1)) & 1;
+            return static_cast<int32_t>(parentCPU.R()[rm]) >> shift_amount;
         case 3: // ROR
             if (shift_amount == 0) {
                 *carry_out = (parentCPU.CPSR() >> 29) & 1;
-                return rm;
+                return parentCPU.R()[rm];
             }
             shift_amount %= 32;
-            *carry_out = (rm >> (shift_amount - 1)) & 1;
-            return ror32(rm, shift_amount);
+            *carry_out = (parentCPU.R()[rm] >> (shift_amount - 1)) & 1;
+            return ror32(parentCPU.R()[rm], shift_amount);
     }
-    return rm;
+    return parentCPU.R()[rm];
 }
 
 // New execution functions for cached instructions
@@ -765,9 +765,8 @@ void ARMCPU::execute_arm_and_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_and_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] & result;
     if (cached.set_flags && cached.rd != 15) {
         updateFlagsLogical(result, carry_out);
@@ -778,9 +777,8 @@ void ARMCPU::execute_arm_eor_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_eor_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] ^ result;
     if (cached.set_flags && cached.rd != 15) {
         updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
@@ -791,9 +789,8 @@ void ARMCPU::execute_arm_sub_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_sub_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] - result;
     if (cached.set_flags && cached.rd != 15) {
         bool c = parentCPU.R()[cached.rn] >= result;
@@ -806,9 +803,8 @@ void ARMCPU::execute_arm_rsb_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_rsb_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     parentCPU.R()[cached.rd] = result - parentCPU.R()[cached.rn];
     if (cached.set_flags && cached.rd != 15) {
         bool c = result >= parentCPU.R()[cached.rn];
@@ -821,8 +817,7 @@ void ARMCPU::execute_arm_add_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_add_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
         
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] + result;
     if (cached.set_flags && cached.rd != 15) {
@@ -836,9 +831,8 @@ void ARMCPU::execute_arm_adc_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_adc_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     uint32_t op1 = parentCPU.R()[cached.rn] + carry_out; // Include carry from CPSR
     parentCPU.R()[cached.rd] = op1 + result;
     if (cached.set_flags && cached.rd != 15) {
@@ -852,9 +846,8 @@ void ARMCPU::execute_arm_sbc_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_sbc_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     uint32_t op1 = parentCPU.R()[cached.rn] - carry_out; // Include carry from CPSR
     parentCPU.R()[cached.rd] = op1 - result;
     if (cached.set_flags && cached.rd != 15) {
@@ -868,9 +861,8 @@ void ARMCPU::execute_arm_rsc_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_rsc_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     parentCPU.R()[cached.rd] = result - parentCPU.R()[cached.rn];
     if (cached.set_flags && cached.rd != 15) {
         bool c = result >= parentCPU.R()[cached.rn];
@@ -883,9 +875,8 @@ void ARMCPU::execute_arm_tst_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_tst_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     uint32_t op1 = parentCPU.R()[cached.rn];
     uint32_t res = op1 & result;
     if (cached.set_flags && cached.rd != 15) {
@@ -897,9 +888,8 @@ void ARMCPU::execute_arm_teq_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_teq_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     uint32_t op1 = parentCPU.R()[cached.rn];
     uint32_t res = op1 ^ result;
     if (cached.set_flags && cached.rd != 15) {
@@ -911,9 +901,8 @@ void ARMCPU::execute_arm_cmp_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_cmp_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     uint32_t op1 = parentCPU.R()[cached.rn];
     uint32_t res = op1 - result;
     if (cached.set_flags && cached.rd != 15) {
@@ -927,9 +916,8 @@ void ARMCPU::execute_arm_cmn_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_cmn_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     uint32_t op1 = parentCPU.R()[cached.rn];
     uint32_t res = op1 + result;
     if (cached.set_flags && cached.rd != 15) {
@@ -943,9 +931,8 @@ void ARMCPU::execute_arm_orr_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_orr_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] | result;
     if (cached.set_flags && cached.rd != 15) {
         updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
@@ -956,9 +943,8 @@ void ARMCPU::execute_arm_bic_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_bic_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     parentCPU.R()[cached.rd] = parentCPU.R()[cached.rn] & ~result;
     if (cached.set_flags && cached.rd != 15) {
         updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
@@ -969,9 +955,8 @@ void ARMCPU::execute_arm_mvn_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_mvn_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     parentCPU.R()[cached.rd] = ~result;
     if (cached.set_flags && cached.rd != 15) {
         updateFlagsLogical(parentCPU.R()[cached.rd], carry_out);
@@ -982,9 +967,8 @@ void ARMCPU::execute_arm_mov_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_mov_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     uint32_t carry_out = 0;
-    uint32_t result = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
-    result = parentCPU.R()[result];
-
+    uint32_t result = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, &carry_out);
+    
     if (cached.set_flags && cached.rd != 15) {
         uint32_t cpsr = parentCPU.CPSR();
         cpsr &= ~(0x80000000 | 0x40000000); // Clear N, Z
@@ -1025,7 +1009,7 @@ void ARMCPU::execute_arm_str_reg(ARMCachedInstruction& cached) {
     
     // ARM single data transfer: STR (register offset, all addressing modes)
     uint32_t base = parentCPU.R()[cached.rn];
-    uint32_t offset = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
+    uint32_t offset = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
     bool pre = cached.pre_index;
     bool up = cached.up;
     bool writeback = cached.writeback;
@@ -1076,7 +1060,7 @@ void ARMCPU::execute_arm_ldr_reg(ARMCachedInstruction& cached) {
     
     // ARM single data transfer: LDR (register offset, all addressing modes)
     uint32_t base = parentCPU.R()[cached.rn];
-    uint32_t offset = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
+    uint32_t offset = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
     bool pre = cached.pre_index;
     bool up = cached.up;
     bool writeback = cached.writeback;
@@ -1122,7 +1106,7 @@ void ARMCPU::execute_arm_strb_reg(ARMCachedInstruction& cached) {
     
     // ARM single data transfer: STRB (register offset, all addressing modes)
     uint32_t base = parentCPU.R()[cached.rn];
-    uint32_t offset = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
+    uint32_t offset = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
     bool pre = cached.pre_index;
     bool up = cached.up;
     bool writeback = cached.writeback;
@@ -1168,7 +1152,7 @@ void ARMCPU::execute_arm_ldrb_reg(ARMCachedInstruction& cached) {
     
     // ARM single data transfer: LDRB (register offset, all addressing modes)
     uint32_t base = parentCPU.R()[cached.rn];
-    uint32_t offset = execOperand2reg(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
+    uint32_t offset = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
     bool pre = cached.pre_index;
     bool up = cached.up;
     bool writeback = cached.writeback;
