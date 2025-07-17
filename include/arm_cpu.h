@@ -1,6 +1,4 @@
-#define REPEAT_ALT_8(h1, h2) h1, h2, h1, h2, h1, h2, h1, h2
-#define REPEAT_ALT_16(h1, h2) REPEAT_ALT_8(h1, h2), REPEAT_ALT_8(h1, h2)
-#define REPEAT_ALT_32(h1, h2) REPEAT_ALT_16(h1, h2), REPEAT_ALT_16(h1, h2)
+
 #ifndef ARM_CPU_H
 #define ARM_CPU_H
 
@@ -28,7 +26,27 @@ class ARMCPU {
 
 public:
     // Must be declared before use in static decode table macros
-    FORCE_INLINE void decode_arm_data_proc_or_mul(ARMCachedInstruction& decoded);
+    FORCE_INLINE void decode_arm_data_proc_or_mul(ARMCachedInstruction& decoded) {
+        uint32_t op = bits<7,4>(decoded.instruction);
+        if (op == 0x9) {
+            // bits 7–4 == 1001: MUL/MLA
+            if (bits<21,21>(decoded.instruction)) {
+                decode_arm_mla(decoded);
+            } else {
+                decode_arm_mul(decoded);
+            }
+        } else {
+            // bits 7–4 != 1001: AND/EOR reg/imm
+            static constexpr arm_secondary_decode_func_t and_eor_table[4] = {
+                &ARMCPU::decode_arm_and_reg, // 00: I=0, S=0
+                &ARMCPU::decode_arm_eor_reg, // 01: I=0, S=1
+                &ARMCPU::decode_arm_and_imm, // 10: I=1, S=0
+                &ARMCPU::decode_arm_eor_imm  // 11: I=1, S=1
+            };
+            uint32_t idx = (bits<25,25>(decoded.instruction) << 1) | bits<21,21>(decoded.instruction);
+            (this->*and_eor_table[idx])(decoded);
+        }
+    }
     // Must be declared before use in static decode table macros
     bool exception_taken = false;
     CPU& parentCPU; // Reference to the parent CPU
@@ -37,7 +55,7 @@ public:
     template <uint32_t hi, uint32_t lo>
     static constexpr uint32_t bits(uint32_t instruction) {
         static_assert(hi >= lo && hi < 32, "Invalid bit range");
-        return ((instruction >> lo) & ((1 << (hi - lo + 1)) - 1));
+        return (instruction >> lo) & ((1 << (hi - lo + 1)) - 1);
     }
 
     // Instruction execution functions
@@ -198,6 +216,9 @@ private:
     #define REPEAT_32(handler) REPEAT_16(handler), REPEAT_16(handler)
     #define REPEAT_64(handler) REPEAT_32(handler), REPEAT_32(handler)
     #define REPEAT_128(handler) REPEAT_64(handler), REPEAT_64(handler)
+    #define REPEAT_ALT_8(h1, h2) h1, h2, h1, h2, h1, h2, h1, h2
+    #define REPEAT_ALT_16(h1, h2) REPEAT_ALT_8(h1, h2), REPEAT_ALT_8(h1, h2)
+    #define REPEAT_ALT_32(h1, h2) REPEAT_ALT_16(h1, h2), REPEAT_ALT_16(h1, h2)
     
     #define REPEAT_ALT_4(h1, h2) h1, h2, h1, h2
     
@@ -205,36 +226,37 @@ private:
     static constexpr void (ARMCPU::*arm_decode_table[512])(ARMCachedInstruction& decoded) = {
         // 0x000-0x00F: Data processing/MUL/MLA ambiguous region, use secondary decode
         REPEAT_16(ARM_HANDLER(decode_arm_data_proc_or_mul)),
-        // 0x010-0x017: SUB
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_sub_reg), ARM_HANDLER(decode_arm_sub_imm)),
-        // 0x018-0x01F: RSB
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_rsb_reg), ARM_HANDLER(decode_arm_rsb_imm)),
-        // 0x020-0x027: ADD
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_add_reg), ARM_HANDLER(decode_arm_add_imm)),
-        // 0x028-0x02F: ADC
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_adc_reg), ARM_HANDLER(decode_arm_adc_imm)),
-        // 0x030-0x037: SBC
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_sbc_reg), ARM_HANDLER(decode_arm_sbc_imm)),
-        // 0x038-0x03F: RSC
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_rsc_reg), ARM_HANDLER(decode_arm_rsc_imm)),
-        // 0x040-0x047: TST
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_tst_reg), ARM_HANDLER(decode_arm_tst_imm)),
-        // 0x048-0x04F: TEQ
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_teq_reg), ARM_HANDLER(decode_arm_teq_imm)),
-        // 0x050-0x057: CMP
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_cmp_reg), ARM_HANDLER(decode_arm_cmp_imm)),
-        // 0x058-0x05F: CMN
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_cmn_reg), ARM_HANDLER(decode_arm_cmn_imm)),
-        // 0x060-0x067: ORR
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_orr_reg), ARM_HANDLER(decode_arm_orr_imm)),
-        // 0x068-0x06B: MOV register
-        REPEAT_4(ARM_HANDLER(decode_arm_mov_reg)),
-        // 0x06C-0x06F: MOV immediate
-        REPEAT_4(ARM_HANDLER(decode_arm_mov_imm)),
-        // 0x070-0x077: BIC
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_bic_reg), ARM_HANDLER(decode_arm_bic_imm)),
-        // 0x078-0x07F: MVN
-        REPEAT_ALT_4(ARM_HANDLER(decode_arm_mvn_reg), ARM_HANDLER(decode_arm_mvn_imm)),
+       // REPEAT_4(ARM_HANDLER(decode_arm_sub_reg)), // 0x008-0x00B: SUB
+       // REPEAT_4(ARM_HANDLER(decode_arm_rsb_reg)), // 0x00C-0x00F: RSB
+        REPEAT_4(ARM_HANDLER(decode_arm_add_reg)), // 0x010-0x013: ADD
+        REPEAT_4(ARM_HANDLER(decode_arm_adc_reg)), // 0x014-0x017: ADC
+        REPEAT_4(ARM_HANDLER(decode_arm_sbc_reg)), // 0x018-0x01B: SBC
+        REPEAT_4(ARM_HANDLER(decode_arm_rsc_reg)), // 0x01C-0x01F: RSC
+        REPEAT_4(ARM_HANDLER(decode_arm_tst_reg)), // 0x020-0x023: TST
+        REPEAT_4(ARM_HANDLER(decode_arm_teq_reg)), // 0x024-0x027: TEQ
+        REPEAT_4(ARM_HANDLER(decode_arm_cmp_reg)), // 0x028-0x02B: CMP
+        REPEAT_4(ARM_HANDLER(decode_arm_cmn_reg)), // 0x02C-0x02F: CMN
+        REPEAT_4(ARM_HANDLER(decode_arm_orr_reg)), // 0x030-0x033: ORR
+        REPEAT_4(ARM_HANDLER(decode_arm_mov_reg)), // 0x034-0x037: MOV register
+        REPEAT_4(ARM_HANDLER(decode_arm_bic_reg)), // 0x038-0x03B: BIC
+        REPEAT_4(ARM_HANDLER(decode_arm_mvn_reg)), // 0x03C-0x03F: MVN
+
+        REPEAT_4(ARM_HANDLER(decode_arm_and_imm)), // 0x040-0x043: AND immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_eor_imm)), // 0x044-0x047: EOR immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_sub_imm)), // 0x048-0x04B: SUB immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_rsb_imm)), // 0x04C-0x04F: RSB immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_add_imm)), // 0x050-0x053: ADD immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_adc_imm)), // 0x054-0x057: ADC immediate  
+        REPEAT_4(ARM_HANDLER(decode_arm_sbc_imm)), // 0x058-0x05B: SBC immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_rsc_imm)), // 0x05C-0x05F: RSC immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_tst_imm)), // 0x060-0x063: TST immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_teq_imm)), // 0x064-0x067: TEQ immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_cmp_imm)), // 0x068-0x06B: CMP immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_cmn_imm)), // 0x06C-0x06F: CMN immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_orr_imm)), // 0x070-0x073: ORR immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_mov_imm)), // 0x074-0x077: MOV immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_bic_imm)), // 0x078-0x07B: BIC immediate
+        REPEAT_4(ARM_HANDLER(decode_arm_mvn_imm)), // 0x07C-0x07F: MVN immediate
         // 0x080 - 0x083: MUL, MLA
         ARM_HANDLER(decode_arm_mul), ARM_HANDLER(decode_arm_mul), ARM_HANDLER(decode_arm_mla), ARM_HANDLER(decode_arm_mla),
         // 0x084 - 0x087: UMULL, UMLAL, SMULL, SMLAL
@@ -287,7 +309,10 @@ private:
     #undef REPEAT_64
     #undef REPEAT_128
     #undef REPEAT_ALT_4
-
+    #undef REPEAT_ALT_8
+    #undef REPEAT_ALT_16
+    #undef REPEAT_ALT_32
+    
         // --- Execute stubs for decode_arm_ functions ---
     void execute_arm_str_imm(ARMCachedInstruction& decoded);
     void execute_arm_str_reg(ARMCachedInstruction& decoded);
