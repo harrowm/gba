@@ -14,41 +14,34 @@ static inline uint32_t ror32(uint32_t value, unsigned int amount) {
 
 
 // --- Compact 16-entry secondary decode table for ambiguous region ---
-constexpr ARMCPU::arm_secondary_decode_func_t ARMCPU::arm_secondary_decode_table[16] = {
-    // 0x0: AND reg
-    &ARMCPU::decode_arm_and_reg,
-    // 0x1: AND imm
-    &ARMCPU::decode_arm_and_imm,
-    // 0x2: EOR reg
-    &ARMCPU::decode_arm_eor_reg,
-    // 0x3: EOR imm
-    &ARMCPU::decode_arm_eor_imm,
-    // 0x4-0x8: undefined
-    &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
-    &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
-    &ARMCPU::decode_arm_undefined,
-    // 0x9: undefined (no longer used)
-    &ARMCPU::decode_arm_undefined,
-    // 0xA: undefined
-    &ARMCPU::decode_arm_undefined,
-    // 0xB: undefined (not MLA)
-    &ARMCPU::decode_arm_undefined,
-    // 0xC-0xF: undefined
-    &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
-    &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined
-};
+// constexpr ARMCPU::arm_secondary_decode_func_t ARMCPU::arm_secondary_decode_table[16] = {
+//     // 0x0: AND reg
+//     &ARMCPU::decode_arm_and_reg,
+//     // 0x1: AND imm
+//     &ARMCPU::decode_arm_and_imm,
+//     // 0x2: EOR reg
+//     &ARMCPU::decode_arm_eor_reg,
+//     // 0x3: EOR imm
+//     &ARMCPU::decode_arm_eor_imm,
+//     // 0x4-0x8: undefined
+//     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
+//     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
+//     &ARMCPU::decode_arm_undefined,
+//     // 0x9: undefined (no longer used)
+//     &ARMCPU::decode_arm_undefined,
+//     // 0xA: undefined
+//     &ARMCPU::decode_arm_undefined,
+//     // 0xB: undefined (not MLA)
+//     &ARMCPU::decode_arm_undefined,
+//     // 0xC-0xF: undefined
+//     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined,
+//     &ARMCPU::decode_arm_undefined, &ARMCPU::decode_arm_undefined
+// };
 
 // Secondary decode function for ambiguous region (data processing/MUL/MLA overlap)
 // Phase 1: New entry point for ambiguous region
-
 ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu) {
     DEBUG_INFO("Initializing ARMCPU with parent CPU");
-
-    // // Debug: Dump the first 40 entries of the decode table
-    // for (int i = 0; i < 40; ++i) {
-    //     uintptr_t fn = *reinterpret_cast<const uintptr_t*>(&arm_decode_table[i]);
-    //     printf("arm_decode_table[%02d] = 0x%016lx\n", i, fn);
-    // }
 }
 
 ARMCPU::~ARMCPU() {

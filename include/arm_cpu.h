@@ -36,15 +36,26 @@ public:
                 decode_arm_mul(decoded);
             }
         } else {
-            // bits 7–4 != 1001: AND/EOR reg/imm
-            static constexpr arm_secondary_decode_func_t and_eor_table[4] = {
-                &ARMCPU::decode_arm_and_reg, // 00: I=0, S=0
-                &ARMCPU::decode_arm_eor_reg, // 01: I=0, S=1
-                &ARMCPU::decode_arm_and_imm, // 10: I=1, S=0
-                &ARMCPU::decode_arm_eor_imm  // 11: I=1, S=1
+            // bits 7–4 != 1001: AND/EOR/SUB/RSB reg
+            static constexpr arm_secondary_decode_func_t and_eor_sub_rsb_table[16] = {
+                &ARMCPU::decode_arm_and_reg,
+                &ARMCPU::decode_arm_and_reg,
+                &ARMCPU::decode_arm_and_reg,
+                &ARMCPU::decode_arm_and_reg,
+                &ARMCPU::decode_arm_eor_reg,
+                &ARMCPU::decode_arm_eor_reg,
+                &ARMCPU::decode_arm_eor_reg,
+                &ARMCPU::decode_arm_eor_reg,
+                &ARMCPU::decode_arm_sub_reg,
+                &ARMCPU::decode_arm_sub_reg,
+                &ARMCPU::decode_arm_sub_reg,
+                &ARMCPU::decode_arm_sub_reg,
+                &ARMCPU::decode_arm_rsb_reg,
+                &ARMCPU::decode_arm_rsb_reg,
+                &ARMCPU::decode_arm_rsb_reg,
+                &ARMCPU::decode_arm_rsb_reg
             };
-            uint32_t idx = (bits<25,25>(decoded.instruction) << 1) | bits<21,21>(decoded.instruction);
-            (this->*and_eor_table[idx])(decoded);
+            (this->*and_eor_sub_rsb_table[bits<24,21>(decoded.instruction)])(decoded);
         }
     }
     // Must be declared before use in static decode table macros
@@ -312,7 +323,7 @@ private:
     #undef REPEAT_ALT_8
     #undef REPEAT_ALT_16
     #undef REPEAT_ALT_32
-    
+
         // --- Execute stubs for decode_arm_ functions ---
     void execute_arm_str_imm(ARMCachedInstruction& decoded);
     void execute_arm_str_reg(ARMCachedInstruction& decoded);
