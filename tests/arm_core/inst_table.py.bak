@@ -1,0 +1,133 @@
+def classify(bits_27_20, mul_swp_bit):
+    # bits 27-20
+    b27 = (bits_27_20 >> 7) & 1
+    b26 = (bits_27_20 >> 6) & 1
+    b25 = (bits_27_20 >> 5) & 1  # 0=reg, 1=imm
+    b24 = (bits_27_20 >> 4) & 1
+    b23 = (bits_27_20 >> 3) & 1
+    b22 = (bits_27_20 >> 2) & 1
+    b21 = (bits_27_20 >> 1) & 1
+    b20 = bits_27_20 & 1
+
+    # MUL/MLA: bits 27-22=000000, mul_swp_bit=1
+    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 0 and b23 == 0 and b22 == 0 and mul_swp_bit == 1:
+        if b21 == 0 and b20 == 0:
+            return "MUL"
+        elif b21 == 1 and b20 == 0:
+            return "MLA"
+
+    # UMULL/UMLAL/SMULL/SMLAL: bits 27-23=00001x, mul_swp_bit=1
+    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 0 and b23 == 1 and mul_swp_bit == 1:
+        if b22 == 0 and b21 == 0:
+            return "UMULL"
+        elif b22 == 0 and b21 == 1:
+            return "UMLAL"
+        elif b22 == 1 and b21 == 0:
+            return "SMULL"
+        elif b22 == 1 and b21 == 1:
+            return "SMLAL"
+
+    # SWP/SWPB: bits 27-23=00010x, mul_swp_bit=1
+    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 1 and b23 == 0 and mul_swp_bit == 1:
+        if b22 == 0:
+            return "SWP"
+        elif b22 == 1:
+            return "SWPB"
+
+    # Data Processing: bits 27-26=00, mul_swp_bit=0
+    if b27 == 0 and b26 == 0 and mul_swp_bit == 0:
+        opcode = (bits_27_20 >> 1) & 0xF  # bits 24-21
+        suffix = "_IMM" if b25 == 1 else "_REG"
+        data_proc_map = {
+            0x0: "AND",
+            0x1: "EOR",
+            0x2: "SUB",
+            0x3: "RSB",
+            0x4: "ADD",
+            0x5: "ADC",
+            0x6: "SBC",
+            0x7: "RSC",
+            0x8: "TST",
+            0x9: "TEQ",
+            0xA: "CMP",
+            0xB: "CMN",
+            0xC: "ORR",
+            0xD: "MOV",
+            0xE: "BIC",
+            0xF: "MVN"
+        }
+        # TST, TEQ, CMP, CMN only have register form
+        if opcode in [0x8, 0x9, 0xA, 0xB]:
+            return f"{data_proc_map[opcode]}_REG"
+        return f"{data_proc_map.get(opcode, 'Other DP')}{suffix}"
+
+    # Single Data Transfer: b27=0, b26=1, mul_swp_bit=0
+    if b27 == 0 and b26 == 1 and mul_swp_bit == 0:
+        if b20 == 0 and b22 == 0 and b25 == 1:
+            return "STR_IMM"
+        elif b20 == 0 and b22 == 0 and b25 == 0:
+            return "STR_REG"
+        elif b20 == 0 and b22 == 1 and b25 == 1:
+            return "STRB_IMM"
+        elif b20 == 0 and b22 == 1 and b25 == 0:
+            return "STRB_REG"
+        elif b20 == 1 and b22 == 0 and b25 == 1:
+            return "LDR_IMM"
+        elif b20 == 1 and b22 == 0 and b25 == 0:
+            return "LDR_REG"
+        elif b20 == 1 and b22 == 1 and b25 == 1:
+            return "LDRB_IMM"
+        elif b20 == 1 and b22 == 1 and b25 == 0:
+            return "LDRB_REG"
+        else:
+            return "Other SDT"
+        
+    # Branch instructions: bits 27-25 = 101
+    if b27 == 1 and b26 == 0 and b25 == 1:
+        if b24 == 0:
+            return "B"
+        elif b24 == 1:
+            return "BL"
+        
+    # Block Data Transfer: bits 27-25 = 100
+    if b27 == 1 and b26 == 0 and b25 == 0:
+        if b20 == 1:
+            return "LDM"
+        else:
+            return "STM"    
+        
+    # Software Interrupt: bits 27-24 = 1111
+    if b27 == 1 and b26 == 1 and b25 == 1 and b24 == 1:
+        return "SWI"
+
+    # Coprocessor instructions: bits 27-24 = 1110
+    if b27 == 1 and b26 == 1 and b25 == 1 and b24 == 0:
+        if b22 == 1 and b20 == 1:
+            return "LDC_IMM"
+        elif b22 == 0 and b20 == 1:
+            return "LDC_REG"
+        elif b22 == 1 and b20 == 0:
+            return "STC_IMM"
+        elif b22 == 0 and b20 == 0:
+            return "STC_REG"
+        elif b22 == 1:
+            return "MRC"
+        elif b22 == 0:
+            return "MCR"    
+    
+    # BX (Branch and Exchange): bits 27-4 = 000100101111111111110001 (not fully covered by this index, but we can mark possible region)
+    # For this table, BX is not uniquely identified, but you can add a placeholder:
+    if b27 == 0 and b26 == 0 and b25 == 1 and b24 == 0 and b23 == 0 and b22 == 1 and b21 == 0 and b20 == 0 and mul_swp_bit == 0:
+        return "BX (possible)"
+
+    # Undefined/Reserved regions
+    # Mark anything not matched above as "Undefined/Reserved"
+    return "Undefined/Reserved"
+
+print(f"{'Idx':>4} {'MulSWP':>6} {'Binary':>8} {'NewIdx':>7} {'Type':>12}")
+for idx in range(256):
+    for mul_swp_bit in (0, 1):
+        mnemonic = classify(idx, mul_swp_bit)
+        if mnemonic != "Other":
+            new_idx = (idx << 1) | mul_swp_bit
+            print(f"0x{idx:02X}   {mul_swp_bit}   {idx:08b}   0x{new_idx:03X}   {mnemonic:>12}")
