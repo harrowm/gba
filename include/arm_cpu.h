@@ -150,316 +150,212 @@ private:
     #define REPEAT_32(handler) REPEAT_16(handler), REPEAT_16(handler)
     #define REPEAT_64(handler) REPEAT_32(handler), REPEAT_32(handler)
     #define REPEAT_128(handler) REPEAT_64(handler), REPEAT_64(handler)
+    #define REPEAT_ALT(a, b) a, b, a, b
+    #define REPEAT_2ALT(a, b) a, a, b, b, a, a, b, b
 
     // Table of 512 entries indexed by bits 27-19 (9 bits)
     static constexpr void (ARMCPU::*arm_decode_table[512])(ARMCachedInstruction& decoded) = {
-        ARM_HANDLER(decode_arm_and_reg),                // 0x000: decode_arm_and_reg
-        ARM_HANDLER(decode_arm_mul),                    // 0x001: decode_arm_mul
-        ARM_HANDLER(decode_arm_and_reg),                // 0x002: decode_arm_and_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x003: decode_arm_undefined
-        ARM_HANDLER(decode_arm_eor_reg),                // 0x004: decode_arm_eor_reg
-        ARM_HANDLER(decode_arm_mla),                    // 0x005: decode_arm_mla
-        ARM_HANDLER(decode_arm_eor_reg),                // 0x006: decode_arm_eor_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x007: decode_arm_undefined
-        ARM_HANDLER(decode_arm_sub_reg),                // 0x008: decode_arm_sub_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x009: decode_arm_undefined
-        ARM_HANDLER(decode_arm_sub_reg),                // 0x00A: decode_arm_sub_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x00B: decode_arm_undefined
-        ARM_HANDLER(decode_arm_rsb_reg),                // 0x00C: decode_arm_rsb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x00D: decode_arm_undefined
-        ARM_HANDLER(decode_arm_rsb_reg),                // 0x00E: decode_arm_rsb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x00F: decode_arm_undefined
-        ARM_HANDLER(decode_arm_add_reg),                // 0x010: decode_arm_add_reg
-        ARM_HANDLER(decode_arm_umull),                  // 0x011: decode_arm_umull
-        ARM_HANDLER(decode_arm_add_reg),                // 0x012: decode_arm_add_reg
-        ARM_HANDLER(decode_arm_umull),                  // 0x013: decode_arm_umull
-        ARM_HANDLER(decode_arm_adc_reg),                // 0x014: decode_arm_adc_reg
-        ARM_HANDLER(decode_arm_umlal),                  // 0x015: decode_arm_umlal
-        ARM_HANDLER(decode_arm_adc_reg),                // 0x016: decode_arm_adc_reg
-        ARM_HANDLER(decode_arm_umlal),                  // 0x017: decode_arm_umlal
-        ARM_HANDLER(decode_arm_sbc_reg),                // 0x018: decode_arm_sbc_reg
-        ARM_HANDLER(decode_arm_smull),                  // 0x019: decode_arm_smull
-        ARM_HANDLER(decode_arm_sbc_reg),                // 0x01A: decode_arm_sbc_reg
-        ARM_HANDLER(decode_arm_smull),                  // 0x01B: decode_arm_smull
-        ARM_HANDLER(decode_arm_rsc_reg),                // 0x01C: decode_arm_rsc_reg
-        ARM_HANDLER(decode_arm_smlal),                  // 0x01D: decode_arm_smlal
-        ARM_HANDLER(decode_arm_rsc_reg),                // 0x01E: decode_arm_rsc_reg
-        ARM_HANDLER(decode_arm_smlal),                  // 0x01F: decode_arm_smlal
-        ARM_HANDLER(decode_arm_tst_reg),                // 0x020: decode_arm_tst_reg
-        ARM_HANDLER(decode_arm_swp),                    // 0x021: decode_arm_swp
-        ARM_HANDLER(decode_arm_tst_reg),                // 0x022: decode_arm_tst_reg
-        ARM_HANDLER(decode_arm_swp),                    // 0x023: decode_arm_swp
-        ARM_HANDLER(decode_arm_teq_reg),                // 0x024: decode_arm_teq_reg
-        ARM_HANDLER(decode_arm_swp),                    // 0x025: decode_arm_swp
-        ARM_HANDLER(decode_arm_teq_reg),                // 0x026: decode_arm_teq_reg
-        ARM_HANDLER(decode_arm_swp),                    // 0x027: decode_arm_swp
-        ARM_HANDLER(decode_arm_cmp_reg),                // 0x028: decode_arm_cmp_reg
-        ARM_HANDLER(decode_arm_swpb),                   // 0x029: decode_arm_swpb
-        ARM_HANDLER(decode_arm_cmp_reg),                // 0x02A: decode_arm_cmp_reg
-        ARM_HANDLER(decode_arm_swpb),                   // 0x02B: decode_arm_swpb
-        ARM_HANDLER(decode_arm_cmn_reg),                // 0x02C: decode_arm_cmn_reg
-        ARM_HANDLER(decode_arm_swpb),                   // 0x02D: decode_arm_swpb
-        ARM_HANDLER(decode_arm_cmn_reg),                // 0x02E: decode_arm_cmn_reg
-        ARM_HANDLER(decode_arm_swpb),                   // 0x02F: decode_arm_swpb
-        ARM_HANDLER(decode_arm_orr_reg),                // 0x030: decode_arm_orr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x031: decode_arm_undefined
-        ARM_HANDLER(decode_arm_orr_reg),                // 0x032: decode_arm_orr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x033: decode_arm_undefined
-        ARM_HANDLER(decode_arm_mov_reg),                // 0x034: decode_arm_mov_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x035: decode_arm_undefined
-        ARM_HANDLER(decode_arm_mov_reg),                // 0x036: decode_arm_mov_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x037: decode_arm_undefined
-        ARM_HANDLER(decode_arm_bic_reg),                // 0x038: decode_arm_bic_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x039: decode_arm_undefined
-        ARM_HANDLER(decode_arm_bic_reg),                // 0x03A: decode_arm_bic_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x03B: decode_arm_undefined
-        ARM_HANDLER(decode_arm_mvn_reg),                // 0x03C: decode_arm_mvn_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x03D: decode_arm_undefined
-        ARM_HANDLER(decode_arm_mvn_reg),                // 0x03E: decode_arm_mvn_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x03F: decode_arm_undefined
-        ARM_HANDLER(decode_arm_and_imm),                // 0x040: decode_arm_and_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x041: decode_arm_undefined
-        ARM_HANDLER(decode_arm_and_imm),                // 0x042: decode_arm_and_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x043: decode_arm_undefined
-        ARM_HANDLER(decode_arm_eor_imm),                // 0x044: decode_arm_eor_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x045: decode_arm_undefined
-        ARM_HANDLER(decode_arm_eor_imm),                // 0x046: decode_arm_eor_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x047: decode_arm_undefined
-        ARM_HANDLER(decode_arm_sub_imm),                // 0x048: decode_arm_sub_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x049: decode_arm_undefined
-        ARM_HANDLER(decode_arm_sub_imm),                // 0x04A: decode_arm_sub_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x04B: decode_arm_undefined
-        ARM_HANDLER(decode_arm_rsb_imm),                // 0x04C: decode_arm_rsb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x04D: decode_arm_undefined
-        ARM_HANDLER(decode_arm_rsb_imm),                // 0x04E: decode_arm_rsb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x04F: decode_arm_undefined
-        ARM_HANDLER(decode_arm_add_imm),                // 0x050: decode_arm_add_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x051: decode_arm_undefined
-        ARM_HANDLER(decode_arm_add_imm),                // 0x052: decode_arm_add_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x053: decode_arm_undefined
-        ARM_HANDLER(decode_arm_adc_imm),                // 0x054: decode_arm_adc_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x055: decode_arm_undefined
-        ARM_HANDLER(decode_arm_adc_imm),                // 0x056: decode_arm_adc_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x057: decode_arm_undefined
-        ARM_HANDLER(decode_arm_sbc_imm),                // 0x058: decode_arm_sbc_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x059: decode_arm_undefined
-        ARM_HANDLER(decode_arm_sbc_imm),                // 0x05A: decode_arm_sbc_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x05B: decode_arm_undefined
-        ARM_HANDLER(decode_arm_rsc_imm),                // 0x05C: decode_arm_rsc_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x05D: decode_arm_undefined
-        ARM_HANDLER(decode_arm_rsc_imm),                // 0x05E: decode_arm_rsc_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x05F: decode_arm_undefined
-        ARM_HANDLER(decode_arm_tst_reg),                // 0x060: decode_arm_tst_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x061: decode_arm_undefined
-        ARM_HANDLER(decode_arm_tst_reg),                // 0x062: decode_arm_tst_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x063: decode_arm_undefined
-        ARM_HANDLER(decode_arm_teq_reg),                // 0x064: decode_arm_teq_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x065: decode_arm_undefined
-        ARM_HANDLER(decode_arm_teq_reg),                // 0x066: decode_arm_teq_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x067: decode_arm_undefined
-        ARM_HANDLER(decode_arm_cmp_reg),                // 0x068: decode_arm_cmp_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x069: decode_arm_undefined
-        ARM_HANDLER(decode_arm_cmp_reg),                // 0x06A: decode_arm_cmp_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x06B: decode_arm_undefined
-        ARM_HANDLER(decode_arm_cmn_reg),                // 0x06C: decode_arm_cmn_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x06D: decode_arm_undefined
-        ARM_HANDLER(decode_arm_cmn_reg),                // 0x06E: decode_arm_cmn_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x06F: decode_arm_undefined
-        ARM_HANDLER(decode_arm_orr_imm),                // 0x070: decode_arm_orr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x071: decode_arm_undefined
-        ARM_HANDLER(decode_arm_orr_imm),                // 0x072: decode_arm_orr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x073: decode_arm_undefined
-        ARM_HANDLER(decode_arm_mov_imm),                // 0x074: decode_arm_mov_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x075: decode_arm_undefined
-        ARM_HANDLER(decode_arm_mov_imm),                // 0x076: decode_arm_mov_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x077: decode_arm_undefined
-        ARM_HANDLER(decode_arm_bic_imm),                // 0x078: decode_arm_bic_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x079: decode_arm_undefined
-        ARM_HANDLER(decode_arm_bic_imm),                // 0x07A: decode_arm_bic_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x07B: decode_arm_undefined
-        ARM_HANDLER(decode_arm_mvn_imm),                // 0x07C: decode_arm_mvn_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x07D: decode_arm_undefined
-        ARM_HANDLER(decode_arm_mvn_imm),                // 0x07E: decode_arm_mvn_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x07F: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_reg),                // 0x080: decode_arm_str_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x081: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_reg),                // 0x082: decode_arm_ldr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x083: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_reg),                // 0x084: decode_arm_str_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x085: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_reg),                // 0x086: decode_arm_ldr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x087: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_reg),               // 0x088: decode_arm_strb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x089: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x08A: decode_arm_ldrb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x08B: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_reg),               // 0x08C: decode_arm_strb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x08D: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x08E: decode_arm_ldrb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x08F: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_reg),                // 0x090: decode_arm_str_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x091: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_reg),                // 0x092: decode_arm_ldr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x093: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_reg),                // 0x094: decode_arm_str_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x095: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_reg),                // 0x096: decode_arm_ldr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x097: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_reg),               // 0x098: decode_arm_strb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x099: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x09A: decode_arm_ldrb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x09B: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_reg),               // 0x09C: decode_arm_strb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x09D: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x09E: decode_arm_ldrb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x09F: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_reg),                // 0x0A0: decode_arm_str_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0A1: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_reg),                // 0x0A2: decode_arm_ldr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0A3: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_reg),                // 0x0A4: decode_arm_str_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0A5: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_reg),                // 0x0A6: decode_arm_ldr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0A7: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_reg),               // 0x0A8: decode_arm_strb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0A9: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x0AA: decode_arm_ldrb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0AB: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_reg),               // 0x0AC: decode_arm_strb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0AD: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x0AE: decode_arm_ldrb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0AF: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_reg),                // 0x0B0: decode_arm_str_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0B1: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_reg),                // 0x0B2: decode_arm_ldr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0B3: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_reg),                // 0x0B4: decode_arm_str_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0B5: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_reg),                // 0x0B6: decode_arm_ldr_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0B7: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_reg),               // 0x0B8: decode_arm_strb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0B9: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x0BA: decode_arm_ldrb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0BB: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_reg),               // 0x0BC: decode_arm_strb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0BD: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_reg),               // 0x0BE: decode_arm_ldrb_reg
-        ARM_HANDLER(decode_arm_undefined),              // 0x0BF: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_imm),                // 0x0C0: decode_arm_str_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0C1: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0C2: decode_arm_ldr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0C3: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_imm),                // 0x0C4: decode_arm_str_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0C5: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0C6: decode_arm_ldr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0C7: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_imm),               // 0x0C8: decode_arm_strb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0C9: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0CA: decode_arm_ldrb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0CB: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_imm),               // 0x0CC: decode_arm_strb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0CD: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0CE: decode_arm_ldrb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0CF: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_imm),                // 0x0D0: decode_arm_str_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0D1: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0D2: decode_arm_ldr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0D3: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_imm),                // 0x0D4: decode_arm_str_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0D5: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0D6: decode_arm_ldr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0D7: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_imm),               // 0x0D8: decode_arm_strb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0D9: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0DA: decode_arm_ldrb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0DB: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_imm),               // 0x0DC: decode_arm_strb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0DD: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0DE: decode_arm_ldrb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0DF: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_imm),                // 0x0E0: decode_arm_str_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0E1: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0E2: decode_arm_ldr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0E3: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_imm),                // 0x0E4: decode_arm_str_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0E5: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0E6: decode_arm_ldr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0E7: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_imm),               // 0x0E8: decode_arm_strb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0E9: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0EA: decode_arm_ldrb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0EB: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_imm),               // 0x0EC: decode_arm_strb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0ED: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0EE: decode_arm_ldrb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0EF: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_imm),                // 0x0F0: decode_arm_str_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0F1: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0F2: decode_arm_ldr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0F3: decode_arm_undefined
-        ARM_HANDLER(decode_arm_str_imm),                // 0x0F4: decode_arm_str_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0F5: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldr_imm),                // 0x0F6: decode_arm_ldr_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0F7: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_imm),               // 0x0F8: decode_arm_strb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0F9: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0FA: decode_arm_ldrb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0FB: decode_arm_undefined
-        ARM_HANDLER(decode_arm_strb_imm),               // 0x0FC: decode_arm_strb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0FD: decode_arm_undefined
-        ARM_HANDLER(decode_arm_ldrb_imm),               // 0x0FE: decode_arm_ldrb_imm
-        ARM_HANDLER(decode_arm_undefined),              // 0x0FF: decode_arm_undefined
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x100-0x101: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x102-0x103: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x104-0x105: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x106-0x107: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x108-0x109: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x10A-0x10B: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x10C-0x10D: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x10E-0x10F: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x110-0x111: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x112-0x113: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x114-0x115: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x116-0x117: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x118-0x119: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x11A-0x11B: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x11C-0x11D: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x11E-0x11F: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x120-0x121: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x122-0x123: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x124-0x125: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x126-0x127: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x128-0x129: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x12A-0x12B: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x12C-0x12D: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x12E-0x12F: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x130-0x131: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x132-0x133: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x134-0x135: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x136-0x137: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x138-0x139: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x13A-0x13B: decode_arm_ldm
-        REPEAT_2(ARM_HANDLER(decode_arm_stm)),          // 0x13C-0x13D: decode_arm_stm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldm)),          // 0x13E-0x13F: decode_arm_ldm
-        REPEAT_32(ARM_HANDLER(decode_arm_b)),           // 0x140-0x15F: decode_arm_b
-        REPEAT_32(ARM_HANDLER(decode_arm_bl)),          // 0x160-0x17F: decode_arm_bl
-        REPEAT_64(ARM_HANDLER(decode_arm_undefined)),   // 0x180-0x1BF: decode_arm_undefined
-        REPEAT_2(ARM_HANDLER(decode_arm_stc_reg)),      // 0x1C0-0x1C1: decode_arm_stc_reg
-        REPEAT_2(ARM_HANDLER(decode_arm_ldc_reg)),      // 0x1C2-0x1C3: decode_arm_ldc_reg
-        REPEAT_2(ARM_HANDLER(decode_arm_stc_reg)),      // 0x1C4-0x1C5: decode_arm_stc_reg
-        REPEAT_2(ARM_HANDLER(decode_arm_ldc_reg)),      // 0x1C6-0x1C7: decode_arm_ldc_reg
-        REPEAT_2(ARM_HANDLER(decode_arm_stc_imm)),      // 0x1C8-0x1C9: decode_arm_stc_imm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldc_imm)),      // 0x1CA-0x1CB: decode_arm_ldc_imm
-        REPEAT_2(ARM_HANDLER(decode_arm_stc_imm)),      // 0x1CC-0x1CD: decode_arm_stc_imm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldc_imm)),      // 0x1CE-0x1CF: decode_arm_ldc_imm
-        REPEAT_2(ARM_HANDLER(decode_arm_stc_reg)),      // 0x1D0-0x1D1: decode_arm_stc_reg
-        REPEAT_2(ARM_HANDLER(decode_arm_ldc_reg)),      // 0x1D2-0x1D3: decode_arm_ldc_reg
-        REPEAT_2(ARM_HANDLER(decode_arm_stc_reg)),      // 0x1D4-0x1D5: decode_arm_stc_reg
-        REPEAT_2(ARM_HANDLER(decode_arm_ldc_reg)),      // 0x1D6-0x1D7: decode_arm_ldc_reg
-        REPEAT_2(ARM_HANDLER(decode_arm_stc_imm)),      // 0x1D8-0x1D9: decode_arm_stc_imm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldc_imm)),      // 0x1DA-0x1DB: decode_arm_ldc_imm
-        REPEAT_2(ARM_HANDLER(decode_arm_stc_imm)),      // 0x1DC-0x1DD: decode_arm_stc_imm
-        REPEAT_2(ARM_HANDLER(decode_arm_ldc_imm)),      // 0x1DE-0x1DF: decode_arm_ldc_imm
+        ARM_HANDLER(decode_arm_and_reg),            // 0x000: decode_arm_and_reg
+        ARM_HANDLER(decode_arm_mul),                // 0x001: decode_arm_mul
+        ARM_HANDLER(decode_arm_and_reg),            // 0x002: decode_arm_and_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x003: decode_arm_undefined
+        ARM_HANDLER(decode_arm_eor_reg),            // 0x004: decode_arm_eor_reg
+        ARM_HANDLER(decode_arm_mla),                // 0x005: decode_arm_mla
+        ARM_HANDLER(decode_arm_eor_reg),            // 0x006: decode_arm_eor_reg
+        REPEAT_ALT(ARM_HANDLER(decode_arm_undefined), ARM_HANDLER(decode_arm_sub_reg)), // 0x007-0x00A: decode_arm_undefined/decode_arm_sub_reg ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_undefined), ARM_HANDLER(decode_arm_rsb_reg)), // 0x00B-0x00E: decode_arm_undefined/decode_arm_rsb_reg ABAB
+        ARM_HANDLER(decode_arm_undefined),          // 0x00F: decode_arm_undefined
+        REPEAT_ALT(ARM_HANDLER(decode_arm_add_reg), ARM_HANDLER(decode_arm_umull)), // 0x010-0x013: decode_arm_add_reg/decode_arm_umull ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_adc_reg), ARM_HANDLER(decode_arm_umlal)), // 0x014-0x017: decode_arm_adc_reg/decode_arm_umlal ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_sbc_reg), ARM_HANDLER(decode_arm_smull)), // 0x018-0x01B: decode_arm_sbc_reg/decode_arm_smull ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_rsc_reg), ARM_HANDLER(decode_arm_smlal)), // 0x01C-0x01F: decode_arm_rsc_reg/decode_arm_smlal ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_tst_reg), ARM_HANDLER(decode_arm_swp)), // 0x020-0x023: decode_arm_tst_reg/decode_arm_swp ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_teq_reg), ARM_HANDLER(decode_arm_swp)), // 0x024-0x027: decode_arm_teq_reg/decode_arm_swp ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_cmp_reg), ARM_HANDLER(decode_arm_swpb)), // 0x028-0x02B: decode_arm_cmp_reg/decode_arm_swpb ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_cmn_reg), ARM_HANDLER(decode_arm_swpb)), // 0x02C-0x02F: decode_arm_cmn_reg/decode_arm_swpb ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_orr_reg), ARM_HANDLER(decode_arm_undefined)), // 0x030-0x033: decode_arm_orr_reg/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_mov_reg), ARM_HANDLER(decode_arm_undefined)), // 0x034-0x037: decode_arm_mov_reg/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_bic_reg), ARM_HANDLER(decode_arm_undefined)), // 0x038-0x03B: decode_arm_bic_reg/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_mvn_reg), ARM_HANDLER(decode_arm_undefined)), // 0x03C-0x03F: decode_arm_mvn_reg/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_and_imm), ARM_HANDLER(decode_arm_undefined)), // 0x040-0x043: decode_arm_and_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_eor_imm), ARM_HANDLER(decode_arm_undefined)), // 0x044-0x047: decode_arm_eor_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_sub_imm), ARM_HANDLER(decode_arm_undefined)), // 0x048-0x04B: decode_arm_sub_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_rsb_imm), ARM_HANDLER(decode_arm_undefined)), // 0x04C-0x04F: decode_arm_rsb_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_add_imm), ARM_HANDLER(decode_arm_undefined)), // 0x050-0x053: decode_arm_add_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_adc_imm), ARM_HANDLER(decode_arm_undefined)), // 0x054-0x057: decode_arm_adc_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_sbc_imm), ARM_HANDLER(decode_arm_undefined)), // 0x058-0x05B: decode_arm_sbc_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_rsc_imm), ARM_HANDLER(decode_arm_undefined)), // 0x05C-0x05F: decode_arm_rsc_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_tst_reg), ARM_HANDLER(decode_arm_undefined)), // 0x060-0x063: decode_arm_tst_reg/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_teq_reg), ARM_HANDLER(decode_arm_undefined)), // 0x064-0x067: decode_arm_teq_reg/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_cmp_reg), ARM_HANDLER(decode_arm_undefined)), // 0x068-0x06B: decode_arm_cmp_reg/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_cmn_reg), ARM_HANDLER(decode_arm_undefined)), // 0x06C-0x06F: decode_arm_cmn_reg/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_orr_imm), ARM_HANDLER(decode_arm_undefined)), // 0x070-0x073: decode_arm_orr_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_mov_imm), ARM_HANDLER(decode_arm_undefined)), // 0x074-0x077: decode_arm_mov_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_bic_imm), ARM_HANDLER(decode_arm_undefined)), // 0x078-0x07B: decode_arm_bic_imm/decode_arm_undefined ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_mvn_imm), ARM_HANDLER(decode_arm_undefined)), // 0x07C-0x07F: decode_arm_mvn_imm/decode_arm_undefined ABAB
+        ARM_HANDLER(decode_arm_str_reg),            // 0x080: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x081: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),            // 0x082: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x083: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),            // 0x084: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x085: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),            // 0x086: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x087: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),           // 0x088: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x089: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),           // 0x08A: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x08B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),           // 0x08C: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x08D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),           // 0x08E: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x08F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),            // 0x090: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x091: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),            // 0x092: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x093: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),            // 0x094: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x095: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),            // 0x096: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x097: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),           // 0x098: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x099: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),           // 0x09A: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x09B: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),           // 0x09C: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x09D: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),           // 0x09E: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x09F: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),            // 0x0A0: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0A1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),            // 0x0A2: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0A3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),            // 0x0A4: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0A5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),            // 0x0A6: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0A7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),           // 0x0A8: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0A9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),           // 0x0AA: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0AB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),           // 0x0AC: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0AD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),           // 0x0AE: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0AF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),            // 0x0B0: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0B1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),            // 0x0B2: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0B3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_reg),            // 0x0B4: decode_arm_str_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0B5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_reg),            // 0x0B6: decode_arm_ldr_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0B7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),           // 0x0B8: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0B9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),           // 0x0BA: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0BB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_reg),           // 0x0BC: decode_arm_strb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0BD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_reg),           // 0x0BE: decode_arm_ldrb_reg
+        ARM_HANDLER(decode_arm_undefined),          // 0x0BF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),            // 0x0C0: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0C1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),            // 0x0C2: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0C3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),            // 0x0C4: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0C5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),            // 0x0C6: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0C7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),           // 0x0C8: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0C9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),           // 0x0CA: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0CB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),           // 0x0CC: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0CD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),           // 0x0CE: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0CF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),            // 0x0D0: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0D1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),            // 0x0D2: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0D3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),            // 0x0D4: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0D5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),            // 0x0D6: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0D7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),           // 0x0D8: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0D9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),           // 0x0DA: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0DB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),           // 0x0DC: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0DD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),           // 0x0DE: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0DF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),            // 0x0E0: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0E1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),            // 0x0E2: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0E3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),            // 0x0E4: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0E5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),            // 0x0E6: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0E7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),           // 0x0E8: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0E9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),           // 0x0EA: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0EB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),           // 0x0EC: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0ED: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),           // 0x0EE: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0EF: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),            // 0x0F0: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0F1: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),            // 0x0F2: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0F3: decode_arm_undefined
+        ARM_HANDLER(decode_arm_str_imm),            // 0x0F4: decode_arm_str_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0F5: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldr_imm),            // 0x0F6: decode_arm_ldr_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0F7: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),           // 0x0F8: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0F9: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),           // 0x0FA: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0FB: decode_arm_undefined
+        ARM_HANDLER(decode_arm_strb_imm),           // 0x0FC: decode_arm_strb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0FD: decode_arm_undefined
+        ARM_HANDLER(decode_arm_ldrb_imm),           // 0x0FE: decode_arm_ldrb_imm
+        ARM_HANDLER(decode_arm_undefined),          // 0x0FF: decode_arm_undefined
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x100-0x103: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x104-0x107: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x108-0x10B: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x10C-0x10F: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x110-0x113: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x114-0x117: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x118-0x11B: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x11C-0x11F: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x120-0x123: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x124-0x127: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x128-0x12B: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x12C-0x12F: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x130-0x133: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x134-0x137: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x138-0x13B: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stm), ARM_HANDLER(decode_arm_ldm)), // 0x13C-0x13F: decode_arm_stm/decode_arm_ldm ABAB
+        REPEAT_32(ARM_HANDLER(decode_arm_b)),       // 0x140-0x15F: decode_arm_b
+        REPEAT_32(ARM_HANDLER(decode_arm_bl)),      // 0x160-0x17F: decode_arm_bl
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_imm), ARM_HANDLER(decode_arm_ldc_imm)), // 0x180-0x183: decode_arm_stc_imm/decode_arm_ldc_imm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_imm), ARM_HANDLER(decode_arm_ldc_imm)), // 0x184-0x187: decode_arm_stc_imm/decode_arm_ldc_imm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_imm), ARM_HANDLER(decode_arm_ldc_imm)), // 0x188-0x18B: decode_arm_stc_imm/decode_arm_ldc_imm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_imm), ARM_HANDLER(decode_arm_ldc_imm)), // 0x18C-0x18F: decode_arm_stc_imm/decode_arm_ldc_imm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_imm), ARM_HANDLER(decode_arm_ldc_imm)), // 0x190-0x193: decode_arm_stc_imm/decode_arm_ldc_imm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_imm), ARM_HANDLER(decode_arm_ldc_imm)), // 0x194-0x197: decode_arm_stc_imm/decode_arm_ldc_imm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_imm), ARM_HANDLER(decode_arm_ldc_imm)), // 0x198-0x19B: decode_arm_stc_imm/decode_arm_ldc_imm ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_imm), ARM_HANDLER(decode_arm_ldc_imm)), // 0x19C-0x19F: decode_arm_stc_imm/decode_arm_ldc_imm ABAB
+        REPEAT_32(ARM_HANDLER(decode_arm_undefined)), // 0x1A0-0x1BF: decode_arm_undefined
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_reg), ARM_HANDLER(decode_arm_ldc_reg)), // 0x1C0-0x1C3: decode_arm_stc_reg/decode_arm_ldc_reg ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_reg), ARM_HANDLER(decode_arm_ldc_reg)), // 0x1C4-0x1C7: decode_arm_stc_reg/decode_arm_ldc_reg ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_reg), ARM_HANDLER(decode_arm_ldc_reg)), // 0x1C8-0x1CB: decode_arm_stc_reg/decode_arm_ldc_reg ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_reg), ARM_HANDLER(decode_arm_ldc_reg)), // 0x1CC-0x1CF: decode_arm_stc_reg/decode_arm_ldc_reg ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_reg), ARM_HANDLER(decode_arm_ldc_reg)), // 0x1D0-0x1D3: decode_arm_stc_reg/decode_arm_ldc_reg ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_reg), ARM_HANDLER(decode_arm_ldc_reg)), // 0x1D4-0x1D7: decode_arm_stc_reg/decode_arm_ldc_reg ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_reg), ARM_HANDLER(decode_arm_ldc_reg)), // 0x1D8-0x1DB: decode_arm_stc_reg/decode_arm_ldc_reg ABAB
+        REPEAT_ALT(ARM_HANDLER(decode_arm_stc_reg), ARM_HANDLER(decode_arm_ldc_reg)), // 0x1DC-0x1DF: decode_arm_stc_reg/decode_arm_ldc_reg ABAB
         REPEAT_32(ARM_HANDLER(decode_arm_software_interrupt)), // 0x1E0-0x1FF: decode_arm_software_interrupt
     };
 
@@ -472,8 +368,10 @@ private:
     #undef REPEAT_32
     #undef REPEAT_64
     #undef REPEAT_128
+    #undef REPEAT_ALT
+    #undef REPEAT_2ALT
 
-        // --- Execute stubs for decode_arm_ functions ---
+    // --- Execute stubs for decode_arm_ functions ---
     void execute_arm_str_imm(ARMCachedInstruction& decoded);
     void execute_arm_str_reg(ARMCachedInstruction& decoded);
     void execute_arm_ldr_imm(ARMCachedInstruction& decoded);

@@ -254,33 +254,6 @@ void ARMCPU::decode_arm_undefined(ARMCachedInstruction& decoded) {
     decoded.execute_func = nullptr;
 }
 
-
-// // CDP (Coprocessor Data Processing) decoder stub
-// void ARMCPU::decode_arm_cdp(ARMCachedInstruction& decoded) {
-//     DEBUG_LOG(std::string("decode_arm_cdp: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-//     // Reuse rs field for coprocessor number (bits 11-8)
-//     decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
-//     decoded.execute_func = nullptr; // Not implemented
-// }
-
-// // MCR (Move to Coprocessor from ARM Register) decoder stub
-// void ARMCPU::decode_arm_mcr(ARMCachedInstruction& decoded) {
-//     DEBUG_LOG(std::string("decode_arm_mcr: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-//     // Reuse rs field for coprocessor number (bits 11-8)
-//     decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
-//     decoded.execute_func = nullptr; // Not implemented
-// }
-
-// // MRC (Move to ARM Register from Coprocessor) decoder stub
-// void ARMCPU::decode_arm_mrc(ARMCachedInstruction& decoded) {
-//     DEBUG_LOG(std::string("decode_arm_mrc: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-//     // Reuse rs field for coprocessor number (bits 11-8)
-//     decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
-//     decoded.execute_func = nullptr; // Not implemented
-// }
-
-
-
 void ARMCPU::decode_arm_mov_imm(ARMCachedInstruction& decoded) {
     DEBUG_LOG(std::string("decode_arm_mov_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
     decoded.rn = bits<19,16>(decoded.instruction);
@@ -308,6 +281,7 @@ void ARMCPU::decode_arm_software_interrupt(ARMCachedInstruction& decoded) {
     // SWI immediate is bits 23-0
     decoded.imm = bits<23,0>(decoded.instruction);
     decoded.execute_func = nullptr; // Not implemented, or set to handler if available
+    DEBUG_ERROR(std::string("decode_arm_software_interrupt: SWI instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
 }
 
 
@@ -358,6 +332,7 @@ void ARMCPU::decode_arm_ldc_imm(ARMCachedInstruction& decoded) {
     DEBUG_LOG(std::string("decode_arm_ldc_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
     decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
     decoded.execute_func = nullptr; // Not implemented
+    DEBUG_ERROR(std::string("decode_arm_ldc_imm: Coprocessor LDC (imm) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
 }
 
 // LDC (Load to Coprocessor from Memory, Register) decoder stub
@@ -365,6 +340,7 @@ void ARMCPU::decode_arm_ldc_reg(ARMCachedInstruction& decoded) {
     DEBUG_LOG(std::string("decode_arm_ldc_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
     decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
     decoded.execute_func = nullptr; // Not implemented
+    DEBUG_ERROR(std::string("decode_arm_ldc_reg: Coprocessor LDC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
 }
 
 // STC (Store from Coprocessor to Memory, Immediate) decoder stub
@@ -372,6 +348,7 @@ void ARMCPU::decode_arm_stc_imm(ARMCachedInstruction& decoded) {
     DEBUG_LOG(std::string("decode_arm_stc_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
     decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
     decoded.execute_func = nullptr; // Not implemented
+    DEBUG_ERROR(std::string("decode_arm_stc_imm: Coprocessor STC (imm) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
 }
 
 // STC (Store from Coprocessor to Memory, Register) decoder stub
@@ -379,3 +356,5 @@ void ARMCPU::decode_arm_stc_reg(ARMCachedInstruction& decoded) {
     DEBUG_LOG(std::string("decode_arm_stc_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
     decoded.rs = bits<11,8>(decoded.instruction); // Coprocessor number
     decoded.execute_func = nullptr; // Not implemented
+    DEBUG_ERROR(std::string("decode_arm_stc_reg: Coprocessor STC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
+}
