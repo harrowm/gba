@@ -120,8 +120,9 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
         if (exception_taken) return true;
         return cached->pc_modified;
     } else {
+        uint32_t ind = (bits<27,20>(instruction) << 1) | (bits<7,4>(instruction) == 0x9);
         DEBUG_INFO("CACHE MISS: PC=0x" + debug_to_hex_string(pc, 8) + 
-                   " Instruction=0x" + debug_to_hex_string(instruction, 8) + "going to use function table index: 0x" + debug_to_hex_string((bits<27,20>(instruction) << 1) & (bits<7,4>(instruction) == 0x9), 3));
+                   " Instruction=0x" + debug_to_hex_string(instruction, 8) + " using fn table index: 0x" + debug_to_hex_string(ind, 3));
         ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
         instruction_cache.insert(pc, decoded);
         if (!checkConditionCached(decoded.condition)) return false;
@@ -406,7 +407,7 @@ ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction
     decoded.pc_modified = (decoded.rd == 15);
 
     // .. and call the decode handler based on the instruction type to handle the rest
-    uint32_t index = (bits<27,20>(instruction) << 1) & (bits<7,4>(instruction) == 0x9); // bits 7-4 = "1001"
+    uint32_t index = (bits<27,20>(instruction) << 1) | (bits<7,4>(instruction) == 0x9); // bits 7-4 = "1001"
     auto decode_func = arm_decode_table[index];
     if (decode_func == nullptr) {
         DEBUG_ERROR("[FATAL] arm_decode_table entry is nullptr for instruction 0x" + debug_to_hex_string(instruction, 8));
@@ -936,49 +937,47 @@ void ARMCPU::execute_arm_mov_reg(ARMCachedInstruction& cached) {
 
 void ARMCPU::execute_arm_str_imm(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_str_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    DEBUG_LOG("STR_imm: rn=" + std::to_string(cached.rn) + " base=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[cached.rn], 8) + " rd=" + std::to_string(cached.rd) + " val=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[cached.rd], 8) + " imm=0x" + DEBUG_TO_HEX_STRING(cached.imm, 8));
     
-    // ARM single data transfer: STR (immediate offset, all addressing modes)
     uint32_t base = parentCPU.R()[cached.rn];
     uint32_t offset = cached.imm;
     bool pre = cached.pre_index;
     bool up = cached.up;
     bool writeback = cached.writeback;
-    uint32_t address = base;
-    if (pre) {
-        address = up ? (base + offset) : (base - offset);
-    }
+
+    uint32_t address = pre ? (up ? base + offset : base - offset) : base;
+    DEBUG_LOG("STR_imm: writing 0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[cached.rd], 8) + " to address 0x" + DEBUG_TO_HEX_STRING(address, 8));
     parentCPU.getMemory().write32(address, parentCPU.R()[cached.rd]);
-    if (!pre) {
-        address = up ? (base + offset) : (base - offset);
-        parentCPU.getMemory().write32(address, parentCPU.R()[cached.rd]);
-    }
+    DEBUG_LOG("STR_imm: after write, mem[0x" + DEBUG_TO_HEX_STRING(address, 8) + "] = 0x" + DEBUG_TO_HEX_STRING(parentCPU.getMemory().read32(address), 8));
+
     if (writeback) {
-        parentCPU.R()[cached.rn] = address;
+        DEBUG_LOG("STR_imm: writeback, rn=" + std::to_string(cached.rn) + " old=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[cached.rn], 8) + " new=0x" + DEBUG_TO_HEX_STRING(up ? base + offset : base - offset, 8));
+        parentCPU.R()[cached.rn] = up ? base + offset : base - offset;
     }
+
     // PC-relative STR is not meaningful, so no special handling needed
     // Unaligned access: ARMv4 allows, but result is rotated; not implemented here
 }
-
+    
 void ARMCPU::execute_arm_str_reg(ARMCachedInstruction& cached) {
     DEBUG_LOG(std::string("execute_arm_str_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
-    
-    // ARM single data transfer: STR (register offset, all addressing modes)
+    DEBUG_LOG("STR_reg: rn=" + std::to_string(cached.rn) + " base=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[cached.rn], 8) + " rd=" + std::to_string(cached.rd) + " val=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[cached.rd], 8) + " rm=" + std::to_string(cached.rm) + " rs=" + std::to_string(cached.rs) + " shift_type=" + std::to_string(cached.shift_type) + " reg_shift=" + std::to_string(cached.reg_shift));
     uint32_t base = parentCPU.R()[cached.rn];
     uint32_t offset = calcShiftedResult(cached.rm, cached.rs, cached.shift_type, cached.reg_shift, nullptr);
     bool pre = cached.pre_index;
     bool up = cached.up;
     bool writeback = cached.writeback;
-    uint32_t address = base;
-    if (pre) {
-        address = up ? (base + offset) : (base - offset);
-    }
+
+    DEBUG_LOG("offset=0x" + DEBUG_TO_HEX_STRING(offset, 8) + " pre=" + std::to_string(pre) + " up=" + std::to_string(up) + " writeback=" + std::to_string(writeback));
+
+    uint32_t address = pre ? (up ? base + offset : base - offset) : base;
+    DEBUG_LOG("STR_reg: writing 0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[cached.rd], 8) + " to address 0x" + DEBUG_TO_HEX_STRING(address, 8));
     parentCPU.getMemory().write32(address, parentCPU.R()[cached.rd]);
-    if (!pre) {
-        address = up ? (base + offset) : (base - offset);
-        parentCPU.getMemory().write32(address, parentCPU.R()[cached.rd]);
-    }
+    DEBUG_LOG("STR_reg: after write, mem[0x" + DEBUG_TO_HEX_STRING(address, 8) + "] = 0x" + DEBUG_TO_HEX_STRING(parentCPU.getMemory().read32(address), 8));
+
     if (writeback) {
-        parentCPU.R()[cached.rn] = address;
+        DEBUG_LOG("STR_reg: writeback, rn=" + std::to_string(cached.rn) + " old=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[cached.rn], 8) + " new=0x" + DEBUG_TO_HEX_STRING(up ? base + offset : base - offset, 8));
+        parentCPU.R()[cached.rn] = up ? base + offset : base - offset;
     }
 }
 
