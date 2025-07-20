@@ -93,105 +93,213 @@ ARM_SDT_DECODER_IMM(ldr)
 ARM_SDT_DECODER_REG(ldr)
 
 
-// STM/LDM decoders
-void ARMCPU::decode_arm_stm(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_stm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.register_list = bits<15,0>(decoded.instruction);
-    decoded.addressing_mode = bits<23,22>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_stm;
+void ARMCPU::exec_arm_ldm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint16_t reg_list = bits<15,0>(instruction);
+    uint8_t addressing_mode = bits<23,22>(instruction);
+    bool writeback = bits<21,21>(instruction);
+
+    uint32_t base = parentCPU.R()[rn];
+    int offset = 0;
+    // Calculate offset direction and order based on addressing_mode
+    bool up = (addressing_mode & 0x2) != 0;
+    bool pre = (addressing_mode & 0x1) != 0;
+    int reg_count = 0;
+    for (int i = 0; i < 16; ++i) {
+        if (reg_list & (1 << i)) ++reg_count;
+    }
+    int addr = base;
+    if (up) {
+        addr += pre ? 4 : 0;
+    } else {
+        addr -= pre ? 4 : 0;
+    }
+    for (int i = 0; i < 16; ++i) {
+        if (reg_list & (1 << i)) {
+            parentCPU.R()[i] = parentCPU.getMemory().read32(addr);
+            addr += up ? 4 : -4;
+        }
+    }
+    if (writeback) {
+        parentCPU.R()[rn] = up ? base + reg_count * 4 : base - reg_count * 4;
+    }
 }
 
-void ARMCPU::decode_arm_ldm(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_ldm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.register_list = bits<15,0>(decoded.instruction);
-    decoded.addressing_mode = bits<23,22>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_ldm;
-}
+void ARMCPU::exec_arm_stm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_stm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint16_t reg_list = bits<15,0>(instruction);
+    uint8_t addressing_mode = bits<23,22>(instruction);
+    bool writeback = bits<21,21>(instruction);
 
-// Branch decoders
-void ARMCPU::decode_arm_b(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_b: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    int32_t offset = bits<23,0>(decoded.instruction);
+    uint32_t base = parentCPU.R()[rn];
+    int offset = 0;
+    // Calculate offset direction and order based on addressing_mode
+    bool up = (addressing_mode & 0x2) != 0;
+    bool pre = (addressing_mode & 0x1) != 0;
+    int reg_count = 0;
+    for (int i = 0; i < 16; ++i) {
+        if (reg_list & (1 << i)) ++reg_count;
+    }
+    int addr = base;
+    if (up) {
+        addr += pre ? 4 : 0;
+    } else {
+        addr -= pre ? 4 : 0;
+    }
+    for (int i = 0; i < 16; ++i) {
+        if (reg_list & (1 << i)) {
+            parentCPU.getMemory().write32(addr, parentCPU.R()[i]);
+            addr += up ? 4 : -4;
+        }
+    }
+    if (writeback) {
+        parentCPU.R()[rn] = up ? base + reg_count * 4 : base - reg_count * 4;
+    }
+}
+void ARMCPU::exec_arm_b(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_b: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    int32_t offset = bits<23,0>(instruction);
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
-    decoded.branch_offset = (offset << 2) + 8;
-    decoded.execute_func = &ARMCPU::execute_arm_b;
+    uint32_t branch_offset = (offset << 2) + 8;
+    // Branch to target address
+    parentCPU.R()[15] += branch_offset;
 }
 
-void ARMCPU::decode_arm_bl(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_bl: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    int32_t offset = bits<23,0>(decoded.instruction);
+void ARMCPU::exec_arm_bl(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_bl: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    int32_t offset = bits<23,0>(instruction);
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
-    decoded.branch_offset = (offset << 2) + 8;
-    decoded.execute_func = &ARMCPU::execute_arm_bl;
+    uint32_t branch_offset = (offset << 2) + 8;
+    // Set LR to return address (current PC + 4)
+    parentCPU.R()[14] = parentCPU.R()[15] + 4;
+    // Branch to target address
+    parentCPU.R()[15] += branch_offset;
 }
 
-// SWP/SWPB decoders
-void ARMCPU::decode_arm_swp(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_swp: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_swp;
+void ARMCPU::exec_arm_swp(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_swp: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+
+    // Read word from memory address in rn
+    uint32_t addr = parentCPU.R()[rn];
+    uint32_t mem_val = parentCPU.getMemory().read32(addr);
+    // Write value from rm to memory
+    parentCPU.getMemory().write32(addr, parentCPU.R()[rm]);
+    // Store original memory value in rd
+    parentCPU.R()[rd] = mem_val;
 }
 
-void ARMCPU::decode_arm_swpb(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_swpb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_swpb;
+void ARMCPU::exec_arm_swpb(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_swpb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+
+    // Read byte from memory address in rn
+    uint32_t addr = parentCPU.R()[rn];
+    uint8_t mem_val = parentCPU.getMemory().read8(addr);
+    // Write value from rm to memory
+    parentCPU.getMemory().write8(addr, parentCPU.R()[rm] & 0xFF);
+    // Store original memory value in rd
+    parentCPU.R()[rd] = mem_val;
 }
 
-// MUL/MLA/UMULL/UMLAL/SMULL/SMLAL decoders
-void ARMCPU::decode_arm_mul(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_mul: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rd = bits<19,16>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.rs = bits<11,8>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_mul;
+void ARMCPU::exec_arm_mul(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_mul: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    bool    set_flags = bits<20,20>(instruction);
+    
+    // Multiply two registers and store the result
+    uint32_t op1 = parentCPU.R()[rm];
+    uint32_t op2 = parentCPU.R()[rs];
+    parentCPU.R()[rd] = op1 * op2;
+    
+    if (set_flags && rd != 15) {
+        // Update flags based on the result
+        updateFlagsLogical(parentCPU.R()[rd], 0); // No carry for multiplication
+    }
 }
 
-void ARMCPU::decode_arm_mla(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_mla: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rd = bits<19,16>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.rs = bits<11,8>(decoded.instruction);
-    decoded.rn = bits<15,12>(decoded.instruction);
-    decoded.accumulate = true;
-    decoded.execute_func = &ARMCPU::execute_arm_mla;
+void ARMCPU::exec_arm_mla(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_mla: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t rn = bits<15,12>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+
+    // Multiply and accumulate: Rd = (Rm * Rs) + Rn
+    uint32_t op1 = parentCPU.R()[rm];
+    uint32_t op2 = parentCPU.R()[rs];
+    uint32_t acc = parentCPU.R()[rn];
+    parentCPU.R()[rd] = (op1 * op2) + acc;
+
+    if (set_flags && rd != 15) {
+        // Update flags based on the result
+        updateFlagsLogical(parentCPU.R()[rd], 0); // No carry for MLA
+    }
 }
 
-void ARMCPU::decode_arm_umull(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_umull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rdHi = bits<19,16>(decoded.instruction);
-    decoded.rdLo = bits<15,12>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.rs = bits<11,8>(decoded.instruction);
-    decoded.signed_op = false;
-    decoded.execute_func = &ARMCPU::execute_arm_umull;
+void ARMCPU::exec_arm_umull(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_umull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rdHi = bits<19,16>(instruction);
+    uint8_t rdLo = bits<15,12>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+
+    uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs];
+    parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+    parentCPU.R()[rdHi] = (uint32_t)(result >> 32);
+
+    if (set_flags && rdHi != 15 && rdLo != 15) {
+        // Update flags based on the result (N and Z)
+        updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+    }
 }
 
-void ARMCPU::decode_arm_umlal(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_umlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rdHi = bits<19,16>(decoded.instruction);
-    decoded.rdLo = bits<15,12>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.rs = bits<11,8>(decoded.instruction);
-    decoded.signed_op = false;
-    decoded.accumulate = true;
-    decoded.execute_func = &ARMCPU::execute_arm_umlal;
+void ARMCPU::exec_arm_umlal(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_umlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rdHi = bits<19,16>(instruction);
+    uint8_t rdLo = bits<15,12>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+
+    // Get the accumulator value from RdHi/RdLo
+    uint64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | (uint64_t)parentCPU.R()[rdLo];
+    uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs] + acc;
+    parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+    parentCPU.R()[rdHi] = (uint32_t)(result >> 32);
+
+    if (set_flags && rdHi != 15 && rdLo != 15) {
+        // Update flags based on the result (N and Z)
+        updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+    }
 }
 
-void ARMCPU::decode_arm_smull(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_smull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rdHi = bits<19,16>(decoded.instruction);
-    decoded.rdLo = bits<15,12>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.rs = bits<11,8>(decoded.instruction);
-    decoded.signed_op = true;
-    decoded.execute_func = &ARMCPU::execute_arm_smull;
+void ARMCPU::exec_arm_smull(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_smull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rdHi = bits<19,16>(instruction);
+    uint8_t rdLo = bits<15,12>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+
+    int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs];
+    parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+    parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+
+    if (set_flags && rdHi != 15 && rdLo != 15) {
+        // Update flags based on the result (N and Z)
+        updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+    }
 }
 
 void ARMCPU::decode_arm_smlal(ARMCachedInstruction& decoded) {

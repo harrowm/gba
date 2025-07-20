@@ -24,7 +24,7 @@ We've implemented several key optimizations to improve the performance of the AR
 The profiling results show significant improvements in the hotspot functions:
 
 ### Original Baseline Profile
-- `ARMCPU::executeWithCache`: 30.8% direct samples (71.8% inclusive)
+- `ARMCPU::executeInstruction`: 30.8% direct samples (71.8% inclusive)
 - `ARMCPU::executeCachedBlockDataTransfer`: 10.3% direct samples (28.2% inclusive)
 - Memory read/write operations: High overhead
 
@@ -37,7 +37,7 @@ The profiling results show significant improvements in the hotspot functions:
 
 Based on the current profile results, the next optimization candidates are:
 
-1. `ARMCPU::executeWithCache`: Currently at 50.0% of direct samples
+1. `ARMCPU::executeInstruction`: Currently at 50.0% of direct samples
 2. `ARMCPU::executeCachedDataProcessing`: Further optimization opportunities
 3. `ARMCPU::executeCachedSingleDataTransfer`: Additional optimizations possible
 

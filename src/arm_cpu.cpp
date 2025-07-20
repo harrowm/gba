@@ -35,7 +35,7 @@ void ARMCPU::execute(uint32_t cycles) {
         uint32_t instruction = parentCPU.getMemory().read32(pc); // Fetch instruction
 
         // Use cached execution path
-        bool pc_modified = executeWithCache(pc, instruction);
+        bool pc_modified = executeInstruction(pc, instruction);
         if (exception_taken) {
             break;
         }
@@ -77,7 +77,7 @@ void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
         // Check if instruction will complete before next timing event
         if (instruction_cycles <= cycles_until_event) {
             // Execute instruction normally with cache
-            bool pc_modified = executeWithCache(pc, instruction);
+            bool pc_modified = executeInstruction(pc, instruction);
             
             if (!pc_modified) {
                 parentCPU.R()[15] = pc + 4;
@@ -130,25 +130,36 @@ const ARMCPU::CondFunc ARMCPU::condTable[16] = {
     &ARMCPU::cond_nv  // 15: NV
 };
 
-bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
-    ARMCachedInstruction* cached = instruction_cache.lookup(pc, instruction);
+bool ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
+    UNUSED(pc); // maybe useful for debugging
     
-    if (cached) {
-        if(!condTable[cached->condition](parentCPU.CPSR() >> 28)) return false;
-        (this->*(cached->execute_func))(*cached);
-        if (exception_taken) return true;
-        return cached->pc_modified;
-    } else {
-        uint32_t ind = (bits<27,20>(instruction) << 1) | (bits<7,4>(instruction) == 0x9);
-        DEBUG_INFO("CACHE MISS: PC=0x" + debug_to_hex_string(pc, 8) + 
-                   " Instruction=0x" + debug_to_hex_string(instruction, 8) + " using fn table index: 0x" + debug_to_hex_string(ind, 3));
-        ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
-        instruction_cache.insert(pc, decoded);
-        if(!ARMCPU::condTable[decoded.condition](parentCPU.CPSR() >> 28)) return false;
-        (this->*(decoded.execute_func))(decoded);
-        if (exception_taken) return true;
-        return decoded.pc_modified;
-    }
+    uint32_t index = (bits<27,20>(instruction) << 1) | (bits<7,4>(instruction) == 0x9);
+    DEBUG_INFO("executeInstruction: PC=0x" + debug_to_hex_string(pc, 8) + 
+                " Instruction=0x" + debug_to_hex_string(instruction, 8) + " using fn table index: 0x" + debug_to_hex_string(index, 3));
+    
+    // Check if condition is met before executing instruction
+    uint8_t condition = bits<31, 28>(instruction);
+    if(!ARMCPU::condTable[condition](parentCPU.CPSR() >> 28)) 
+        return false;
+
+    // Decode instruction
+    ARMCachedInstruction decoded;
+
+    // Add in common decodes ..
+    decoded.instruction = instruction;    
+    decoded.condition = bits<31, 28>(instruction);
+    decoded.set_flags = bits<20, 20>(instruction);
+    decoded.valid = true;
+    decoded.pc_modified = (decoded.rd == 15);
+
+    // .. and call the decode handler based on the instruction type to handle the rest
+    auto decode_func = arm_decode_table[index];
+    (this->*decode_func)(decoded);
+     
+    
+    (this->*(decoded.execute_func))(decoded);
+    if (exception_taken) return true;
+    return decoded.pc_modified;
 }
 
 // Optimized flag update function for logical operations (AND, EOR, TST, TEQ, etc.)
@@ -265,30 +276,6 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
                " disable_fiq=" + std::to_string(disable_fiq));
 }
 
-// Main instruction decoder
-ARMCachedInstruction ARMCPU::decodeInstruction(uint32_t pc, uint32_t instruction) {
-    UNUSED(pc); // PC is not used in this decode function, but could be useful for debugging
-    ARMCachedInstruction decoded;
-
-    // Add in common decodes ..
-    decoded.instruction = instruction;
-    
-    decoded.condition = bits<31, 28>(instruction);
-    decoded.set_flags = bits<20, 20>(instruction);
-    decoded.valid = true;
-    decoded.pc_modified = (decoded.rd == 15);
-
-    // .. and call the decode handler based on the instruction type to handle the rest
-    uint32_t index = (bits<27,20>(instruction) << 1) | (bits<7,4>(instruction) == 0x9); // bits 7-4 = "1001"
-    auto decode_func = arm_decode_table[index];
-    if (decode_func == nullptr) {
-        DEBUG_ERROR("[FATAL] arm_decode_table entry is nullptr for instruction 0x" + debug_to_hex_string(instruction, 8));
-        // Optionally, set decoded.valid = false or handle error as needed
-        return decoded;
-    }
-    (this->*decode_func)(decoded);
-    return decoded;
-}
 
 FORCE_INLINE uint32_t ARMCPU::execOperand2imm(uint32_t imm, uint8_t rotate, uint32_t* carry_out) {
     if (rotate == 0) {
