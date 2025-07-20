@@ -322,22 +322,43 @@ void ARMCPU::exec_arm_smlal(uint32_t instruction) {
     }
 }
 
-
-// LDRH/STRH/LDRSB/LDRSH decoders
-#define ARM_HALFWORD_DECODER(name) \
-void ARMCPU::decode_arm_##name(ARMCachedInstruction& decoded) { \
-    DEBUG_LOG(std::string("decode_arm_" #name ": pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
-    decoded.rd = bits<15,12>(decoded.instruction); \
-    decoded.rn = bits<19,16>(decoded.instruction); \
-    decoded.rm = bits<3,0>(decoded.instruction); \
-    decoded.execute_func = &ARMCPU::execute_arm_##name; \
+void ARMCPU::exec_arm_ldrh(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldrh: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint32_t addr = parentCPU.R()[rn] + parentCPU.R()[rm];
+    parentCPU.R()[rd] = parentCPU.getMemory().read16(addr);
 }
 
-ARM_HALFWORD_DECODER(ldrh)
-ARM_HALFWORD_DECODER(strh)
-ARM_HALFWORD_DECODER(ldrsb)
-ARM_HALFWORD_DECODER(ldrsh)
+void ARMCPU::exec_arm_strh(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_strh: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint32_t addr = parentCPU.R()[rn] + parentCPU.R()[rm];
+    parentCPU.getMemory().write16(addr, parentCPU.R()[rd] & 0xFFFF);
+}
 
+void ARMCPU::exec_arm_ldrsb(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldrsb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint32_t addr = parentCPU.R()[rn] + parentCPU.R()[rm];
+    int8_t val = parentCPU.getMemory().read8(addr);
+    parentCPU.R()[rd] = (int32_t)val;
+}
+
+void ARMCPU::exec_arm_ldrsh(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldrsh: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint32_t addr = parentCPU.R()[rn] + parentCPU.R()[rm];
+    int16_t val = parentCPU.getMemory().read16(addr);
+    parentCPU.R()[rd] = (int32_t)val;
+}
 
 void ARMCPU::exec_arm_undefined(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
@@ -403,17 +424,24 @@ void ARMCPU::exec_arm_software_interrupt(uint32_t instruction) {
     // TODO: Implement SWI handler or exception logic as needed.
 }
 
-
-// Load/Store to/from Coprocessor
-#define ARM_COPROCESSOR_DECODER(name, type) \
-void ARMCPU::decode_arm_##name##_##type(ARMCachedInstruction& decoded) { \
-    DEBUG_LOG(std::string("decode_arm_" #name "_" #type ": pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
-    decoded.rs = bits<11,8>(decoded.instruction); /* Coprocessor number */ \
-    decoded.execute_func = &ARMCPU::execute_arm_undefined; \
-    DEBUG_ERROR(std::string("decode_arm_" #name "_" #type ": Coprocessor " #name " (" #type ") instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
+void ARMCPU::exec_arm_ldc_imm(uint32_t instruction) {
+    DEBUG_ERROR(std::string("exec_arm_ldc_imm: Coprocessor LDC (imm) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    // TODO: Implement coprocessor LDC (imm) logic if needed
 }
 
-ARM_COPROCESSOR_DECODER(ldc, imm)
-ARM_COPROCESSOR_DECODER(ldc, reg)
-ARM_COPROCESSOR_DECODER(stc, imm)
-ARM_COPROCESSOR_DECODER(stc, reg)
+void ARMCPU::exec_arm_ldc_reg(uint32_t instruction) {
+    DEBUG_ERROR(std::string("exec_arm_ldc_reg: Coprocessor LDC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    // TODO: Implement coprocessor LDC (reg) logic if needed
+}
+
+void ARMCPU::exec_arm_stc_imm(uint32_t instruction) {
+    DEBUG_ERROR(std::string("exec_arm_stc_imm: Coprocessor STC (imm) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    // TODO: Implement coprocessor STC (imm) logic if needed
+}
+
+void ARMCPU::exec_arm_stc_reg(uint32_t instruction) {
+    DEBUG_ERROR(std::string("exec_arm_stc_reg: Coprocessor STC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    // TODO: Implement coprocessor STC (reg) logic if needed
+}
+
+
