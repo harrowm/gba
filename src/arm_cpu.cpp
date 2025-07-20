@@ -290,84 +290,84 @@ void ARMCPU::arm_undefined(uint32_t instruction) {
 }
 
 // ARM instruction helper functions
-uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t shift_amount, uint32_t* carry_out) {
-    // Use switch statement for shift operations (reverted from function pointer optimization)
-    switch (shift_type) {
-        case 0: // LSL
-            if (shift_amount == 0) {
-                *carry_out = (value >> 31) & 1;
-                return value;
-            } else if (shift_amount < 32) {
-                *carry_out = (value >> (32 - shift_amount)) & 1;
-                return value << shift_amount;
-            } else if (shift_amount == 32) {
-                *carry_out = value & 1;
-                return 0;
-            } else {
-                *carry_out = 0;
-                return 0;
-            }
-        case 1: // LSR
-            if (shift_amount == 0) {
-                // Special case: LSR #0 is interpreted as LSR #32
-                *carry_out = (value >> 31) & 1;
-                return 0;
-            } else if (shift_amount < 32) {
-                *carry_out = (value >> (shift_amount - 1)) & 1;
-                return value >> shift_amount;
-            } else {
-                *carry_out = 0;
-                return 0;
-            }
-        case 2: // ASR
-            if (shift_amount == 0) {
-                // Special case: ASR #0 is interpreted as ASR #32
-                if (value & 0x80000000) {
-                    *carry_out = 1;
-                    return 0xFFFFFFFF;
-                } else {
-                    *carry_out = 0;
-                    return 0;
-                }
-            } else if (shift_amount < 32) {
-                *carry_out = (value >> (shift_amount - 1)) & 1;
-                // Use arithmetic shift (sign extension)
-                if (value & 0x80000000) {
-                    return (value >> shift_amount) | (~0U << (32 - shift_amount));
-                } else {
-                    return value >> shift_amount;
-                }
-            } else {
-                if (value & 0x80000000) {
-                    *carry_out = 1;
-                    return 0xFFFFFFFF;
-                } else {
-                    *carry_out = 0;
-                    return 0;
-                }
-            }
+// uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t shift_amount, uint32_t* carry_out) {
+//     // Use switch statement for shift operations (reverted from function pointer optimization)
+//     switch (shift_type) {
+//         case 0: // LSL
+//             if (shift_amount == 0) {
+//                 *carry_out = (value >> 31) & 1;
+//                 return value;
+//             } else if (shift_amount < 32) {
+//                 *carry_out = (value >> (32 - shift_amount)) & 1;
+//                 return value << shift_amount;
+//             } else if (shift_amount == 32) {
+//                 *carry_out = value & 1;
+//                 return 0;
+//             } else {
+//                 *carry_out = 0;
+//                 return 0;
+//             }
+//         case 1: // LSR
+//             if (shift_amount == 0) {
+//                 // Special case: LSR #0 is interpreted as LSR #32
+//                 *carry_out = (value >> 31) & 1;
+//                 return 0;
+//             } else if (shift_amount < 32) {
+//                 *carry_out = (value >> (shift_amount - 1)) & 1;
+//                 return value >> shift_amount;
+//             } else {
+//                 *carry_out = 0;
+//                 return 0;
+//             }
+//         case 2: // ASR
+//             if (shift_amount == 0) {
+//                 // Special case: ASR #0 is interpreted as ASR #32
+//                 if (value & 0x80000000) {
+//                     *carry_out = 1;
+//                     return 0xFFFFFFFF;
+//                 } else {
+//                     *carry_out = 0;
+//                     return 0;
+//                 }
+//             } else if (shift_amount < 32) {
+//                 *carry_out = (value >> (shift_amount - 1)) & 1;
+//                 // Use arithmetic shift (sign extension)
+//                 if (value & 0x80000000) {
+//                     return (value >> shift_amount) | (~0U << (32 - shift_amount));
+//                 } else {
+//                     return value >> shift_amount;
+//                 }
+//             } else {
+//                 if (value & 0x80000000) {
+//                     *carry_out = 1;
+//                     return 0xFFFFFFFF;
+//                 } else {
+//                     *carry_out = 0;
+//                     return 0;
+//                 }
+//             }
             
-        case 3: // ROR
-            if (shift_amount == 0) {
-                // Special case: ROR #0 is interpreted as RRX (rotate right with extend)
-                uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
-                *carry_out = value & 1;
-                return (value >> 1) | (old_carry << 31);
-            } else {
-                shift_amount %= 32; // Normalize rotation amount
-                if (shift_amount == 0) {
-                    // No rotation after normalization
-                    return value;
-                    // Carry unchanged
-                } else {
-                    *carry_out = (value >> (shift_amount - 1)) & 1;
-                    return ror32(value, shift_amount);
-                }
-            }
-    }
+//         case 3: // ROR
+//             if (shift_amount == 0) {
+//                 // Special case: ROR #0 is interpreted as RRX (rotate right with extend)
+//                 uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
+//                 *carry_out = value & 1;
+//                 return (value >> 1) | (old_carry << 31);
+//             } else {
+//                 shift_amount %= 32; // Normalize rotation amount
+//                 if (shift_amount == 0) {
+//                     // No rotation after normalization
+//                     return value;
+//                     // Carry unchanged
+//                 } else {
+//                     *carry_out = (value >> (shift_amount - 1)) & 1;
+//                     return ror32(value, shift_amount);
+//                 }
+//             }
+//     }
     
-    return value; // Should never reach here
-}
+//     return value; // Should never reach here
+// }
 
 // Cached condition checking for performance
 FORCE_INLINE bool ARMCPU::checkConditionCached(uint8_t condition) {
@@ -1329,7 +1329,7 @@ void ARMCPU::execute_arm_swpb(ARMCachedInstruction& cached) {
 }   
 
 void ARMCPU::execute_arm_undefined(ARMCachedInstruction& cached) {
-    DEBUG_LOG(std::string("execute_arm_illegal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
+    DEBUG_ERROR(std::string("execute_arm_illegal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(cached.instruction, 8));
     
     // Handle illegal instruction
     // parentCPU.setException(ARMException::IllegalInstruction);

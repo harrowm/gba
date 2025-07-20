@@ -223,7 +223,7 @@ ARM_HALFWORD_DECODER(ldrsh)
 // Undefined decoder
 void ARMCPU::decode_arm_undefined(ARMCachedInstruction& decoded) {
     DEBUG_ERROR(std::string("decode_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.execute_func = nullptr;
+    decoded.execute_func = &ARMCPU::execute_arm_undefined; 
 }
 
 void ARMCPU::decode_arm_mov_imm(ARMCachedInstruction& decoded) {
@@ -252,7 +252,7 @@ void ARMCPU::decode_arm_software_interrupt(ARMCachedInstruction& decoded) {
     DEBUG_LOG(std::string("decode_arm_software_interrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
     // SWI immediate is bits 23-0
     decoded.imm = bits<23,0>(decoded.instruction);
-    decoded.execute_func = nullptr; // Not implemented, or set to handler if available
+    decoded.execute_func = &ARMCPU::execute_arm_undefined;
     DEBUG_ERROR(std::string("decode_arm_software_interrupt: SWI instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
 }
 
@@ -262,7 +262,7 @@ void ARMCPU::decode_arm_software_interrupt(ARMCachedInstruction& decoded) {
 void ARMCPU::decode_arm_##name##_##type(ARMCachedInstruction& decoded) { \
     DEBUG_LOG(std::string("decode_arm_" #name "_" #type ": pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
     decoded.rs = bits<11,8>(decoded.instruction); /* Coprocessor number */ \
-    decoded.execute_func = nullptr; /* Not implemented */ \
+    decoded.execute_func = &ARMCPU::execute_arm_undefined; \
     DEBUG_ERROR(std::string("decode_arm_" #name "_" #type ": Coprocessor " #name " (" #type ") instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
 }
 

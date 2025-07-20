@@ -9,6 +9,7 @@
         "temp_arm_cpu": "cpp",
         "string": "cpp",
         "typeinfo": "cpp",
-        "typeindex": "cpp"
+        "typeindex": "cpp",
+        "__config": "cpp"
     }
 }
