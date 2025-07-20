@@ -302,16 +302,26 @@ void ARMCPU::exec_arm_smull(uint32_t instruction) {
     }
 }
 
-void ARMCPU::decode_arm_smlal(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_smlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rdHi = bits<19,16>(decoded.instruction);
-    decoded.rdLo = bits<15,12>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.rs = bits<11,8>(decoded.instruction);
-    decoded.signed_op = true;
-    decoded.accumulate = true;
-    decoded.execute_func = &ARMCPU::execute_arm_smlal;
+void ARMCPU::exec_arm_smlal(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_smlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rdHi = bits<19,16>(instruction);
+    uint8_t rdLo = bits<15,12>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+
+    // Get the accumulator value from RdHi/RdLo
+    int64_t acc = ((int64_t)(int32_t)parentCPU.R()[rdHi] << 32) | (uint32_t)parentCPU.R()[rdLo];
+    int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs] + acc;
+    parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+    parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+
+    if (set_flags && rdHi != 15 && rdLo != 15) {
+        // Update flags based on the result (N and Z)
+        updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+    }
 }
+
 
 // LDRH/STRH/LDRSB/LDRSH decoders
 #define ARM_HALFWORD_DECODER(name) \
@@ -328,40 +338,69 @@ ARM_HALFWORD_DECODER(strh)
 ARM_HALFWORD_DECODER(ldrsb)
 ARM_HALFWORD_DECODER(ldrsh)
 
-// Undefined decoder
-void ARMCPU::decode_arm_undefined(ARMCachedInstruction& decoded) {
-    DEBUG_ERROR(std::string("decode_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.execute_func = &ARMCPU::execute_arm_undefined; 
+
+void ARMCPU::exec_arm_undefined(uint32_t instruction) {
+    DEBUG_ERROR(std::string("exec_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    // Optionally halt, throw, or handle undefined instruction here
+    // For now, just log and return
 }
 
-void ARMCPU::decode_arm_mov_imm(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_mov_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rotate = bits<11,8>(decoded.instruction) * 2; 
-    decoded.imm = bits<7,0>(decoded.instruction);
+void ARMCPU::exec_arm_mov_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_mov_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+
+    // Apply rotation to immediate value
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    parentCPU.R()[rd] = value;
+
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(value, 0); // No carry for MOV
+    }
+}
+
+void ARMCPU::exec_arm_mov_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_mov_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint32_t shift_val;
+
+    uint8_t rs = bits<11,8>(instruction);
+    shift_val = parentCPU.R()[rs] & 0xFF;
     
-    decoded.execute_func = &ARMCPU::execute_arm_mov_imm;
+    uint32_t value = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: // LSL
+            value = value << shift_val;
+            break;
+        case 1: // LSR
+            value = shift_val ? (value >> shift_val) : 0;
+            break;
+        case 2: // ASR
+            value = shift_val ? ((int32_t)value >> shift_val) : (value & 0x80000000 ? 0xFFFFFFFF : 0);
+            break;
+        case 3: // ROR
+            value = shift_val ? ((value >> shift_val) | (value << (32 - shift_val))) : value;
+            break;
+    }
+    parentCPU.R()[rd] = value;
+
+    bool set_flags = bits<20,20>(instruction);
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(value, 0); // No carry for MOV
+    }
 }
 
-void ARMCPU::decode_arm_mov_reg(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_mov_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rs = bits<11,7>(decoded.instruction); // could be rs or imm depending on reg_shift
-    decoded.shift_type = bits<6,5>(decoded.instruction);
-    decoded.reg_shift = bits<4,4>(decoded.instruction); 
-    decoded.rm = bits<3,0>(decoded.instruction);
-
-    decoded.execute_func = &ARMCPU::execute_arm_mov_reg;
-}
-
-void ARMCPU::decode_arm_software_interrupt(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_software_interrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    // SWI immediate is bits 23-0
-    decoded.imm = bits<23,0>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_undefined;
-    DEBUG_ERROR(std::string("decode_arm_software_interrupt: SWI instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
+void ARMCPU::exec_arm_software_interrupt(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_software_interrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint32_t swi_imm = bits<23,0>(instruction);
+    // Handle software interrupt (SWI) here. Typically triggers a supervisor call or exception.
+    // For now, just log and optionally halt or signal exception.
+    DEBUG_ERROR(std::string("SWI executed: immediate=0x") + DEBUG_TO_HEX_STRING(swi_imm, 8) + ", pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
+    // TODO: Implement SWI handler or exception logic as needed.
 }
 
 
