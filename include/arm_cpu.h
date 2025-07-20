@@ -68,7 +68,30 @@ public:
     void switchToMode(uint32_t new_mode);
     bool checkMemoryAccess(uint32_t address, bool is_write, bool is_privileged);
 
+public:
+    // Condition code functions
+    // Condition functions as static member functions
+    static bool cond_eq(uint32_t flags) { return (flags & 0x4); }
+    static bool cond_ne(uint32_t flags) { return !(flags & 0x4); }
+    static bool cond_cs(uint32_t flags) { return (flags & 0x2); }
+    static bool cond_cc(uint32_t flags) { return !(flags & 0x2); }
+    static bool cond_mi(uint32_t flags) { return (flags & 0x8); }
+    static bool cond_pl(uint32_t flags) { return !(flags & 0x8); }
+    static bool cond_vs(uint32_t flags) { return (flags & 0x1); }
+    static bool cond_vc(uint32_t flags) { return !(flags & 0x1); }
+    static bool cond_hi(uint32_t flags) { return (flags & 0x2) && !(flags & 0x4); }
+    static bool cond_ls(uint32_t flags) { return !(flags & 0x2) || (flags & 0x4); }
+    static bool cond_ge(uint32_t flags) { return ((flags & 0x8) >> 3) == (flags & 0x1); }
+    static bool cond_lt(uint32_t flags) { return ((flags & 0x8) >> 3) != (flags & 0x1); }
+    static bool cond_gt(uint32_t flags) { return !(flags & 0x4) && (((flags & 0x8) >> 3) == (flags & 0x1)); }
+    static bool cond_le(uint32_t flags) { return (flags & 0x4) || (((flags & 0x8) >> 3) != (flags & 0x1)); }
+    static bool cond_al(uint32_t)        { return true; }
+    static bool cond_nv(uint32_t)        { return false; }
+
+    using CondFunc = bool(*)(uint32_t);
+    static const CondFunc condTable[16];
 private:
+
     ARMCachedInstruction decodeInstruction(uint32_t pc, uint32_t instruction);
     
     // ARM7TDMI instruction decode table using bits 27-20 and a check to see if 

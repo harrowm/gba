@@ -111,11 +111,30 @@ uint32_t ARMCPU::calculateInstructionCycles(uint32_t instruction) {
     return arm_calculate_instruction_cycles(instruction, pc, registers, cpsr);
 }
 
+const ARMCPU::CondFunc ARMCPU::condTable[16] = {
+    &ARMCPU::cond_eq, // 0: EQ
+    &ARMCPU::cond_ne, // 1: NE
+    &ARMCPU::cond_cs, // 2: CS
+    &ARMCPU::cond_cc, // 3: CC
+    &ARMCPU::cond_mi, // 4: MI
+    &ARMCPU::cond_pl, // 5: PL
+    &ARMCPU::cond_vs, // 6: VS
+    &ARMCPU::cond_vc, // 7: VC
+    &ARMCPU::cond_hi, // 8: HI
+    &ARMCPU::cond_ls, // 9: LS
+    &ARMCPU::cond_ge, // 10: GE
+    &ARMCPU::cond_lt, // 11: LT
+    &ARMCPU::cond_gt, // 12: GT
+    &ARMCPU::cond_le, // 13: LE
+    &ARMCPU::cond_al, // 14: AL
+    &ARMCPU::cond_nv  // 15: NV
+};
+
 bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
     ARMCachedInstruction* cached = instruction_cache.lookup(pc, instruction);
     
     if (cached) {
-        if (!checkConditionCached(cached->condition)) return false;
+        if(!condTable[cached->condition](parentCPU.CPSR() >> 28)) return false;
         (this->*(cached->execute_func))(*cached);
         if (exception_taken) return true;
         return cached->pc_modified;
@@ -125,7 +144,7 @@ bool ARMCPU::executeWithCache(uint32_t pc, uint32_t instruction) {
                    " Instruction=0x" + debug_to_hex_string(instruction, 8) + " using fn table index: 0x" + debug_to_hex_string(ind, 3));
         ARMCachedInstruction decoded = decodeInstruction(pc, instruction);
         instruction_cache.insert(pc, decoded);
-        if (!checkConditionCached(decoded.condition)) return false;
+        if(!ARMCPU::condTable[decoded.condition](parentCPU.CPSR() >> 28)) return false;
         (this->*(decoded.execute_func))(decoded);
         if (exception_taken) return true;
         return decoded.pc_modified;
@@ -244,153 +263,6 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
                " new mode=0x" + debug_to_hex_string(new_mode, 2) + 
                " disable_irq=" + std::to_string(disable_irq) + 
                " disable_fiq=" + std::to_string(disable_fiq));
-}
-
-// Coprocessor functions
-void ARMCPU::arm_coprocessor_operation(uint32_t instruction) {
-    // In GBA there are no coprocessors, so this should trigger undefined instruction handler
-    arm_undefined(instruction);
-}
-
-void ARMCPU::arm_coprocessor_transfer(uint32_t instruction) {
-    // In GBA there are no coprocessors, so this should trigger undefined instruction handler
-    arm_undefined(instruction);
-}
-
-void ARMCPU::arm_coprocessor_register(uint32_t instruction) {
-    // In GBA there are no coprocessors, so this should trigger undefined instruction handler
-    arm_undefined(instruction);
-}
-
-void ARMCPU::arm_undefined(uint32_t instruction) {
-    DEBUG_INFO("Undefined instruction encountered: 0x" + 
-               debug_to_hex_string(instruction, 8));
-    
-    // Calculate the return address (PC+4)
-    uint32_t return_address = parentCPU.R()[15] + 4;
-
-    DEBUG_INFO("Return address for undefined instruction: 0x" + 
-               debug_to_hex_string(return_address, 8));
-
-    // Save user LR before exception for test validation
-    uint32_t user_lr = parentCPU.R()[14];
-
-    // Switch to undefined instruction mode and handle the exception
-    handleException(0x00000004, 0x1B, true, false);
-    exception_taken = true;
-
-    // Restore user LR if we return to user mode (for test)
-    if ((parentCPU.CPSR() & 0x1F) == 0x10) {
-        parentCPU.R()[14] = user_lr;
-    }
-
-    // Prevent unused variable warnings in release builds
-    UNUSED(instruction);
-    UNUSED(return_address);
-}
-
-// ARM instruction helper functions
-// uint32_t ARMCPU::arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t shift_amount, uint32_t* carry_out) {
-//     // Use switch statement for shift operations (reverted from function pointer optimization)
-//     switch (shift_type) {
-//         case 0: // LSL
-//             if (shift_amount == 0) {
-//                 *carry_out = (value >> 31) & 1;
-//                 return value;
-//             } else if (shift_amount < 32) {
-//                 *carry_out = (value >> (32 - shift_amount)) & 1;
-//                 return value << shift_amount;
-//             } else if (shift_amount == 32) {
-//                 *carry_out = value & 1;
-//                 return 0;
-//             } else {
-//                 *carry_out = 0;
-//                 return 0;
-//             }
-//         case 1: // LSR
-//             if (shift_amount == 0) {
-//                 // Special case: LSR #0 is interpreted as LSR #32
-//                 *carry_out = (value >> 31) & 1;
-//                 return 0;
-//             } else if (shift_amount < 32) {
-//                 *carry_out = (value >> (shift_amount - 1)) & 1;
-//                 return value >> shift_amount;
-//             } else {
-//                 *carry_out = 0;
-//                 return 0;
-//             }
-//         case 2: // ASR
-//             if (shift_amount == 0) {
-//                 // Special case: ASR #0 is interpreted as ASR #32
-//                 if (value & 0x80000000) {
-//                     *carry_out = 1;
-//                     return 0xFFFFFFFF;
-//                 } else {
-//                     *carry_out = 0;
-//                     return 0;
-//                 }
-//             } else if (shift_amount < 32) {
-//                 *carry_out = (value >> (shift_amount - 1)) & 1;
-//                 // Use arithmetic shift (sign extension)
-//                 if (value & 0x80000000) {
-//                     return (value >> shift_amount) | (~0U << (32 - shift_amount));
-//                 } else {
-//                     return value >> shift_amount;
-//                 }
-//             } else {
-//                 if (value & 0x80000000) {
-//                     *carry_out = 1;
-//                     return 0xFFFFFFFF;
-//                 } else {
-//                     *carry_out = 0;
-//                     return 0;
-//                 }
-//             }
-            
-//         case 3: // ROR
-//             if (shift_amount == 0) {
-//                 // Special case: ROR #0 is interpreted as RRX (rotate right with extend)
-//                 uint32_t old_carry = (parentCPU.CPSR() >> 29) & 1;
-//                 *carry_out = value & 1;
-//                 return (value >> 1) | (old_carry << 31);
-//             } else {
-//                 shift_amount %= 32; // Normalize rotation amount
-//                 if (shift_amount == 0) {
-//                     // No rotation after normalization
-//                     return value;
-//                     // Carry unchanged
-//                 } else {
-//                     *carry_out = (value >> (shift_amount - 1)) & 1;
-//                     return ror32(value, shift_amount);
-//                 }
-//             }
-//     }
-    
-//     return value; // Should never reach here
-// }
-
-// Cached condition checking for performance
-FORCE_INLINE bool ARMCPU::checkConditionCached(uint8_t condition) {
-    uint32_t flags = parentCPU.CPSR() >> 28;
-    switch (condition) {
-        case 0x0: return (flags & 0x4) != 0;           // EQ: Z=1
-        case 0x1: return (flags & 0x4) == 0;           // NE: Z=0
-        case 0x2: return (flags & 0x2) != 0;           // CS: C=1
-        case 0x3: return (flags & 0x2) == 0;           // CC: C=0
-        case 0x4: return (flags & 0x8) != 0;           // MI: N=1
-        case 0x5: return (flags & 0x8) == 0;           // PL: N=0
-        case 0x6: return (flags & 0x1) != 0;           // VS: V=1
-        case 0x7: return (flags & 0x1) == 0;           // VC: V=0
-        case 0x8: return (flags & 0x2) && !(flags & 0x4); // HI: C=1 && Z=0
-        case 0x9: return !(flags & 0x2) || (flags & 0x4); // LS: C=0 || Z=1
-        case 0xA: return !((flags & 0x8) >> 3) == !((flags & 0x1)); // GE: N==V
-        case 0xB: return !((flags & 0x8) >> 3) != !((flags & 0x1)); // LT: N!=V
-        case 0xC: return !(flags & 0x4) && (!((flags & 0x8) >> 3) == !((flags & 0x1))); // GT: Z=0 && N==V
-        case 0xD: return (flags & 0x4) || (!((flags & 0x8) >> 3) != !((flags & 0x1))); // LE: Z=1 || N!=V
-        case 0xE: return true;                         // AL: Always
-        case 0xF: return false;                        // NV: Never (undefined in ARMv4)
-        default: return false;
-    }
 }
 
 // Main instruction decoder
