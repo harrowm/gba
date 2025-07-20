@@ -51,7 +51,7 @@
 
 #### 2. **CPU Integration** (`include/arm_cpu.h`, `src/arm_cpu.cpp`):
    - Integrated cache into ARM CPU class
-   - Cache-aware instruction execution pipeline (`executeWithCache`)
+   - Cache-aware instruction execution pipeline (`executeInstruction`)
    - Decode helpers for all major instruction types
    - Cache statistics and management methods
 

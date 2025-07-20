@@ -69,7 +69,7 @@ tests/
 ```
 
 ### Key Implementation Features
-1. **executeWithCache()**: Cache-aware ARM instruction execution
+1. **executeInstruction()**: Cache-aware ARM instruction execution
 2. **ARMInstructionCache**: Direct-mapped cache with pre-decoded instructions
 3. **Cache Invalidation**: Callback-based system for self-modifying code
 4. **Statistics API**: Real-time cache performance monitoring
