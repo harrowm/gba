@@ -57,51 +57,41 @@ ARM_DP_DECODER_REG(bic)
 ARM_DP_DECODER_IMM(mvn)
 ARM_DP_DECODER_REG(mvn)
 
-void ARMCPU::decode_arm_strb_imm(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_strb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.imm = bits<11,0>(decoded.instruction);
-    decoded.pre_index = bits<24,24>(decoded.instruction);
-    decoded.up = bits<23,23>(decoded.instruction);
-    decoded.writeback = bits<21,21>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_strb_imm;
+// Macro for ARM single data transfer decoders (STR/LDR/STRB/LDRB, IMM/REG)
+#define ARM_SDT_DECODER_IMM(name) \
+void ARMCPU::decode_arm_##name##_imm(ARMCachedInstruction& decoded) { \
+    DEBUG_LOG(std::string("decode_arm_" #name "_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
+    decoded.rd = bits<15,12>(decoded.instruction); \
+    decoded.rn = bits<19,16>(decoded.instruction); \
+    decoded.imm = bits<11,0>(decoded.instruction); \
+    decoded.pre_index = bits<24,24>(decoded.instruction); \
+    decoded.up = bits<23,23>(decoded.instruction); \
+    decoded.writeback = bits<21,21>(decoded.instruction); \
+    decoded.execute_func = &ARMCPU::execute_arm_##name##_imm; \
 }
 
-void ARMCPU::decode_arm_strb_reg(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_strb_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.offset_type = bits<6,5>(decoded.instruction);
-    decoded.pre_index = bits<24,24>(decoded.instruction);
-    decoded.up = bits<23,23>(decoded.instruction);
-    decoded.writeback = bits<21,21>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_strb_reg;
+#define ARM_SDT_DECODER_REG(name) \
+void ARMCPU::decode_arm_##name##_reg(ARMCachedInstruction& decoded) { \
+    DEBUG_LOG(std::string("decode_arm_" #name "_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
+    decoded.rd = bits<15,12>(decoded.instruction); \
+    decoded.rn = bits<19,16>(decoded.instruction); \
+    decoded.rm = bits<3,0>(decoded.instruction); \
+    decoded.offset_type = bits<6,5>(decoded.instruction); \
+    decoded.pre_index = bits<24,24>(decoded.instruction); \
+    decoded.up = bits<23,23>(decoded.instruction); \
+    decoded.writeback = bits<21,21>(decoded.instruction); \
+    decoded.execute_func = &ARMCPU::execute_arm_##name##_reg; \
 }
 
-void ARMCPU::decode_arm_ldrb_imm(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_ldrb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.imm = bits<11,0>(decoded.instruction);
-    decoded.pre_index = bits<24,24>(decoded.instruction);
-    decoded.up = bits<23,23>(decoded.instruction);
-    decoded.writeback = bits<21,21>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_ldrb_imm;
-}
+ARM_SDT_DECODER_IMM(strb)
+ARM_SDT_DECODER_REG(strb)
+ARM_SDT_DECODER_IMM(ldrb)
+ARM_SDT_DECODER_REG(ldrb)
+ARM_SDT_DECODER_IMM(str)
+ARM_SDT_DECODER_REG(str)
+ARM_SDT_DECODER_IMM(ldr)
+ARM_SDT_DECODER_REG(ldr)
 
-void ARMCPU::decode_arm_ldrb_reg(ARMCachedInstruction& decoded) {
-    DEBUG_LOG(std::string("decode_arm_ldrb_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.offset_type = bits<6,5>(decoded.instruction);
-    decoded.pre_index = bits<24,24>(decoded.instruction);
-    decoded.up = bits<23,23>(decoded.instruction);
-    decoded.writeback = bits<21,21>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_ldrb_reg;
-}
 
 // STM/LDM decoders
 void ARMCPU::decode_arm_stm(ARMCachedInstruction& decoded) {
@@ -284,48 +274,6 @@ void ARMCPU::decode_arm_software_interrupt(ARMCachedInstruction& decoded) {
     DEBUG_ERROR(std::string("decode_arm_software_interrupt: SWI instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8));
 }
 
-
-void ARMCPU::decode_arm_str_imm(ARMCachedInstruction& decoded) {
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.imm = bits<11,0>(decoded.instruction);
-    decoded.pre_index = bits<24,24>(decoded.instruction);
-    decoded.up = bits<23,23>(decoded.instruction);
-    decoded.writeback = bits<21,21>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_str_imm;
-}
-
-void ARMCPU::decode_arm_str_reg(ARMCachedInstruction& decoded) {
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.offset_type = bits<6,5>(decoded.instruction);
-    decoded.pre_index = bits<24,24>(decoded.instruction);
-    decoded.up = bits<23,23>(decoded.instruction);
-    decoded.writeback = bits<21,21>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_str_reg;
-}
-
-void ARMCPU::decode_arm_ldr_imm(ARMCachedInstruction& decoded) {
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.imm = bits<11,0>(decoded.instruction);
-    decoded.pre_index = bits<24,24>(decoded.instruction);
-    decoded.up = bits<23,23>(decoded.instruction);
-    decoded.writeback = bits<21,21>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_ldr_imm;
-}
-
-void ARMCPU::decode_arm_ldr_reg(ARMCachedInstruction& decoded) {
-    decoded.rd = bits<15,12>(decoded.instruction);
-    decoded.rn = bits<19,16>(decoded.instruction);
-    decoded.rm = bits<3,0>(decoded.instruction);
-    decoded.offset_type = bits<6,5>(decoded.instruction);
-    decoded.pre_index = bits<24,24>(decoded.instruction);
-    decoded.up = bits<23,23>(decoded.instruction);
-    decoded.writeback = bits<21,21>(decoded.instruction);
-    decoded.execute_func = &ARMCPU::execute_arm_ldr_reg;
-}
 
 // LDC (Load to Coprocessor from Memory, Immediate) decoder stub
 void ARMCPU::decode_arm_ldc_imm(ARMCachedInstruction& decoded) {
