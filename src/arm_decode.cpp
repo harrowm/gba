@@ -923,14 +923,12 @@ void ARMCPU::exec_arm_umull(uint32_t instruction) {
     }
 }
 
-
 void ARMCPU::exec_arm_umlal(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_umlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rdHi = bits<19,16>(instruction);
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
-    bool set_flags = bits<20,20>(instruction);
 
     // Get the accumulator value from RdHi/RdLo
     uint64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | (uint64_t)parentCPU.R()[rdLo];
@@ -951,7 +949,6 @@ void ARMCPU::exec_arm_smull(uint32_t instruction) {
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
-    bool set_flags = bits<20,20>(instruction);
 
     int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs];
     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
@@ -970,7 +967,6 @@ void ARMCPU::exec_arm_smlal(uint32_t instruction) {
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
-    bool set_flags = bits<20,20>(instruction);
 
     // Get the accumulator value from RdHi/RdLo
     int64_t acc = ((int64_t)(int32_t)parentCPU.R()[rdHi] << 32) | (uint32_t)parentCPU.R()[rdLo];

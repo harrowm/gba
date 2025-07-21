@@ -21,6 +21,7 @@ ARMCPU::~ARMCPU() {
     // Cleanup logic if necessary
 }
 
+// HACK - exception taken looks like a bodge ..
 void ARMCPU::execute(uint32_t cycles) {
     exception_taken = false;
     while (cycles > 0) {
@@ -33,16 +34,12 @@ void ARMCPU::execute(uint32_t cycles) {
         uint32_t pc = parentCPU.R()[15]; // Get current PC
         uint32_t instruction = parentCPU.getMemory().read32(pc); // Fetch instruction
 
-        // Use cached execution path
-        bool pc_modified = executeInstruction(pc, instruction);
+        executeInstruction(pc, instruction);
         if (exception_taken) {
             break;
         }
-        // Only increment PC if instruction didn't modify it (e.g., not a branch)
-        if (!pc_modified) {
-            parentCPU.R()[15] = pc + 4;
-            DEBUG_INFO("Incremented PC to: 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
-        }
+        
+        DEBUG_INFO("PC now: 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
         cycles -= 1; // Placeholder for cycle deduction
     }
 }
@@ -76,12 +73,8 @@ void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
         // Check if instruction will complete before next timing event
         if (instruction_cycles <= cycles_until_event) {
             // Execute instruction normally with cache
-            bool pc_modified = executeInstruction(pc, instruction);
-            
-            if (!pc_modified) {
-                parentCPU.R()[15] = pc + 4;
-            }
-            
+            executeInstruction(pc, instruction);
+        
             // Update timing
             timing_advance(timing, instruction_cycles);
             cycles -= instruction_cycles;
@@ -129,7 +122,7 @@ const ARMCPU::CondFunc ARMCPU::condTable[16] = {
     &ARMCPU::cond_nv  // 15: NV
 };
 
-bool ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
+void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     UNUSED(pc); // maybe useful for debugging
 
     uint32_t index = (bits<27,20>(instruction) << 1) | (bits<7,4>(instruction) == 0x9);
@@ -139,16 +132,11 @@ bool ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     // Check if condition is met before executing instruction
     uint8_t condition = bits<31, 28>(instruction);
     if(!ARMCPU::condTable[condition](parentCPU.CPSR() >> 28)) 
-        return false;
-
-    // HACK decoded.pc_modified = (decoded.rd == 15);
+        return ;
 
     // .. and call the exec handler for the instruction
     auto exec_func = arm_exec_table[index];
     (this->*exec_func)(instruction);
-
-    if (exception_taken) return true;
-    return true; // HACK decoded.pc_modified;
 }
 
 // Optimized flag update function for logical operations (AND, EOR, TST, TEQ, etc.)
