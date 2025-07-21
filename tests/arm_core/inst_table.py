@@ -67,20 +67,21 @@ def classify(bits_27_20, mul_swp_bit):
 
     # Single Data Transfer: b27=0, b26=1, mul_swp_bit=0
     if b27 == 0 and b26 == 1 and mul_swp_bit == 0:
+        # STR/LDR/STRB/LDRB immediate: distinguish pre/post by b24
         if b20 == 0 and b22 == 0 and b25 == 1:
-            return "STR_IMM"
+            return "STR_IMM_PRE" if b24 == 1 else "STR_IMM_POST"
         elif b20 == 0 and b22 == 0 and b25 == 0:
-            return "STR_REG"
+            return "STR_REG_PRE" if b24 == 1 else "STR_REG_POST"
         elif b20 == 0 and b22 == 1 and b25 == 1:
-            return "STRB_IMM"
+            return "STRB_IMM_PRE" if b24 == 1 else "STRB_IMM_POST"
         elif b20 == 0 and b22 == 1 and b25 == 0:
             return "STRB_REG"
         elif b20 == 1 and b22 == 0 and b25 == 1:
-            return "LDR_IMM"
+            return "LDR_IMM_PRE" if b24 == 1 else "LDR_IMM_POST"
         elif b20 == 1 and b22 == 0 and b25 == 0:
             return "LDR_REG"
         elif b20 == 1 and b22 == 1 and b25 == 1:
-            return "LDRB_IMM"
+            return "LDRB_IMM_PRE" if b24 == 1 else "LDRB_IMM_POST"
         elif b20 == 1 and b22 == 1 and b25 == 0:
             return "LDRB_REG"
         else:
@@ -134,6 +135,14 @@ def classify(bits_27_20, mul_swp_bit):
     return "Undefined/Reserved"
 
 type_to_handler = {
+    "STR_IMM_PRE": "exec_arm_str_imm_pre",
+    "STR_IMM_POST": "exec_arm_str_imm_post",
+    "STRB_IMM_PRE": "exec_arm_strb_imm_pre",
+    "STRB_IMM_POST": "exec_arm_strb_imm_post",
+    "LDR_IMM_PRE": "exec_arm_ldr_imm_pre",
+    "LDR_IMM_POST": "exec_arm_ldr_imm_post",
+    "LDRB_IMM_PRE": "exec_arm_ldrb_imm_pre",
+    "LDRB_IMM_POST": "exec_arm_ldrb_imm_post",
     "MULS": "exec_arm_mul",
     "MLAS": "exec_arm_mla",
     "UMULLS": "exec_arm_umull",
@@ -181,13 +190,8 @@ type_to_handler = {
     "MVN_REG": "exec_arm_mvn_reg",
     "MVN_IMM": "exec_arm_mvn_imm",
     "STR_IMM": "exec_arm_str_imm",
-    "STR_REG": "exec_arm_str_reg",
-    "STRB_IMM": "exec_arm_strb_imm",
-    "STRB_REG": "exec_arm_strb_reg",
-    "LDR_IMM": "exec_arm_ldr_imm",
-    "LDR_REG": "exec_arm_ldr_reg",
-    "LDRB_IMM": "exec_arm_ldrb_imm",
-    "LDRB_REG": "exec_arm_ldrb_reg",
+    "STR_REG_PRE": "exec_arm_str_reg_pre",
+    "STR_REG_POST": "exec_arm_str_reg_post",
     "LDM": "exec_arm_ldm",
     "STM": "exec_arm_stm",
     "B": "exec_arm_b",

@@ -534,105 +534,130 @@ void ARMCPU::exec_arm_teq_reg(uint32_t instruction) {
 
 // HACK .. these load/store use bits in the decoded instruction index .. should be able to simplify these .. 
 
-void ARMCPU::exec_arm_str_imm(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_str_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+void ARMCPU::exec_arm_str_imm_pre(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
-    bool pre_index = bits<24,24>(instruction);
     bool up = bits<23,23>(instruction);
     bool writeback = bits<21,21>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    if (pre_index) {
-        parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
-        if (writeback) parentCPU.R()[rn] = addr;
-    } else {
-        parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
-        if (writeback) parentCPU.R()[rn] = addr;
-    }
+    parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
+    if (writeback) parentCPU.R()[rn] = addr;
 }
 
-void ARMCPU::exec_arm_str_reg(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_str_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+void ARMCPU::exec_arm_str_imm_post(uint32_t instruction) {
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint32_t imm = bits<11,0>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
+    uint32_t addr = up ? base + imm : base - imm;
+    if (writeback) parentCPU.R()[rn] = addr;
+}
+
+void ARMCPU::exec_arm_str_reg_pre(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    // uint8_t offset_type = bits<6,5>(instruction);
-    bool pre_index = bits<24,24>(instruction);
     bool up = bits<23,23>(instruction);
     bool writeback = bits<21,21>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
-    if (pre_index) {
-        parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
-        if (writeback) parentCPU.R()[rn] = addr;
-    } else {
-        parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
-        if (writeback) parentCPU.R()[rn] = addr;
-    }
+    parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
+    if (writeback) parentCPU.R()[rn] = addr;
 }
 
-void ARMCPU::exec_arm_ldr_imm(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_ldr_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+void ARMCPU::exec_arm_str_reg_post(uint32_t instruction) {
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t offset = parentCPU.R()[rm];
+    parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
+    uint32_t addr = up ? base + offset : base - offset;
+    if (writeback) parentCPU.R()[rn] = addr;
+}
+
+void ARMCPU::exec_arm_ldr_imm_pre(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
-    bool pre_index = bits<24,24>(instruction);
     bool up = bits<23,23>(instruction);
     bool writeback = bits<21,21>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    if (pre_index) {
-        parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
-        if (writeback) parentCPU.R()[rn] = addr;
-    } else {
-        parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
-        if (writeback) parentCPU.R()[rn] = addr;
-    }
+    parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
+    if (writeback) parentCPU.R()[rn] = addr;
 }
 
-void ARMCPU::exec_arm_ldr_reg(uint32_t instruction) {
+void ARMCPU::exec_arm_ldr_imm_post(uint32_t instruction) {
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint32_t imm = bits<11,0>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
+    uint32_t addr = up ? base + imm : base - imm;
+    if (writeback) parentCPU.R()[rn] = addr;
+}
+
+void ARMCPU::exec_arm_ldr_reg_pre(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_ldr_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    // uint8_t offset_type = bits<6,5>(instruction);
-    bool pre_index = bits<24,24>(instruction);
     bool up = bits<23,23>(instruction);
     bool writeback = bits<21,21>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
-    if (pre_index) {
-        parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
-        if (writeback) parentCPU.R()[rn] = addr;
-    } else {
-        parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
-        if (writeback) parentCPU.R()[rn] = addr;
-    }
+    parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
+    if (writeback) parentCPU.R()[rn] = addr;
 }
 
+void ARMCPU::exec_arm_ldr_reg_post(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldr_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t offset = parentCPU.R()[rm];
+    uint32_t addr = up ? base + offset : base - offset;
+    parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
+    if (writeback) parentCPU.R()[rn] = addr;
+}
 
-
-void ARMCPU::exec_arm_strb_imm(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_strb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+void ARMCPU::exec_arm_strb_imm_pre(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
-    bool pre_index = bits<24,24>(instruction);
     bool up = bits<23,23>(instruction);
     bool writeback = bits<21,21>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    if (pre_index) {
-        parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
-        if (writeback) parentCPU.R()[rn] = addr;
-    } else {
-        parentCPU.getMemory().write8(base, parentCPU.R()[rd] & 0xFF);
-        if (writeback) parentCPU.R()[rn] = addr;
-    }
+    parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
+    if (writeback) parentCPU.R()[rn] = addr;
+}
+
+void ARMCPU::exec_arm_strb_imm_post(uint32_t instruction) {
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint32_t imm = bits<11,0>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    parentCPU.getMemory().write8(base, parentCPU.R()[rd] & 0xFF);
+    uint32_t addr = up ? base + imm : base - imm;
+    if (writeback) parentCPU.R()[rn] = addr;
 }
 
 void ARMCPU::exec_arm_strb_reg(uint32_t instruction) {
@@ -656,45 +681,57 @@ void ARMCPU::exec_arm_strb_reg(uint32_t instruction) {
     }
 }
 
-void ARMCPU::exec_arm_ldrb_imm(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_ldrb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+void ARMCPU::exec_arm_ldrb_imm_pre(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
-    bool pre_index = bits<24,24>(instruction);
     bool up = bits<23,23>(instruction);
     bool writeback = bits<21,21>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    if (pre_index) {
-        parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
-        if (writeback) parentCPU.R()[rn] = addr;
-    } else {
-        parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
-        if (writeback) parentCPU.R()[rn] = addr;
-    }
+    parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
+    if (writeback) parentCPU.R()[rn] = addr;
 }
 
-void ARMCPU::exec_arm_ldrb_reg(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_ldrb_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+void ARMCPU::exec_arm_ldrb_imm_post(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
-    uint8_t rm = bits<3,0>(instruction);
-    // uint8_t offset_type = bits<6,5>(instruction);
-    bool pre_index = bits<24,24>(instruction);
+    uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
     bool writeback = bits<21,21>(instruction);
     uint32_t base = parentCPU.R()[rn];
-    uint32_t offset = parentCPU.R()[rm];
-    uint32_t addr = up ? base + offset : base - offset;
-    if (pre_index) {
-        parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
-        if (writeback) parentCPU.R()[rn] = addr;
-    } else {
-        parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
-        if (writeback) parentCPU.R()[rn] = addr;
-    }
+    parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
+    uint32_t addr = up ? base + imm : base - imm;
+    if (writeback) parentCPU.R()[rn] = addr;
 }
+
+// void ARMCPU::exec_arm_ldr_reg_pre(uint32_t instruction) {
+//     uint8_t rn = bits<19,16>(instruction);
+//     uint8_t rd = bits<15,12>(instruction);
+//     uint8_t rm = bits<3,0>(instruction);
+//     // uint8_t offset_type = bits<6,5>(instruction);
+//     bool up = bits<23,23>(instruction);
+//     bool writeback = bits<21,21>(instruction);
+//     uint32_t base = parentCPU.R()[rn];
+//     uint32_t offset = parentCPU.R()[rm];
+//     uint32_t addr = up ? base + offset : base - offset;
+//     parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
+//     if (writeback) parentCPU.R()[rn] = addr;
+// }
+
+// void ARMCPU::exec_arm_ldr_reg_post(uint32_t instruction) {
+//     uint8_t rn = bits<19,16>(instruction);
+//     uint8_t rd = bits<15,12>(instruction);
+//     uint8_t rm = bits<3,0>(instruction);
+//     // uint8_t offset_type = bits<6,5>(instruction);
+//     bool up = bits<23,23>(instruction);
+//     bool writeback = bits<21,21>(instruction);
+//     uint32_t base = parentCPU.R()[rn];
+//     uint32_t offset = parentCPU.R()[rm];
+//     uint32_t addr = up ? base + offset : base - offset;
+//     parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
+//     if (writeback) parentCPU.R()[rn] = addr;
+// }
 
 void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_ldm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
