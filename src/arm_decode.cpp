@@ -1023,9 +1023,8 @@ void ARMCPU::exec_arm_ldrsh(uint32_t instruction) {
 
 void ARMCPU::exec_arm_undefined(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
-    // Optionally halt, throw, or handle undefined instruction here
-    // For now, just log and return
-    parentCPU.R()[15] += 4; // Increment PC for next instruction
+    // Trigger ARM undefined instruction exception
+    handleException(0x04, 0x1B, true, false); // Vector 0x04, mode 0x1B (Undefined), disable IRQ
 }
 
 void ARMCPU::exec_arm_mov_imm(uint32_t instruction) {

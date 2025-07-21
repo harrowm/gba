@@ -129,7 +129,7 @@ public:
         DEBUG_INFO("setMode: BEFORE swap, mode=" + std::to_string((int)oldMode) + ", SP=0x" + debug_to_hex_string(registers[13], 8) + ", LR=0x" + debug_to_hex_string(registers[14], 8));
         DEBUG_INFO(std::string("setMode: switching from ") + std::to_string((int)oldMode) + " to " + std::to_string((int)newMode));
         assert((int)newMode >= 0x10 && (int)newMode <= 0x1F && "Invalid newMode in setMode");
-        if (oldMode == newMode) return;
+        // Always update CPSR mode bits, even if mode is unchanged
         // Save current SP/LR to bank
         switch (oldMode) {
             case FIQ: banked_r13_fiq = registers[13]; banked_r14_fiq = registers[14]; break;
@@ -141,20 +141,22 @@ public:
             case SYS: banked_r13_usr = registers[13]; banked_r14_usr = registers[14]; break;
             default: break;
         }
-        // Load new SP/LR from bank
+        // Update CPSR mode bits BEFORE loading new banked registers
+        cpsr = (cpsr & ~0x1F) | (uint32_t)newMode;
+        // Load new SP from bank
         switch (newMode) {
-            case FIQ: registers[13] = banked_r13_fiq; registers[14] = banked_r14_fiq; break;
-            case SVC: registers[13] = banked_r13_svc; registers[14] = banked_r14_svc; break;
-            case ABT: registers[13] = banked_r13_abt; registers[14] = banked_r14_abt; break;
-            case IRQ: registers[13] = banked_r13_irq; registers[14] = banked_r14_irq; break;
-            case UND: registers[13] = banked_r13_und; registers[14] = banked_r14_und; break;
+            case FIQ: registers[13] = banked_r13_fiq; break;
+            case SVC: registers[13] = banked_r13_svc; break;
+            case ABT: registers[13] = banked_r13_abt; break;
+            case IRQ: registers[13] = banked_r13_irq; break;
+            case UND: registers[13] = banked_r13_und; break;
             case USER:
-            case SYS: registers[13] = banked_r13_usr; registers[14] = banked_r14_usr; break;
+            case SYS: registers[13] = banked_r13_usr; break;
             default: break;
         }
+        // Always update LR after mode switch to match banked LR
+        registers[14] = bankedLR(newMode);
         DEBUG_INFO("setMode: AFTER swap, mode=" + std::to_string((int)newMode) + ", SP=0x" + debug_to_hex_string(registers[13], 8) + ", LR=0x" + debug_to_hex_string(registers[14], 8));
-        // Update CPSR mode bits
-        cpsr = (cpsr & ~0x1F) | (uint32_t)newMode;
     }
     Memory& getMemory() { return memory; }
     TimingState& getTiming() { return timing; } // Access to timing state
