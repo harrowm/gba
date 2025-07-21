@@ -722,7 +722,8 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     cpu.R()[3] = 0x9ABCDEF0;
     cpu.R()[0] = 0;
     cpu.R()[1] = 0;
-    uint32_t umull_inst = 0xE0820392; // UMULL R0, R1, R2, R3
+    uint32_t umull_inst = 0xE0810392; // UMULL R0, R1, R2, R3
+    
     memory.write32(0x00000000, umull_inst);
     uint32_t src2_umull = cpu.R()[2];
     uint32_t src3_umull = cpu.R()[3];
@@ -753,7 +754,7 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     cpu.R()[3] = (uint32_t)5678;
     cpu.R()[0] = 0;
     cpu.R()[1] = 0;
-    uint32_t smull_inst = 0xE0C20392; // SMULL R0, R1, R2, R3
+    uint32_t smull_inst = 0xE0C10392; // SMULL R0, R1, R2, R3
     memory.write32(0x00000008, smull_inst);
     cpu.R()[15] = 0x00000008;
     int32_t src2_smull = (int32_t)cpu.R()[2];
@@ -808,7 +809,7 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     EXPECT_EQ(cpu.R()[1], (uint32_t)(expected_neg >> 32)) << "SMULL negative high failed";
 
     // --- S bit: UMULLS, SMULLS, UMLALS, SMLALS (check flags) ---
-    uint32_t umulls_inst = 0xE0920392; // UMULLS R0, R1, R2, R3 (S bit set)
+    uint32_t umulls_inst = 0xE0910392; // UMULLS R0, R1, R2, R3 (S bit set)
     cpu.R()[2] = 0xFFFFFFFF;
     cpu.R()[3] = 2;
     cpu.R()[0] = 0;
