@@ -42,15 +42,6 @@ bool CPU::getFlag(uint32_t flag) const {
     return (cpsr & flag) != 0;
 }
 
-
-void CPU::setCPUState(const CPUState& state) {
-    DEBUG_INFO("Setting CPU state");
-    for (int i = 0; i < 16; ++i) {
-        registers[i] = state.registers[i];
-    }
-    cpsr = state.cpsr;
-}
-
 CPU::CPUState CPU::getCPUState() const {
     DEBUG_INFO("Getting CPU state");
     CPUState state;

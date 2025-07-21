@@ -276,7 +276,6 @@ public:
     void clearFlag(uint32_t flag);
     bool getFlag(uint32_t flag) const;
 
-    void setCPUState(const CPUState& state);
     CPUState getCPUState() const;
     void printCPUState() const;
 
