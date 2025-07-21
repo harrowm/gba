@@ -22,12 +22,6 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     // Initialize timing system
     timing_init(&timing);
     DEBUG_LOG("Timing system initialized");
-
-    // Register ARM instruction cache invalidation callback
-    memory.registerCacheInvalidationCallback([this](uint32_t start_addr, uint32_t end_addr) {
-        armCPU->invalidateInstructionCache(start_addr, end_addr);
-    });
-    DEBUG_INFO("ARM instruction cache invalidation callback registered");
 }
 
 void CPU::setFlag(uint32_t flag) {

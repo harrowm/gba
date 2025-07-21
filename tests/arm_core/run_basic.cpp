@@ -30,7 +30,6 @@ protected:
             cpu.R()[i] = 0x1000 + i * 0x100;
         }
         cpu.CPSR() = 0x10; // User mode, no flags set
-        arm_cpu.clearInstructionCache();
     }
 };
 

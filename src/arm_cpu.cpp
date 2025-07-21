@@ -4,7 +4,6 @@
 #include "debug.h"
 #include "timing.h"
 #include "arm_timing.h"
-#include "arm_instruction_cache.h"
 
 // Helper for 32-bit rotate right
 static inline uint32_t ror32(uint32_t value, unsigned int amount) {

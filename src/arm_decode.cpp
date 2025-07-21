@@ -45,7 +45,7 @@ void ARMCPU::updateFlagsLogical(uint32_t result, uint32_t carry) {
 }
 
 // Helper for ARM register shift operations
-uint32_t ARMCPU::arm_shift(uint32_t value, uint8_t shift_type, uint32_t shift_val) {
+FORCE_INLINE uint32_t ARMCPU::arm_shift(uint32_t value, uint8_t shift_type, uint32_t shift_val) {
     switch (shift_type) {
         case 0: // LSL
             return value << shift_val;
@@ -149,7 +149,12 @@ void ARMCPU::exec_arm_sub_reg(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool set_flags = bits<20,20>(instruction);
     uint32_t value = parentCPU.R()[rm];
-    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    uint32_t shift_val;
+    if (reg_shift) {
+        shift_val = parentCPU.R()[rs] & 0xFF;
+    } else {
+        shift_val = bits<11,7>(instruction);
+    }
     value = arm_shift(value, shift_type, shift_val);
     uint32_t result = parentCPU.R()[rn] - value;
     parentCPU.R()[rd] = result;
@@ -527,19 +532,6 @@ void ARMCPU::exec_arm_teq_reg(uint32_t instruction) {
     updateFlagsLogical(result, 0);
 }
 
-// Macro for ARM single data transfer decoders (STR/LDR/STRB/LDRB, IMM/REG)
-#define ARM_SDT_DECODER_IMM(name) \
-void ARMCPU::decode_arm_##name##_imm(ARMCachedInstruction& decoded) { \
-    DEBUG_LOG(std::string("decode_arm_" #name "_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
-    decoded.rd = bits<15,12>(decoded.instruction); \
-    decoded.rn = bits<19,16>(decoded.instruction); \
-    decoded.imm = bits<11,0>(decoded.instruction); \
-    decoded.pre_index = bits<24,24>(decoded.instruction); \
-    decoded.up = bits<23,23>(decoded.instruction); \
-    decoded.writeback = bits<21,21>(decoded.instruction); \
-    decoded.execute_func = &ARMCPU::execute_arm_##name##_imm; \
-}
-
 // HACK .. these load/store use bits in the decoded instruction index .. should be able to simplify these .. 
 
 void ARMCPU::exec_arm_str_imm(uint32_t instruction) {
@@ -834,7 +826,7 @@ void ARMCPU::exec_arm_mul(uint32_t instruction) {
     parentCPU.R()[rd] = op1 * op2;
     
     if (set_flags && rd != 15) {
-        // Update flags based on the result
+        // Update N and Z flags for MUL/MULS
         updateFlagsLogical(parentCPU.R()[rd], 0); // No carry for multiplication
     }
 }
@@ -854,7 +846,7 @@ void ARMCPU::exec_arm_mla(uint32_t instruction) {
     parentCPU.R()[rd] = (op1 * op2) + acc;
 
     if (set_flags && rd != 15) {
-        // Update flags based on the result
+        // Update N and Z flags for MLA/MLAS
         updateFlagsLogical(parentCPU.R()[rd], 0); // No carry for MLA
     }
 }

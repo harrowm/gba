@@ -7,7 +7,6 @@
 #include "timing.h"
 #include "arm_timing.h"
 #include "utility_macros.h"
-#include "arm_instruction_cache.h"
 
 /**
  * ARM CPU Optimizations:
@@ -26,7 +25,6 @@ public:
     // Must be declared before use in static decode table macros
     bool exception_taken = false;
     CPU& parentCPU; // Reference to the parent CPU
-    ARMInstructionCache instruction_cache; // Instruction decode cache
 
     template <uint32_t hi, uint32_t lo>
     static constexpr uint32_t bits(uint32_t instruction) {
@@ -37,34 +35,17 @@ public:
     // Cache-aware execution method
     bool executeInstruction(uint32_t pc, uint32_t instruction);
 
-    void arm_software_interrupt(uint32_t instruction);
-    void arm_coprocessor_operation(uint32_t instruction);
-    void arm_coprocessor_transfer(uint32_t instruction);
-    void arm_coprocessor_register(uint32_t instruction);
-    void arm_undefined(uint32_t instruction);
-
-public:
-    // Clear the instruction cache (for testing)
-    void clearInstructionCache() { instruction_cache.clear(); }
-    
+public:    
     uint32_t arm_shift(uint32_t value, uint8_t shift_type, uint32_t shift_val);
   
-    void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result);
-    void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result);
-  
+    FORCE_INLINE void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result);
+    FORCE_INLINE void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result);
     FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry_out);
-    // FORCE_INLINE bool checkConditionCached(uint8_t condition);
-    // FORCE_INLINE void executeCachedInstruction(const ARMCachedInstruction& cached);
-    
-    // Exception and mode handling
+   
     void handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq);
-    bool isPrivilegedMode();
-    void switchToMode(uint32_t new_mode);
-    bool checkMemoryAccess(uint32_t address, bool is_write, bool is_privileged);
-
+   
 public:
     // Condition code functions
-    // Condition functions as static member functions
     static bool cond_eq(uint32_t flags) { return (flags & 0x4); }
     static bool cond_ne(uint32_t flags) { return !(flags & 0x4); }
     static bool cond_cs(uint32_t flags) { return (flags & 0x2); }
@@ -169,16 +150,10 @@ private:
 
     // Table of 512 entries indexed by bits 27-19 (9 bits)
     static constexpr void (ARMCPU::*arm_exec_table[512])(uint32_t instruction) = {
-        ARM_FN(exec_arm_and_reg),                   // 0x000: exec_arm_and_reg
-        ARM_FN(exec_arm_mul),                       // 0x001: exec_arm_mul
-        ARM_FN(exec_arm_and_reg),                   // 0x002: exec_arm_and_reg
-        ARM_FN(exec_arm_undefined),                 // 0x003: exec_arm_undefined
-        ARM_FN(exec_arm_eor_reg),                   // 0x004: exec_arm_eor_reg
-        ARM_FN(exec_arm_mla),                       // 0x005: exec_arm_mla
-        ARM_FN(exec_arm_eor_reg),                   // 0x006: exec_arm_eor_reg
-        REPEAT_ALT(ARM_FN(exec_arm_undefined), ARM_FN(exec_arm_sub_reg)), // 0x007-0x00A: exec_arm_undefined/exec_arm_sub_reg ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_undefined), ARM_FN(exec_arm_rsb_reg)), // 0x00B-0x00E: exec_arm_undefined/exec_arm_rsb_reg ABAB
-        ARM_FN(exec_arm_undefined),                 // 0x00F: exec_arm_undefined
+        REPEAT_ALT(ARM_FN(exec_arm_and_reg), ARM_FN(exec_arm_mul)), // 0x000-0x003: exec_arm_and_reg/exec_arm_mul ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_eor_reg), ARM_FN(exec_arm_mla)), // 0x004-0x007: exec_arm_eor_reg/exec_arm_mla ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_sub_reg), ARM_FN(exec_arm_undefined)), // 0x008-0x00B: exec_arm_sub_reg/exec_arm_undefined ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_rsb_reg), ARM_FN(exec_arm_undefined)), // 0x00C-0x00F: exec_arm_rsb_reg/exec_arm_undefined ABAB
         REPEAT_ALT(ARM_FN(exec_arm_add_reg), ARM_FN(exec_arm_umull)), // 0x010-0x013: exec_arm_add_reg/exec_arm_umull ABAB
         REPEAT_ALT(ARM_FN(exec_arm_adc_reg), ARM_FN(exec_arm_umlal)), // 0x014-0x017: exec_arm_adc_reg/exec_arm_umlal ABAB
         REPEAT_ALT(ARM_FN(exec_arm_sbc_reg), ARM_FN(exec_arm_smull)), // 0x018-0x01B: exec_arm_sbc_reg/exec_arm_smull ABAB
@@ -395,17 +370,17 @@ public:
     
     
     // Cache management functions
-    void invalidateInstructionCache() { instruction_cache.clear(); }
-    void invalidateInstructionCacheRange(uint32_t start_addr, uint32_t end_addr) {
-        instruction_cache.invalidate_range(start_addr, end_addr);
-    }
-    void invalidateInstructionCache(uint32_t start_addr, uint32_t end_addr) {
-        instruction_cache.invalidate_range(start_addr, end_addr);
-    }
-    ARMInstructionCache::CacheStats getInstructionCacheStats() const {
-        return instruction_cache.getStats();
-    }
-    void resetInstructionCacheStats() { instruction_cache.resetStats(); }
+    // void invalidateInstructionCache() { instruction_cache.clear(); }
+    // void invalidateInstructionCacheRange(uint32_t start_addr, uint32_t end_addr) {
+    //     instruction_cache.invalidate_range(start_addr, end_addr);
+    // }
+    // void invalidateInstructionCache(uint32_t start_addr, uint32_t end_addr) {
+    //     instruction_cache.invalidate_range(start_addr, end_addr);
+    // }
+    // ARMInstructionCache::CacheStats getInstructionCacheStats() const {
+    //     return instruction_cache.getStats();
+    // }
+    // void resetInstructionCacheStats() { instruction_cache.resetStats(); }
 };
 
 #endif
