@@ -163,37 +163,6 @@ FORCE_INLINE void ARMCPU::updateFlagsLogical(uint32_t result, uint32_t carry_out
     parentCPU.CPSR() = cpsr;
 }
 
-// Optimized general flag update function for arithmetic operations (ADD, SUB, etc.)
-// FORCE_INLINE void ARMCPU::updateFlags(uint32_t result, bool carry, bool overflow) {
-//     // Get current CPSR value once to reduce memory access
-//     uint32_t cpsr = parentCPU.CPSR();
-    
-//     // Clear N, Z, C, V flags in one operation (bits 31, 30, 29, 28)
-//     cpsr &= ~(0x80000000 | 0x40000000 | 0x20000000 | 0x10000000);
-    
-//     // Set N if result is negative (bit 31 set)
-//     cpsr |= (result & 0x80000000);
-    
-//     // Set Z if result is zero (bit 30)
-//     if (result == 0) {
-//         cpsr |= 0x40000000;
-//     }
-    
-//     // Set C flag based on carry parameter (bit 29)
-//     if (carry) {
-//         cpsr |= 0x20000000;
-//     }
-    
-//     // Set V flag based on overflow parameter (bit 28)
-//     if (overflow) {
-//         cpsr |= 0x10000000;
-//     }
-    
-//     // Update CPSR
-//     parentCPU.CPSR() = cpsr;  // Direct assignment instead of setCPSR method
-// }
-
-// Add simplified exception handling implementation
 void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq) {
     DEBUG_INFO("handleException: vector=0x" + debug_to_hex_string(vector_address, 8) + ", new_mode=0x" + debug_to_hex_string(new_mode, 2) + ", PC=0x" + debug_to_hex_string(parentCPU.R()[15], 8));
     assert((new_mode & 0x1F) >= 0x10 && (new_mode & 0x1F) <= 0x1F && "Invalid new_mode in handleException");
@@ -202,13 +171,11 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
 
     // Calculate the return address (PC+4)
     uint32_t return_address = parentCPU.R()[15] + 4;
+    CPU::Mode old_mode = static_cast<CPU::Mode>(parentCPU.CPSR() & 0x1F);
+    CPU::Mode new_mode_enum = static_cast<CPU::Mode>(new_mode & 0x1F);
 
-    // Set mode and swap in correct banked registers first
-    CPU::Mode mode_enum = static_cast<CPU::Mode>(new_mode & 0x1F);
-    parentCPU.setMode(mode_enum);
-
-    // Set the correct banked LR for the new mode (after swap)
-    switch (mode_enum) {
+    // Set LR for the NEW mode BEFORE swapping
+    switch (new_mode_enum) {
         case CPU::SVC:
             parentCPU.bankedLR(CPU::SVC) = return_address;
             break;
@@ -229,8 +196,11 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
             break;
     }
 
-    // Create new CPSR value
-    uint32_t new_cpsr = (old_cpsr & ~0x1F) | (new_mode & 0x1F);
+    // Now swap to the new mode
+    parentCPU.setMode(new_mode_enum);
+
+    // Set IRQ/FIQ disable bits in CPSR
+    uint32_t new_cpsr = parentCPU.CPSR();
     if (disable_irq) {
         new_cpsr |= 0x80; // Set I bit
     }
