@@ -2,60 +2,530 @@
 #include "debug.h"
 #include <cstdio>
 
-// ARM Data Processing decoders (AND, EOR, SUB, RSB, ADD, ADC, SBC, RSC, TST, TEQ, CMP, CMN, ORR, BIC, MVN) split between IMM and REG variants
-// Use macros to generate these    
-#define ARM_DP_DECODER_IMM(name) \
-void ARMCPU::decode_arm_##name##_imm(ARMCachedInstruction& decoded) { \
-    DEBUG_LOG(std::string("decode_arm_" #name "_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
-    decoded.rn = bits<19,16>(decoded.instruction); \
-    decoded.rd = bits<15,12>(decoded.instruction); \
-    decoded.rotate = bits<11,8>(decoded.instruction) * 2; \
-    decoded.imm = bits<7,0>(decoded.instruction); \
-    decoded.execute_func = &ARMCPU::execute_arm_##name##_imm; \
+// Update flags after subtraction: N, Z, C, V
+FORCE_INLINE void ARMCPU::updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result) {
+    uint32_t n = (result >> 31) & 1;
+    uint32_t z = (result == 0) ? 1 : 0;
+    uint32_t c = (op1 >= op2) ? 1 : 0;
+    uint32_t v = (((op1 ^ op2) & (op1 ^ result)) >> 31) & 1;
+    uint32_t cpsr = parentCPU.CPSR();
+    cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+    cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+    cpsr = (cpsr & ~(1u << 29)) | (c << 29); // C
+    cpsr = (cpsr & ~(1u << 28)) | (v << 28); // V
+    parentCPU.CPSR() = cpsr;
 }
 
-#define ARM_DP_DECODER_REG(name) \
-void ARMCPU::decode_arm_##name##_reg(ARMCachedInstruction& decoded) { \
-    DEBUG_LOG(std::string("decode_arm_" #name "_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
-    decoded.rn = bits<19,16>(decoded.instruction); \
-    decoded.rd = bits<15,12>(decoded.instruction); \
-    decoded.rs = bits<11,8>(decoded.instruction); \
-    decoded.shift_type = bits<6,5>(decoded.instruction); \
-    decoded.reg_shift = bits<4,4>(decoded.instruction); \
-    decoded.rm = bits<3,0>(decoded.instruction); \
-    decoded.execute_func = &ARMCPU::execute_arm_##name##_reg; \
+// Update flags after addition: N, Z, C, V
+FORCE_INLINE void ARMCPU::updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result) {
+    uint32_t n = (result >> 31) & 1;
+    uint32_t z = (result == 0) ? 1 : 0;
+    uint32_t c = (result < op1) ? 1 : 0;
+    uint32_t v = (~(op1 ^ op2) & (op1 ^ result) >> 31) & 1;
+    uint32_t cpsr = parentCPU.CPSR();
+    cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+    cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+    cpsr = (cpsr & ~(1u << 29)) | (c << 29); // C
+    cpsr = (cpsr & ~(1u << 28)) | (v << 28); // V
+    parentCPU.CPSR() = cpsr;
 }
 
-ARM_DP_DECODER_IMM(and)
-ARM_DP_DECODER_REG(and)
-ARM_DP_DECODER_IMM(eor)
-ARM_DP_DECODER_REG(eor)
-ARM_DP_DECODER_IMM(sub)
-ARM_DP_DECODER_REG(sub)
-ARM_DP_DECODER_IMM(rsb)
-ARM_DP_DECODER_REG(rsb)
-ARM_DP_DECODER_IMM(add)
-ARM_DP_DECODER_REG(add)
-ARM_DP_DECODER_IMM(adc)
-ARM_DP_DECODER_REG(adc)
-ARM_DP_DECODER_IMM(sbc)
-ARM_DP_DECODER_REG(sbc)
-ARM_DP_DECODER_IMM(rsc)
-ARM_DP_DECODER_REG(rsc)
-ARM_DP_DECODER_IMM(tst)
-ARM_DP_DECODER_REG(tst)
-ARM_DP_DECODER_IMM(teq)
-ARM_DP_DECODER_REG(teq)
-ARM_DP_DECODER_IMM(cmp)
-ARM_DP_DECODER_REG(cmp)
-ARM_DP_DECODER_IMM(cmn)
-ARM_DP_DECODER_REG(cmn)
-ARM_DP_DECODER_IMM(orr)
-ARM_DP_DECODER_REG(orr)
-ARM_DP_DECODER_IMM(bic)
-ARM_DP_DECODER_REG(bic)
-ARM_DP_DECODER_IMM(mvn)
-ARM_DP_DECODER_REG(mvn)
+void ARMCPU::updateFlagsLogical(uint32_t result, uint32_t carry) {
+    // N flag: set if result is negative
+    uint32_t n = (result >> 31) & 1;
+    // Z flag: set if result is zero
+    uint32_t z = (result == 0) ? 1 : 0;
+    // C flag: use provided carry value (if meaningful for the operation)
+    uint32_t cpsr = parentCPU.CPSR();
+    cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+    cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+    cpsr = (cpsr & ~(1u << 29)) | ((carry & 1) << 29); // C
+    // V flag is not affected by logical ops
+    parentCPU.CPSR() = cpsr;
+}
+
+// Helper for ARM register shift operations
+uint32_t ARMCPU::arm_shift(uint32_t value, uint8_t shift_type, uint32_t shift_val) {
+    switch (shift_type) {
+        case 0: // LSL
+            return value << shift_val;
+        case 1: // LSR
+            return shift_val ? (value >> shift_val) : 0;
+        case 2: // ASR
+            return shift_val ? ((int32_t)value >> shift_val) : (value & 0x80000000 ? 0xFFFFFFFF : 0);
+        case 3: // ROR
+            return shift_val ? ((value >> shift_val) | (value << (32 - shift_val))) : value;
+        default:
+            return value;
+    }
+}
+
+void ARMCPU::exec_arm_and_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_and_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    parentCPU.R()[rd] = parentCPU.R()[rn] & value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+void ARMCPU::exec_arm_and_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_and_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    parentCPU.R()[rd] = parentCPU.R()[rn] & value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+void ARMCPU::exec_arm_eor_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_eor_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    parentCPU.R()[rd] = parentCPU.R()[rn] ^ value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+void ARMCPU::exec_arm_eor_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_eor_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    parentCPU.R()[rd] = parentCPU.R()[rn] ^ value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+void ARMCPU::exec_arm_sub_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_sub_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t result = parentCPU.R()[rn] - value;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsSub(parentCPU.R()[rn], value, result);
+    }
+}
+
+void ARMCPU::exec_arm_sub_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_sub_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t result = parentCPU.R()[rn] - value;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsSub(parentCPU.R()[rn], value, result);
+    }
+}
+void ARMCPU::exec_arm_rsb_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_rsb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t result = value - parentCPU.R()[rn];
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsSub(value, parentCPU.R()[rn], result);
+    }
+}
+void ARMCPU::exec_arm_rsb_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_rsb_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t result = value - parentCPU.R()[rn];
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsSub(value, parentCPU.R()[rn], result);
+    }
+}
+
+void ARMCPU::exec_arm_add_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_add_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t result = parentCPU.R()[rn] + value;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsAdd(parentCPU.R()[rn], value, result);
+    }
+}
+
+// ORR (logical OR)
+void ARMCPU::exec_arm_orr_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_orr_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    parentCPU.R()[rd] = parentCPU.R()[rn] | value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+void ARMCPU::exec_arm_orr_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_orr_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    parentCPU.R()[rd] = parentCPU.R()[rn] | value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+// BIC (bit clear)
+void ARMCPU::exec_arm_bic_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_bic_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    parentCPU.R()[rd] = parentCPU.R()[rn] & ~value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+void ARMCPU::exec_arm_bic_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_bic_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    parentCPU.R()[rd] = parentCPU.R()[rn] & ~value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+// MVN (move not)
+void ARMCPU::exec_arm_mvn_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_mvn_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    parentCPU.R()[rd] = ~value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+void ARMCPU::exec_arm_mvn_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_mvn_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    parentCPU.R()[rd] = ~value;
+    if (set_flags && rd != 15) {
+        updateFlagsLogical(parentCPU.R()[rd], 0);
+    }
+}
+
+void ARMCPU::exec_arm_add_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_add_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t result = parentCPU.R()[rn] + value;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsAdd(parentCPU.R()[rn], value, result);
+    }
+}
+
+void ARMCPU::exec_arm_adc_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_adc_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
+    uint32_t result = parentCPU.R()[rn] + value + carry;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsAdd(parentCPU.R()[rn], value + carry, result);
+    }
+}
+
+void ARMCPU::exec_arm_adc_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_adc_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
+    uint32_t result = parentCPU.R()[rn] + value + carry;
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsAdd(parentCPU.R()[rn], value + carry, result);
+    }
+}
+
+void ARMCPU::exec_arm_sbc_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_sbc_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
+    uint32_t result = parentCPU.R()[rn] - value - (1 - carry);
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsSub(parentCPU.R()[rn], value + (1 - carry), result);
+    }
+}
+
+void ARMCPU::exec_arm_sbc_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_sbc_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
+    uint32_t result = parentCPU.R()[rn] - value - (1 - carry);
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsSub(parentCPU.R()[rn], value + (1 - carry), result);
+    }
+}
+
+void ARMCPU::exec_arm_rsc_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_rsc_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
+    uint32_t result = value - parentCPU.R()[rn] - (1 - carry);
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsSub(value, parentCPU.R()[rn] + (1 - carry), result);
+    }
+}
+
+void ARMCPU::exec_arm_rsc_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_rsc_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool set_flags = bits<20,20>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
+    uint32_t result = value - parentCPU.R()[rn] - (1 - carry);
+    parentCPU.R()[rd] = result;
+    if (set_flags && rd != 15) {
+        updateFlagsSub(value, parentCPU.R()[rn] + (1 - carry), result);
+    }
+}
+
+void ARMCPU::exec_arm_tst_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_tst_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t result = parentCPU.R()[rn] & value;
+    updateFlagsLogical(result, 0);
+}
+
+void ARMCPU::exec_arm_tst_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_tst_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t result = parentCPU.R()[rn] & value;
+    updateFlagsLogical(result, 0);
+}
+
+void ARMCPU::exec_arm_teq_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_teq_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t result = parentCPU.R()[rn] ^ value;
+    updateFlagsLogical(result, 0);
+}
+
+// CMP (compare, subtract, sets flags, does not store result)
+void ARMCPU::exec_arm_cmp_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_cmp_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t result = parentCPU.R()[rn] - value;
+    updateFlagsSub(parentCPU.R()[rn], value, result);
+}
+
+void ARMCPU::exec_arm_cmp_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_cmp_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t result = parentCPU.R()[rn] - value;
+    updateFlagsSub(parentCPU.R()[rn], value, result);
+}
+
+// CMN (compare negative, adds, sets flags, does not store result)
+void ARMCPU::exec_arm_cmn_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_cmn_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rotate = bits<11,8>(instruction) * 2;
+    uint32_t imm = bits<7,0>(instruction);
+    uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
+    uint32_t result = parentCPU.R()[rn] + value;
+    updateFlagsAdd(parentCPU.R()[rn], value, result);
+}
+
+void ARMCPU::exec_arm_cmn_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_cmn_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t result = parentCPU.R()[rn] + value;
+    updateFlagsAdd(parentCPU.R()[rn], value, result);
+}
+
+void ARMCPU::exec_arm_teq_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_teq_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t result = parentCPU.R()[rn] ^ value;
+    updateFlagsLogical(result, 0);
+}
 
 // Macro for ARM single data transfer decoders (STR/LDR/STRB/LDRB, IMM/REG)
 #define ARM_SDT_DECODER_IMM(name) \
@@ -70,28 +540,169 @@ void ARMCPU::decode_arm_##name##_imm(ARMCachedInstruction& decoded) { \
     decoded.execute_func = &ARMCPU::execute_arm_##name##_imm; \
 }
 
-#define ARM_SDT_DECODER_REG(name) \
-void ARMCPU::decode_arm_##name##_reg(ARMCachedInstruction& decoded) { \
-    DEBUG_LOG(std::string("decode_arm_" #name "_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(decoded.instruction, 8)); \
-    decoded.rd = bits<15,12>(decoded.instruction); \
-    decoded.rn = bits<19,16>(decoded.instruction); \
-    decoded.rm = bits<3,0>(decoded.instruction); \
-    decoded.offset_type = bits<6,5>(decoded.instruction); \
-    decoded.pre_index = bits<24,24>(decoded.instruction); \
-    decoded.up = bits<23,23>(decoded.instruction); \
-    decoded.writeback = bits<21,21>(decoded.instruction); \
-    decoded.execute_func = &ARMCPU::execute_arm_##name##_reg; \
+// HACK .. these load/store use bits in the decoded instruction index .. should be able to simplify these .. 
+
+void ARMCPU::exec_arm_str_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_str_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint32_t imm = bits<11,0>(instruction);
+    bool pre_index = bits<24,24>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t addr = up ? base + imm : base - imm;
+    if (pre_index) {
+        parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
+        if (writeback) parentCPU.R()[rn] = addr;
+    } else {
+        parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
+        if (writeback) parentCPU.R()[rn] = addr;
+    }
 }
 
-ARM_SDT_DECODER_IMM(strb)
-ARM_SDT_DECODER_REG(strb)
-ARM_SDT_DECODER_IMM(ldrb)
-ARM_SDT_DECODER_REG(ldrb)
-ARM_SDT_DECODER_IMM(str)
-ARM_SDT_DECODER_REG(str)
-ARM_SDT_DECODER_IMM(ldr)
-ARM_SDT_DECODER_REG(ldr)
+void ARMCPU::exec_arm_str_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_str_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    // uint8_t offset_type = bits<6,5>(instruction);
+    bool pre_index = bits<24,24>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t offset = parentCPU.R()[rm];
+    uint32_t addr = up ? base + offset : base - offset;
+    if (pre_index) {
+        parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
+        if (writeback) parentCPU.R()[rn] = addr;
+    } else {
+        parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
+        if (writeback) parentCPU.R()[rn] = addr;
+    }
+}
 
+void ARMCPU::exec_arm_ldr_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldr_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint32_t imm = bits<11,0>(instruction);
+    bool pre_index = bits<24,24>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t addr = up ? base + imm : base - imm;
+    if (pre_index) {
+        parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
+        if (writeback) parentCPU.R()[rn] = addr;
+    } else {
+        parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
+        if (writeback) parentCPU.R()[rn] = addr;
+    }
+}
+
+void ARMCPU::exec_arm_ldr_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldr_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    // uint8_t offset_type = bits<6,5>(instruction);
+    bool pre_index = bits<24,24>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t offset = parentCPU.R()[rm];
+    uint32_t addr = up ? base + offset : base - offset;
+    if (pre_index) {
+        parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
+        if (writeback) parentCPU.R()[rn] = addr;
+    } else {
+        parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
+        if (writeback) parentCPU.R()[rn] = addr;
+    }
+}
+
+
+
+void ARMCPU::exec_arm_strb_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_strb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint32_t imm = bits<11,0>(instruction);
+    bool pre_index = bits<24,24>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t addr = up ? base + imm : base - imm;
+    if (pre_index) {
+        parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
+        if (writeback) parentCPU.R()[rn] = addr;
+    } else {
+        parentCPU.getMemory().write8(base, parentCPU.R()[rd] & 0xFF);
+        if (writeback) parentCPU.R()[rn] = addr;
+    }
+}
+
+void ARMCPU::exec_arm_strb_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_strb_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    // uint8_t offset_type = bits<6,5>(instruction);
+    bool pre_index = bits<24,24>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t offset = parentCPU.R()[rm];
+    uint32_t addr = up ? base + offset : base - offset;
+    if (pre_index) {
+        parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
+        if (writeback) parentCPU.R()[rn] = addr;
+    } else {
+        parentCPU.getMemory().write8(base, parentCPU.R()[rd] & 0xFF);
+        if (writeback) parentCPU.R()[rn] = addr;
+    }
+}
+
+void ARMCPU::exec_arm_ldrb_imm(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldrb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint32_t imm = bits<11,0>(instruction);
+    bool pre_index = bits<24,24>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t addr = up ? base + imm : base - imm;
+    if (pre_index) {
+        parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
+        if (writeback) parentCPU.R()[rn] = addr;
+    } else {
+        parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
+        if (writeback) parentCPU.R()[rn] = addr;
+    }
+}
+
+void ARMCPU::exec_arm_ldrb_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldrb_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    // uint8_t offset_type = bits<6,5>(instruction);
+    bool pre_index = bits<24,24>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t offset = parentCPU.R()[rm];
+    uint32_t addr = up ? base + offset : base - offset;
+    if (pre_index) {
+        parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
+        if (writeback) parentCPU.R()[rn] = addr;
+    } else {
+        parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
+        if (writeback) parentCPU.R()[rn] = addr;
+    }
+}
 
 void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_ldm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
@@ -101,10 +712,11 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     bool writeback = bits<21,21>(instruction);
 
     uint32_t base = parentCPU.R()[rn];
-    int offset = 0;
+    // int offset = 0;
     // Calculate offset direction and order based on addressing_mode
     bool up = (addressing_mode & 0x2) != 0;
     bool pre = (addressing_mode & 0x1) != 0;
+
     int reg_count = 0;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) ++reg_count;
@@ -134,7 +746,7 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     bool writeback = bits<21,21>(instruction);
 
     uint32_t base = parentCPU.R()[rn];
-    int offset = 0;
+    // int offset = 0;
     // Calculate offset direction and order based on addressing_mode
     bool up = (addressing_mode & 0x2) != 0;
     bool pre = (addressing_mode & 0x1) != 0;
@@ -161,6 +773,7 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
 void ARMCPU::exec_arm_b(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_b: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     int32_t offset = bits<23,0>(instruction);
+    
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
     uint32_t branch_offset = (offset << 2) + 8;
     // Branch to target address

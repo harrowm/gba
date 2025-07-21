@@ -47,17 +47,14 @@ public:
     // Clear the instruction cache (for testing)
     void clearInstructionCache() { instruction_cache.clear(); }
     
-    // Helper functions - critical ones marked as FORCE_INLINE for optimization
-    FORCE_INLINE uint32_t execOperand2imm(uint32_t imm, uint8_t rotate, uint32_t* carry_out);
-    FORCE_INLINE uint32_t calcShiftedResult(uint8_t rm, uint8_t rs, uint8_t shift_type, bool reg_shift, uint32_t* carry_out);
-
-    // FORCE_INLINE uint32_t calculateOperand2(uint32_t instruction, uint32_t* carry_out);
-    uint32_t calculateOperand2Advanced(uint32_t instruction, uint32_t* carry_out, uint32_t* cycles);
-    uint32_t arm_apply_shift(uint32_t value, uint32_t shift_type, uint32_t shift_amount, uint32_t* carry_out);
-    FORCE_INLINE void updateFlags(uint32_t result, bool carry, bool overflow);
+    uint32_t arm_shift(uint32_t value, uint8_t shift_type, uint32_t shift_val);
+  
+    void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result);
+    void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result);
+  
     FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry_out);
-    FORCE_INLINE bool checkConditionCached(uint8_t condition);
-    FORCE_INLINE void executeCachedInstruction(const ARMCachedInstruction& cached);
+    // FORCE_INLINE bool checkConditionCached(uint8_t condition);
+    // FORCE_INLINE void executeCachedInstruction(const ARMCachedInstruction& cached);
     
     // Exception and mode handling
     void handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq);
