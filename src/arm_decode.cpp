@@ -204,12 +204,13 @@ void ARMCPU::exec_arm_add_imm(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
-    bool set_flags = bits<20,20>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
     uint32_t result = parentCPU.R()[rn] + value;
     parentCPU.R()[rd] = result;
-    if (set_flags && rd != 15) {
-        updateFlagsAdd(parentCPU.R()[rn], value, result);
+    if (rd != 15) {
+        parentCPU.R()[15] += 4; // Increment PC for next instruction
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], value, result);
     }
 }
 
@@ -322,14 +323,15 @@ void ARMCPU::exec_arm_add_reg(uint32_t instruction) {
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    bool set_flags = bits<20,20>(instruction);
     uint32_t value = parentCPU.R()[rm];
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     value = arm_shift(value, shift_type, shift_val);
     uint32_t result = parentCPU.R()[rn] + value;
     parentCPU.R()[rd] = result;
-    if (set_flags && rd != 15) {
-        updateFlagsAdd(parentCPU.R()[rn], value, result);
+    if (rd != 15) {
+        parentCPU.R()[15] += 4; // Increment PC for next instruction
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], value, result);
     }
 }
 
@@ -339,13 +341,14 @@ void ARMCPU::exec_arm_adc_imm(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
-    bool set_flags = bits<20,20>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     uint32_t result = parentCPU.R()[rn] + value + carry;
     parentCPU.R()[rd] = result;
-    if (set_flags && rd != 15) {
-        updateFlagsAdd(parentCPU.R()[rn], value + carry, result);
+    if (rd != 15) {
+        parentCPU.R()[15] += 4; // Increment PC for next instruction
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], value + carry, result);
     }
 }
 
@@ -357,15 +360,16 @@ void ARMCPU::exec_arm_adc_reg(uint32_t instruction) {
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    bool set_flags = bits<20,20>(instruction);
     uint32_t value = parentCPU.R()[rm];
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     value = arm_shift(value, shift_type, shift_val);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     uint32_t result = parentCPU.R()[rn] + value + carry;
     parentCPU.R()[rd] = result;
-    if (set_flags && rd != 15) {
-        updateFlagsAdd(parentCPU.R()[rn], value + carry, result);
+    if (rd != 15) {
+        parentCPU.R()[15] += 4; // Increment PC for next instruction
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], value + carry, result);
     }
 }
 
@@ -551,8 +555,6 @@ void ARMCPU::exec_arm_teq_reg(uint32_t instruction) {
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
-// HACK .. these load/store use bits in the decoded instruction index .. should be able to simplify these .. 
-
 void ARMCPU::exec_arm_str_imm_pre(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
@@ -563,6 +565,7 @@ void ARMCPU::exec_arm_str_imm_pre(uint32_t instruction) {
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_str_imm_post(uint32_t instruction) {
@@ -575,6 +578,7 @@ void ARMCPU::exec_arm_str_imm_post(uint32_t instruction) {
     parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
     uint32_t addr = up ? base + imm : base - imm;
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_str_reg_pre(uint32_t instruction) {
@@ -588,6 +592,7 @@ void ARMCPU::exec_arm_str_reg_pre(uint32_t instruction) {
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_str_reg_post(uint32_t instruction) {
@@ -601,6 +606,7 @@ void ARMCPU::exec_arm_str_reg_post(uint32_t instruction) {
     parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
     uint32_t addr = up ? base + offset : base - offset;
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldr_imm_pre(uint32_t instruction) {
@@ -613,6 +619,7 @@ void ARMCPU::exec_arm_ldr_imm_pre(uint32_t instruction) {
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldr_imm_post(uint32_t instruction) {
@@ -625,6 +632,7 @@ void ARMCPU::exec_arm_ldr_imm_post(uint32_t instruction) {
     parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
     uint32_t addr = up ? base + imm : base - imm;
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldr_reg_pre(uint32_t instruction) {
@@ -639,6 +647,7 @@ void ARMCPU::exec_arm_ldr_reg_pre(uint32_t instruction) {
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldr_reg_post(uint32_t instruction) {
@@ -653,6 +662,7 @@ void ARMCPU::exec_arm_ldr_reg_post(uint32_t instruction) {
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_strb_imm_pre(uint32_t instruction) {
@@ -665,6 +675,7 @@ void ARMCPU::exec_arm_strb_imm_pre(uint32_t instruction) {
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_strb_imm_post(uint32_t instruction) {
@@ -677,6 +688,7 @@ void ARMCPU::exec_arm_strb_imm_post(uint32_t instruction) {
     parentCPU.getMemory().write8(base, parentCPU.R()[rd] & 0xFF);
     uint32_t addr = up ? base + imm : base - imm;
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_strb_reg(uint32_t instruction) {
@@ -698,6 +710,7 @@ void ARMCPU::exec_arm_strb_reg(uint32_t instruction) {
         parentCPU.getMemory().write8(base, parentCPU.R()[rd] & 0xFF);
         if (writeback) parentCPU.R()[rn] = addr;
     }
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldrb_imm_pre(uint32_t instruction) {
@@ -710,6 +723,7 @@ void ARMCPU::exec_arm_ldrb_imm_pre(uint32_t instruction) {
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldrb_imm_post(uint32_t instruction) {
@@ -722,6 +736,7 @@ void ARMCPU::exec_arm_ldrb_imm_post(uint32_t instruction) {
     parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
     uint32_t addr = up ? base + imm : base - imm;
     if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldm(uint32_t instruction) {
@@ -737,25 +752,29 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     bool up = (addressing_mode & 0x2) != 0;
     bool pre = (addressing_mode & 0x1) != 0;
 
-    int reg_count = 0;
-    for (int i = 0; i < 16; ++i) {
-        if (reg_list & (1 << i)) ++reg_count;
-    }
+    // int reg_count = 0;
+    // for (int i = 0; i < 16; ++i) {
+    //     if (reg_list & (1 << i)) ++reg_count;
+    // }
+    int reg_count = __builtin_popcount(reg_list);
     int addr = base;
     if (up) {
         addr += pre ? 4 : 0;
     } else {
         addr -= pre ? 4 : 0;
     }
+    bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
             parentCPU.R()[i] = parentCPU.getMemory().read32(addr);
             addr += up ? 4 : -4;
+            if (i == 15) r15_updated = true;
         }
     }
     if (writeback) {
         parentCPU.R()[rn] = up ? base + reg_count * 4 : base - reg_count * 4;
     }
+    if (!r15_updated) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_stm(uint32_t instruction) {
@@ -770,25 +789,29 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     // Calculate offset direction and order based on addressing_mode
     bool up = (addressing_mode & 0x2) != 0;
     bool pre = (addressing_mode & 0x1) != 0;
-    int reg_count = 0;
-    for (int i = 0; i < 16; ++i) {
-        if (reg_list & (1 << i)) ++reg_count;
-    }
+    // int reg_count = 0;
+    // for (int i = 0; i < 16; ++i) {
+    //     if (reg_list & (1 << i)) ++reg_count;
+    // }
+    int reg_count = __builtin_popcount(reg_list);
     int addr = base;
     if (up) {
         addr += pre ? 4 : 0;
     } else {
         addr -= pre ? 4 : 0;
     }
+    bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
             parentCPU.getMemory().write32(addr, parentCPU.R()[i]);
             addr += up ? 4 : -4;
+            if (i == 15) r15_updated = true;
         }
     }
     if (writeback) {
         parentCPU.R()[rn] = up ? base + reg_count * 4 : base - reg_count * 4;
     }
+    if (!r15_updated) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_b(uint32_t instruction) {
@@ -825,6 +848,7 @@ void ARMCPU::exec_arm_swp(uint32_t instruction) {
     parentCPU.getMemory().write32(addr, parentCPU.R()[rm]);
     // Store original memory value in rd
     parentCPU.R()[rd] = mem_val;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_swpb(uint32_t instruction) {
@@ -840,6 +864,7 @@ void ARMCPU::exec_arm_swpb(uint32_t instruction) {
     parentCPU.getMemory().write8(addr, parentCPU.R()[rm] & 0xFF);
     // Store original memory value in rd
     parentCPU.R()[rd] = mem_val;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_mul(uint32_t instruction) {
@@ -967,6 +992,7 @@ void ARMCPU::exec_arm_ldrh(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     uint32_t addr = parentCPU.R()[rn] + parentCPU.R()[rm];
     parentCPU.R()[rd] = parentCPU.getMemory().read16(addr);
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_strh(uint32_t instruction) {
@@ -976,6 +1002,7 @@ void ARMCPU::exec_arm_strh(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     uint32_t addr = parentCPU.R()[rn] + parentCPU.R()[rm];
     parentCPU.getMemory().write16(addr, parentCPU.R()[rd] & 0xFFFF);
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldrsb(uint32_t instruction) {
@@ -986,6 +1013,7 @@ void ARMCPU::exec_arm_ldrsb(uint32_t instruction) {
     uint32_t addr = parentCPU.R()[rn] + parentCPU.R()[rm];
     int8_t val = parentCPU.getMemory().read8(addr);
     parentCPU.R()[rd] = (int32_t)val;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldrsh(uint32_t instruction) {
@@ -996,12 +1024,14 @@ void ARMCPU::exec_arm_ldrsh(uint32_t instruction) {
     uint32_t addr = parentCPU.R()[rn] + parentCPU.R()[rm];
     int16_t val = parentCPU.getMemory().read16(addr);
     parentCPU.R()[rd] = (int32_t)val;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_undefined(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // Optionally halt, throw, or handle undefined instruction here
     // For now, just log and return
+    parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_mov_imm(uint32_t instruction) {
@@ -1046,24 +1076,29 @@ void ARMCPU::exec_arm_software_interrupt(uint32_t instruction) {
     // For now, just log and optionally halt or signal exception.
     DEBUG_ERROR(std::string("SWI executed: immediate=0x") + DEBUG_TO_HEX_STRING(swi_imm, 8) + ", pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
     // TODO: Implement SWI handler or exception logic as needed.
+    parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldc_imm(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_ldc_imm: Coprocessor LDC (imm) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor LDC (imm) logic if needed
+    parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldc_reg(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_ldc_reg: Coprocessor LDC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor LDC (reg) logic if needed
+    parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_stc_imm(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_stc_imm: Coprocessor STC (imm) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor STC (imm) logic if needed
+    parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_stc_reg(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_stc_reg: Coprocessor STC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor STC (reg) logic if needed
+    parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
