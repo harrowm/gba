@@ -1023,8 +1023,10 @@ void ARMCPU::exec_arm_ldrsh(uint32_t instruction) {
 
 void ARMCPU::exec_arm_undefined(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    DEBUG_LOG("[UNDEFINED] Before handleException: PC=" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", LR=" + DEBUG_TO_HEX_STRING(parentCPU.R()[14], 8) + ", CPSR=0x" + DEBUG_TO_HEX_STRING(parentCPU.CPSR(), 8));
     // Trigger ARM undefined instruction exception
     handleException(0x04, 0x1B, true, false); // Vector 0x04, mode 0x1B (Undefined), disable IRQ
+    DEBUG_LOG("[UNDEFINED] After handleException: PC=" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", LR=" + DEBUG_TO_HEX_STRING(parentCPU.R()[14], 8) + ", CPSR=0x" + DEBUG_TO_HEX_STRING(parentCPU.CPSR(), 8));
 }
 
 void ARMCPU::exec_arm_mov_imm(uint32_t instruction) {
@@ -1065,11 +1067,9 @@ void ARMCPU::exec_arm_mov_reg(uint32_t instruction) {
 void ARMCPU::exec_arm_software_interrupt(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_software_interrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint32_t swi_imm = bits<23,0>(instruction);
-    // Handle software interrupt (SWI) here. Typically triggers a supervisor call or exception.
-    // For now, just log and optionally halt or signal exception.
+    // Handle software interrupt (SWI) here. Triggers Supervisor exception.
     DEBUG_ERROR(std::string("SWI executed: immediate=0x") + DEBUG_TO_HEX_STRING(swi_imm, 8) + ", pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
-    // TODO: Implement SWI handler or exception logic as needed.
-    parentCPU.R()[15] += 4; // Increment PC for next instruction
+    handleException(0x08, 0x13, true, false); // Vector 0x08, mode 0x13 (SVC), disable IRQ
 }
 
 void ARMCPU::exec_arm_ldc_imm(uint32_t instruction) {

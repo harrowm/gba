@@ -164,42 +164,63 @@ FORCE_INLINE void ARMCPU::updateFlagsLogical(uint32_t result, uint32_t carry_out
 }
 
 void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq) {
-    DEBUG_INFO("handleException: vector=0x" + debug_to_hex_string(vector_address, 8) + ", new_mode=0x" + debug_to_hex_string(new_mode, 2) + ", PC=0x" + debug_to_hex_string(parentCPU.R()[15], 8));
+    DEBUG_LOG("handleException ENTRY: vector=0x" + debug_to_hex_string(vector_address, 8) + ", new_mode=0x" + debug_to_hex_string(new_mode, 2) + ", PC=0x" + debug_to_hex_string(parentCPU.R()[15], 8));
+    DEBUG_LOG("CPSR: 0x" + debug_to_hex_string(parentCPU.CPSR(), 8) + ", LR: 0x" + debug_to_hex_string(parentCPU.R()[14], 8));
+    CPU::Mode old_mode = static_cast<CPU::Mode>(parentCPU.CPSR() & 0x1F);
+    CPU::Mode new_mode_enum = static_cast<CPU::Mode>(new_mode & 0x1F);
+    DEBUG_LOG("Banked LR (old_mode=" + std::to_string(old_mode) + "): 0x" + debug_to_hex_string(parentCPU.bankedLR(old_mode), 8));
+
     assert((new_mode & 0x1F) >= 0x10 && (new_mode & 0x1F) <= 0x1F && "Invalid new_mode in handleException");
     // Save the current CPSR (SPSR not supported in this implementation)
     uint32_t old_cpsr = parentCPU.CPSR();
 
-    // Calculate the return address (PC+4)
+    // Calculate the return address for LR
+    // NOTE: ARM architectural requirement: LR for exception modes is always set to PC+4 (address of next instruction).
+    // Even without a pipeline, exception handlers expect LR = PC+4.
     uint32_t return_address = parentCPU.R()[15] + 4;
-    CPU::Mode old_mode = static_cast<CPU::Mode>(parentCPU.CPSR() & 0x1F);
-    CPU::Mode new_mode_enum = static_cast<CPU::Mode>(new_mode & 0x1F);
+    DEBUG_LOG("Saving LR to bankedLR(" + std::to_string(old_mode) + "): 0x" + debug_to_hex_string(parentCPU.R()[14], 8));
+    if (old_mode == CPU::USER || old_mode == CPU::SYS) {
+        parentCPU.bankedLRUser() = parentCPU.R()[14]; // save User LR
+    } else {
+        parentCPU.bankedLR(old_mode) = parentCPU.R()[14]; // save banked LR for privileged mode
+    }
+    DEBUG_LOG("Banked LR (old_mode=" + std::to_string(old_mode) + ") after save: 0x" + debug_to_hex_string(parentCPU.bankedLR(old_mode), 8));
 
     // Set LR for the NEW mode BEFORE swapping
-    switch (new_mode_enum) {
-        case CPU::SVC:
-            parentCPU.bankedLR(CPU::SVC) = return_address;
-            break;
-        case CPU::IRQ:
-            parentCPU.bankedLR(CPU::IRQ) = return_address;
-            break;
-        case CPU::FIQ:
-            parentCPU.bankedLR(CPU::FIQ) = return_address;
-            break;
-        case CPU::ABT:
-            parentCPU.bankedLR(CPU::ABT) = return_address;
-            break;
-        case CPU::UND:
-            parentCPU.bankedLR(CPU::UND) = return_address;
-            break;
-        default:
-            parentCPU.R()[14] = return_address;
-            break;
+    if (new_mode_enum == CPU::USER || new_mode_enum == CPU::SYS) {
+        // Do not overwrite banked_r14_usr on exception entry
+    } else if (new_mode_enum == CPU::SVC) {
+        DEBUG_LOG("Setting bankedLR(SVC) to return_address: 0x" + debug_to_hex_string(return_address, 8));
+        parentCPU.bankedLR(CPU::SVC) = return_address;
+        DEBUG_LOG("Banked LR (SVC) after set: 0x" + debug_to_hex_string(parentCPU.bankedLR(CPU::SVC), 8));
+    } else if (new_mode_enum == CPU::UND) {
+        DEBUG_LOG("Setting bankedLR(UND) to return_address: 0x" + debug_to_hex_string(return_address, 8));
+        parentCPU.bankedLR(CPU::UND) = return_address;
+        DEBUG_LOG("Banked LR (UND) after set: 0x" + debug_to_hex_string(parentCPU.bankedLR(CPU::UND), 8));
+    } else if (new_mode_enum == CPU::IRQ) {
+        DEBUG_LOG("Setting bankedLR(IRQ) to return_address: 0x" + debug_to_hex_string(return_address, 8));
+        parentCPU.bankedLR(CPU::IRQ) = return_address;
+        DEBUG_LOG("Banked LR (IRQ) after set: 0x" + debug_to_hex_string(parentCPU.bankedLR(CPU::IRQ), 8));
+    } else if (new_mode_enum == CPU::FIQ) {
+        DEBUG_LOG("Setting bankedLR(FIQ) to return_address: 0x" + debug_to_hex_string(return_address, 8));
+        parentCPU.bankedLR(CPU::FIQ) = return_address;
+        DEBUG_LOG("Banked LR (FIQ) after set: 0x" + debug_to_hex_string(parentCPU.bankedLR(CPU::FIQ), 8));
+    } else if (new_mode_enum == CPU::ABT) {
+        DEBUG_LOG("Setting bankedLR(ABT) to return_address: 0x" + debug_to_hex_string(return_address, 8));
+        parentCPU.bankedLR(CPU::ABT) = return_address;
+        DEBUG_LOG("Banked LR (ABT) after set: 0x" + debug_to_hex_string(parentCPU.bankedLR(CPU::ABT), 8));
+    } else {
+        DEBUG_LOG("Setting R14 to return_address: 0x" + debug_to_hex_string(return_address, 8));
+        parentCPU.R()[14] = return_address;
+        DEBUG_LOG("R14 after set: 0x" + debug_to_hex_string(parentCPU.R()[14], 8));
     }
 
     // Now swap to the new mode
+    DEBUG_LOG("Calling setMode(" + std::to_string(new_mode_enum) + ")");
     parentCPU.setMode(new_mode_enum);
+    DEBUG_LOG("After setMode: CPSR=0x" + debug_to_hex_string(parentCPU.CPSR(), 8) + ", LR=0x" + debug_to_hex_string(parentCPU.R()[14], 8));
 
-    // Set IRQ/FIQ disable bits in CPSR
+    // Set IRQ/FIQ disable bits in CPSR (after mode switch)
     uint32_t new_cpsr = parentCPU.CPSR();
     if (disable_irq) {
         new_cpsr |= 0x80; // Set I bit
@@ -210,14 +231,14 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
     parentCPU.CPSR() = new_cpsr;
 
     // In a real ARM CPU, we would save old_cpsr to SPSR, but it's not supported here
-    DEBUG_INFO("SPSR write not supported, old CPSR value 0x" + 
-               debug_to_hex_string(old_cpsr, 8) + " not saved");
+    DEBUG_LOG("SPSR write not supported, old CPSR value 0x" + debug_to_hex_string(old_cpsr, 8) + " not saved");
 
     // Set the PC to the exception vector
+    DEBUG_LOG("Setting PC (R15) to exception vector: 0x" + debug_to_hex_string(vector_address, 8));
     parentCPU.R()[15] = vector_address;
+    DEBUG_LOG("After exception: CPSR=0x" + debug_to_hex_string(parentCPU.CPSR(), 8) + ", LR=0x" + debug_to_hex_string(parentCPU.R()[14], 8));
 
-    DEBUG_INFO("Handling exception: vector=0x" + 
-               debug_to_hex_string(vector_address, 8) + 
+    DEBUG_LOG("Handling exception EXIT: vector=0x" + debug_to_hex_string(vector_address, 8) + 
                " new mode=0x" + debug_to_hex_string(new_mode, 2) + 
                " disable_irq=" + std::to_string(disable_irq) + 
                " disable_fiq=" + std::to_string(disable_fiq));
