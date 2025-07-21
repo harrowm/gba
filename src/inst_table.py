@@ -60,9 +60,9 @@ def classify(bits_27_20, mul_swp_bit):
             0xE: "BIC",
             0xF: "MVN"
         }
-        # TST, TEQ, CMP, CMN only have register form
+        # TST, TEQ, CMP, CMN: generate both _REG and _IMM variants
         if opcode in [0x8, 0x9, 0xA, 0xB]:
-            return f"{data_proc_map[opcode]}_REG"
+            return f"{data_proc_map[opcode]}{suffix}"
         return f"{data_proc_map.get(opcode, 'Other DP')}{suffix}"
 
     # Single Data Transfer: b27=0, b26=1, mul_swp_bit=0

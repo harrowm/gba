@@ -15,7 +15,6 @@ GTEST_FLAGS = $(GTEST_INCLUDE_FLAGS) $(GTEST_LINK_FLAGS)
 
 
 
-# Minimal source list for run_basic
 RUN_BASIC_SRCS = run_basic.cpp \
   ../../src/arm_cpu.cpp \
   ../../src/debug.cpp \
@@ -27,7 +26,6 @@ RUN_BASIC_SRCS = run_basic.cpp \
   ../../src/thumb_timing.c \
   ../../src/timer.c \
   ../../src/timing.c \
-  ../../src/debug.cpp \
   ../../src/gba.cpp \
   ../../src/gpu.cpp
 
@@ -50,31 +48,49 @@ all: $(TARGETS)
 		fi; \
 	done
 
-run_basic: $(RUN_BASIC_OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(GTEST_FLAGS) -DDEBUG_LEVEL=0 && ./run_basic
+run_basic: $(RUN_BASIC_OBJS) include/inst_table.inc
+	$(CXX) $(CXXFLAGS) -o $@ $(RUN_BASIC_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 && ./run_basic
 
 # Ensure build directory exists before compiling object files
-$(RUN_BASIC_OBJS) : | $(BUILD_DIR)
+
+
+
+# Ensure all object files depend on ../../include/inst_table.inc and build/include directories
+$(RUN_BASIC_OBJS): ../../include/inst_table.inc $(BUILD_DIR) include
+
+# If you add more object files, add them to this dependency as well
+
+.PHONY: include
+
+.PRECIOUS: ../../include/inst_table.inc
+include:
+	mkdir -p ../../include
+
+../../include/inst_table.inc: ../../src/inst_table.py include
+	python3 ../../src/inst_table.py > ../../include/inst_table.inc
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 
 # Pattern rules for object files in build directory
-$(BUILD_DIR)/%.o: %.cpp
+
+
+# Pattern rules for object files in build directory, all depend on ../../include/inst_table.inc and include/build directories
+$(BUILD_DIR)/%.o: %.cpp ../../include/inst_table.inc $(BUILD_DIR) include
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: %.c
+$(BUILD_DIR)/%.o: %.c ../../include/inst_table.inc $(BUILD_DIR) include
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Additional pattern rules to match sources in src/ and parent dirs
-$(BUILD_DIR)/%.o: ../../src/%.cpp
+$(BUILD_DIR)/%.o: ../../src/%.cpp ../../include/inst_table.inc $(BUILD_DIR) include
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: ../../src/%.c
+$(BUILD_DIR)/%.o: ../../src/%.c ../../include/inst_table.inc $(BUILD_DIR) include
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: ../%.cpp
+$(BUILD_DIR)/%.o: ../%.cpp ../../include/inst_table.inc $(BUILD_DIR) include
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
