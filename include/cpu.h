@@ -22,6 +22,9 @@ class CPU {
     CPU(CPU&&) = delete;
     CPU& operator=(CPU&&) = delete;
 public:
+    // Accessors for User mode banked SP/LR
+    uint32_t& bankedLRUser() { return banked_r14_usr; }
+    uint32_t& bankedSPUser() { return banked_r13_usr; }
     struct CPUState {
         std::array<uint32_t, 16> registers; // General-purpose registers
         uint32_t cpsr; // Current Program Status Register
@@ -138,7 +141,7 @@ public:
             case IRQ: banked_r13_irq = registers[13]; banked_r14_irq = registers[14]; break;
             case UND: banked_r13_und = registers[13]; banked_r14_und = registers[14]; break;
             case USER:
-            case SYS: banked_r13_usr = registers[13]; banked_r14_usr = registers[14]; break;
+            case SYS: banked_r13_usr = registers[13]; /* banked_r14_usr is only updated on explicit save, not here */ break;
             default: break;
         }
         // Update CPSR mode bits BEFORE loading new banked registers
@@ -154,8 +157,12 @@ public:
             case SYS: registers[13] = banked_r13_usr; break;
             default: break;
         }
-        // Always update LR after mode switch to match banked LR
-        registers[14] = bankedLR(newMode);
+        // Always update LR after mode switch to match banked LR (including User/System)
+        if (newMode == USER || newMode == SYS) {
+            registers[14] = banked_r14_usr;
+        } else {
+            registers[14] = bankedLR(newMode);
+        }
         DEBUG_INFO("setMode: AFTER swap, mode=" + std::to_string((int)newMode) + ", SP=0x" + debug_to_hex_string(registers[13], 8) + ", LR=0x" + debug_to_hex_string(registers[14], 8));
     }
     Memory& getMemory() { return memory; }

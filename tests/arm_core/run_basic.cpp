@@ -305,7 +305,7 @@ TEST_F(ArmCoreTest, ExceptionHandling) {
 
     // --- Undefined Instruction Exception ---
     reset_to_user();
-    uint32_t undef_instruction = 0xE7F000F0;
+    uint32_t undef_instruction = 0xE1A00090;
     memory.write32(cpu.R()[15], undef_instruction);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x04) << "Undefined did not branch to correct vector";
@@ -338,6 +338,7 @@ TEST_F(ArmCoreTest, ExceptionHandling) {
     EXPECT_TRUE((cpu.CPSR() & 0x40) != 0) << "FIQ did not disable FIQ";
 
     // --- Check that user LR is preserved ---
+    DEBUG_ERROR("Checking user LR preservation after exceptions");
     reset_to_user();
     cpu.R()[14] = 0xDEADBEEF;
     arm_cpu.handleException(0x08, 0x13, true, false); // SWI
