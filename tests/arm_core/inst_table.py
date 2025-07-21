@@ -15,21 +15,21 @@ def classify(bits_27_20, mul_swp_bit):
 
     # MUL/MLA: bits 27-22=000000, mul_swp_bit=1
     if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 0 and b23 == 0 and b22 == 0 and mul_swp_bit == 1:
-        if b21 == 0 and b20 == 0:
-            return "MUL"
-        elif b21 == 1 and b20 == 0:
-            return "MLA"
+        if b21 == 0:
+            return "MULS" if b20 == 1 else "MUL"
+        elif b21 == 1:
+            return "MLAS" if b20 == 1 else "MLA"
 
     # UMULL/UMLAL/SMULL/SMLAL: bits 27-23=00001x, mul_swp_bit=1
     if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 0 and b23 == 1 and mul_swp_bit == 1:
         if b22 == 0 and b21 == 0:
-            return "UMULL"
+            return "UMULLS" if b20 == 1 else "UMULL"
         elif b22 == 0 and b21 == 1:
-            return "UMLAL"
+            return "UMLALS" if b20 == 1 else "UMLAL"
         elif b22 == 1 and b21 == 0:
-            return "SMULL"
+            return "SMULLS" if b20 == 1 else "SMULL"
         elif b22 == 1 and b21 == 1:
-            return "SMLAL"
+            return "SMLALS" if b20 == 1 else "SMLAL"
 
     # SWP/SWPB: bits 27-23=00010x, mul_swp_bit=1
     if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 1 and b23 == 0 and mul_swp_bit == 1:
@@ -134,6 +134,12 @@ def classify(bits_27_20, mul_swp_bit):
     return "Undefined/Reserved"
 
 type_to_handler = {
+    "MULS": "exec_arm_mul",
+    "MLAS": "exec_arm_mla",
+    "UMULLS": "exec_arm_umull",
+    "UMLALS": "exec_arm_umlal",
+    "SMULLS": "exec_arm_smull",
+    "SMLALS": "exec_arm_smlal",
     "MUL": "exec_arm_mul",
     "MLA": "exec_arm_mla",
     "UMULL": "exec_arm_umull",
