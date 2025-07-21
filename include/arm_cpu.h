@@ -8,15 +8,6 @@
 #include "arm_timing.h"
 #include "utility_macros.h"
 
-/**
- * ARM CPU Optimizations:
- * - Instruction cache for eliminating redundant decode operations
- * - Function pointer table for fast opcode dispatch
- * - Fast paths for common instructions (MOV, ADD, SUB, CMP)
- * - FORCE_INLINE for critical functions
- * - Optimized flag updates to minimize register reads/writes
- */
-
 class CPU; // Forward declaration
 
 class ARMCPU {
@@ -33,7 +24,7 @@ public:
     }
 
     // Cache-aware execution method
-    bool executeInstruction(uint32_t pc, uint32_t instruction);
+    void executeInstruction(uint32_t pc, uint32_t instruction);
 
 public:    
     uint32_t arm_shift(uint32_t value, uint8_t shift_type, uint32_t shift_val);
