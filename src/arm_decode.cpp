@@ -705,34 +705,6 @@ void ARMCPU::exec_arm_ldrb_imm_post(uint32_t instruction) {
     if (writeback) parentCPU.R()[rn] = addr;
 }
 
-// void ARMCPU::exec_arm_ldr_reg_pre(uint32_t instruction) {
-//     uint8_t rn = bits<19,16>(instruction);
-//     uint8_t rd = bits<15,12>(instruction);
-//     uint8_t rm = bits<3,0>(instruction);
-//     // uint8_t offset_type = bits<6,5>(instruction);
-//     bool up = bits<23,23>(instruction);
-//     bool writeback = bits<21,21>(instruction);
-//     uint32_t base = parentCPU.R()[rn];
-//     uint32_t offset = parentCPU.R()[rm];
-//     uint32_t addr = up ? base + offset : base - offset;
-//     parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
-//     if (writeback) parentCPU.R()[rn] = addr;
-// }
-
-// void ARMCPU::exec_arm_ldr_reg_post(uint32_t instruction) {
-//     uint8_t rn = bits<19,16>(instruction);
-//     uint8_t rd = bits<15,12>(instruction);
-//     uint8_t rm = bits<3,0>(instruction);
-//     // uint8_t offset_type = bits<6,5>(instruction);
-//     bool up = bits<23,23>(instruction);
-//     bool writeback = bits<21,21>(instruction);
-//     uint32_t base = parentCPU.R()[rn];
-//     uint32_t offset = parentCPU.R()[rm];
-//     uint32_t addr = up ? base + offset : base - offset;
-//     parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
-//     if (writeback) parentCPU.R()[rn] = addr;
-// }
-
 void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_ldm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rn = bits<19,16>(instruction);
@@ -1029,26 +1001,10 @@ void ARMCPU::exec_arm_mov_reg(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t shift_type = bits<6,5>(instruction);
-    uint32_t shift_val;
-
     uint8_t rs = bits<11,8>(instruction);
-    shift_val = parentCPU.R()[rs] & 0xFF;
-    
+    uint32_t shift_val = parentCPU.R()[rs] & 0xFF;
     uint32_t value = parentCPU.R()[rm];
-    switch (shift_type) {
-        case 0: // LSL
-            value = value << shift_val;
-            break;
-        case 1: // LSR
-            value = shift_val ? (value >> shift_val) : 0;
-            break;
-        case 2: // ASR
-            value = shift_val ? ((int32_t)value >> shift_val) : (value & 0x80000000 ? 0xFFFFFFFF : 0);
-            break;
-        case 3: // ROR
-            value = shift_val ? ((value >> shift_val) | (value << (32 - shift_val))) : value;
-            break;
-    }
+    value = arm_shift(value, shift_type, shift_val);
     parentCPU.R()[rd] = value;
 
     bool set_flags = bits<20,20>(instruction);
@@ -1085,5 +1041,3 @@ void ARMCPU::exec_arm_stc_reg(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_stc_reg: Coprocessor STC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor STC (reg) logic if needed
 }
-
-
