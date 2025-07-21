@@ -906,16 +906,14 @@ void ARMCPU::exec_arm_mla(uint32_t instruction) {
 }
 
 void ARMCPU::exec_arm_umull(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_umull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+
     uint8_t rdHi = bits<19,16>(instruction);
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
-
     uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs];
     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
     parentCPU.R()[rdHi] = (uint32_t)(result >> 32);
-
     if (rdHi != 15 && rdLo != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction); 
