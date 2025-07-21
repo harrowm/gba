@@ -26,10 +26,16 @@ CPP_SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 C_SRCS = $(wildcard $(SRC_DIR)/*.c)
 
 # Object files (excluding main.cpp for libraries)
+
 CPP_OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(CPP_SRCS))
 C_OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(C_SRCS))
 ALL_OBJS = $(CPP_OBJS) $(C_OBJS)
 LIB_OBJS = $(filter-out $(BUILD_DIR)/main.o, $(ALL_OBJS))
+
+# Ensure all object files depend on inst_table.inc
+$(CPP_OBJS) $(C_OBJS): include/inst_table.inc
+include/inst_table.inc: src/inst_table.py | include
+	python3 src/inst_table.py > include/inst_table.inc
 
 # Target executables
 TARGET = gba_emulator

@@ -761,7 +761,6 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     int32_t src3_smull = (int32_t)cpu.R()[3];
     int64_t expected_smull = (int64_t)src2_smull * (int64_t)src3_smull;
     arm_cpu.execute(1);
-    std::cout << "[TEST DEBUG] After SMULL: R0=" << std::hex << cpu.R()[0] << ", R1=" << cpu.R()[1] << std::dec << std::endl;
     EXPECT_EQ(cpu.R()[0], (uint32_t)expected_smull) << "SMULL low failed";
     EXPECT_EQ(cpu.R()[1], (uint32_t)(expected_smull >> 32)) << "SMULL high failed";
 
