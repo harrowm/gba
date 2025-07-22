@@ -126,6 +126,8 @@ private:
     void exec_arm_cdp(uint32_t instruction);
     void exec_arm_mrc(uint32_t instruction);
     void exec_arm_mcr(uint32_t instruction);
+    void exec_arm_mrs(uint32_t instruction);
+    void exec_arm_msr(uint32_t instruction);
     void exec_arm_software_interrupt(uint32_t instruction);
     void exec_arm_ldc_imm(uint32_t instruction);
     void exec_arm_ldc_reg(uint32_t instruction);

@@ -13,6 +13,12 @@ def classify(bits_27_20, mul_swp_bit):
     b21 = (bits_27_20 >> 1) & 1
     b20 = bits_27_20 & 1
 
+    # MRS/MSR: bits 27-23=00010x, mul_swp_bit=0, b22 distinguishes MRS (0) and MSR (1)
+    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 1 and b23 == 0 and mul_swp_bit == 0:
+        if b22 == 0:
+            return "MRS"
+        elif b22 == 1:
+            return "MSR"
     # MUL/MLA: bits 27-22=000000, mul_swp_bit=1
     if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 0 and b23 == 0 and b22 == 0 and mul_swp_bit == 1:
         if b21 == 0:
@@ -204,6 +210,8 @@ type_to_handler = {
     "MRC": "exec_arm_mrc",
     "MCR": "exec_arm_mcr",
     "BX (possible)": "exec_arm_bx_possible",
+    "MRS": "exec_arm_mrs",
+    "MSR": "exec_arm_msr",
     "Undefined/Reserved": "exec_arm_undefined"
 }
 
