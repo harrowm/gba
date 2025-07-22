@@ -46,32 +46,60 @@
         REPEAT_ALT(ARM_FN(exec_arm_bic_imm), ARM_FN(exec_arm_undefined)), // 0x078-0x07B: exec_arm_bic_imm/exec_arm_undefined ABAB
         REPEAT_ALT(ARM_FN(exec_arm_mvn_imm), ARM_FN(exec_arm_undefined)), // 0x07C-0x07F: exec_arm_mvn_imm/exec_arm_undefined ABAB
         ARM_FN(exec_arm_str_reg_post),              // 0x080: exec_arm_str_reg_post
-        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x081-0x082: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x081: exec_arm_undefined
+        ARM_FN(exec_arm_ldr_reg_post),              // 0x082: exec_arm_ldr_reg_post
         ARM_FN(exec_arm_undefined),                 // 0x083: exec_arm_undefined
         ARM_FN(exec_arm_str_reg_post),              // 0x084: exec_arm_str_reg_post
-        REPEAT_8(ARM_FN(exec_arm_undefined)),       // 0x085-0x08C: exec_arm_undefined
-        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x08D-0x08E: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x085: exec_arm_undefined
+        ARM_FN(exec_arm_ldr_reg_post),              // 0x086: exec_arm_ldr_reg_post
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x087-0x088: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x089: exec_arm_undefined
+        ARM_FN(exec_arm_ldrb_reg_post),             // 0x08A: exec_arm_ldrb_reg_post
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x08B-0x08C: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x08D: exec_arm_undefined
+        ARM_FN(exec_arm_ldrb_reg_post),             // 0x08E: exec_arm_ldrb_reg_post
         ARM_FN(exec_arm_undefined),                 // 0x08F: exec_arm_undefined
         ARM_FN(exec_arm_str_reg_post),              // 0x090: exec_arm_str_reg_post
-        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x091-0x092: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x091: exec_arm_undefined
+        ARM_FN(exec_arm_ldr_reg_post),              // 0x092: exec_arm_ldr_reg_post
         ARM_FN(exec_arm_undefined),                 // 0x093: exec_arm_undefined
         ARM_FN(exec_arm_str_reg_post),              // 0x094: exec_arm_str_reg_post
-        REPEAT_8(ARM_FN(exec_arm_undefined)),       // 0x095-0x09C: exec_arm_undefined
-        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x09D-0x09E: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x095: exec_arm_undefined
+        ARM_FN(exec_arm_ldr_reg_post),              // 0x096: exec_arm_ldr_reg_post
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x097-0x098: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x099: exec_arm_undefined
+        ARM_FN(exec_arm_ldrb_reg_post),             // 0x09A: exec_arm_ldrb_reg_post
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x09B-0x09C: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x09D: exec_arm_undefined
+        ARM_FN(exec_arm_ldrb_reg_post),             // 0x09E: exec_arm_ldrb_reg_post
         ARM_FN(exec_arm_undefined),                 // 0x09F: exec_arm_undefined
         ARM_FN(exec_arm_str_reg_pre),               // 0x0A0: exec_arm_str_reg_pre
-        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0A1-0x0A2: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x0A1: exec_arm_undefined
+        ARM_FN(exec_arm_ldr_reg_pre),               // 0x0A2: exec_arm_ldr_reg_pre
         ARM_FN(exec_arm_undefined),                 // 0x0A3: exec_arm_undefined
         ARM_FN(exec_arm_str_reg_pre),               // 0x0A4: exec_arm_str_reg_pre
-        REPEAT_8(ARM_FN(exec_arm_undefined)),       // 0x0A5-0x0AC: exec_arm_undefined
-        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0AD-0x0AE: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x0A5: exec_arm_undefined
+        ARM_FN(exec_arm_ldr_reg_pre),               // 0x0A6: exec_arm_ldr_reg_pre
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0A7-0x0A8: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x0A9: exec_arm_undefined
+        ARM_FN(exec_arm_ldrb_reg_pre),              // 0x0AA: exec_arm_ldrb_reg_pre
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0AB-0x0AC: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x0AD: exec_arm_undefined
+        ARM_FN(exec_arm_ldrb_reg_pre),              // 0x0AE: exec_arm_ldrb_reg_pre
         ARM_FN(exec_arm_undefined),                 // 0x0AF: exec_arm_undefined
         ARM_FN(exec_arm_str_reg_pre),               // 0x0B0: exec_arm_str_reg_pre
-        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0B1-0x0B2: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x0B1: exec_arm_undefined
+        ARM_FN(exec_arm_ldr_reg_pre),               // 0x0B2: exec_arm_ldr_reg_pre
         ARM_FN(exec_arm_undefined),                 // 0x0B3: exec_arm_undefined
         ARM_FN(exec_arm_str_reg_pre),               // 0x0B4: exec_arm_str_reg_pre
-        REPEAT_8(ARM_FN(exec_arm_undefined)),       // 0x0B5-0x0BC: exec_arm_undefined
-        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0BD-0x0BE: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x0B5: exec_arm_undefined
+        ARM_FN(exec_arm_ldr_reg_pre),               // 0x0B6: exec_arm_ldr_reg_pre
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0B7-0x0B8: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x0B9: exec_arm_undefined
+        ARM_FN(exec_arm_ldrb_reg_pre),              // 0x0BA: exec_arm_ldrb_reg_pre
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0BB-0x0BC: exec_arm_undefined
+        ARM_FN(exec_arm_undefined),                 // 0x0BD: exec_arm_undefined
+        ARM_FN(exec_arm_ldrb_reg_pre),              // 0x0BE: exec_arm_ldrb_reg_pre
         ARM_FN(exec_arm_undefined),                 // 0x0BF: exec_arm_undefined
         ARM_FN(exec_arm_str_imm_post),              // 0x0C0: exec_arm_str_imm_post
         ARM_FN(exec_arm_undefined),                 // 0x0C1: exec_arm_undefined
@@ -82,12 +110,10 @@
         ARM_FN(exec_arm_ldr_imm_post),              // 0x0C6: exec_arm_ldr_imm_post
         ARM_FN(exec_arm_undefined),                 // 0x0C7: exec_arm_undefined
         ARM_FN(exec_arm_strb_imm_post),             // 0x0C8: exec_arm_strb_imm_post
-        ARM_FN(exec_arm_undefined),                 // 0x0C9: exec_arm_undefined
-        ARM_FN(exec_arm_ldrb_imm_post),             // 0x0CA: exec_arm_ldrb_imm_post
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0C9-0x0CA: exec_arm_undefined
         ARM_FN(exec_arm_undefined),                 // 0x0CB: exec_arm_undefined
         ARM_FN(exec_arm_strb_imm_post),             // 0x0CC: exec_arm_strb_imm_post
-        ARM_FN(exec_arm_undefined),                 // 0x0CD: exec_arm_undefined
-        ARM_FN(exec_arm_ldrb_imm_post),             // 0x0CE: exec_arm_ldrb_imm_post
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0CD-0x0CE: exec_arm_undefined
         ARM_FN(exec_arm_undefined),                 // 0x0CF: exec_arm_undefined
         ARM_FN(exec_arm_str_imm_post),              // 0x0D0: exec_arm_str_imm_post
         ARM_FN(exec_arm_undefined),                 // 0x0D1: exec_arm_undefined
@@ -98,12 +124,10 @@
         ARM_FN(exec_arm_ldr_imm_post),              // 0x0D6: exec_arm_ldr_imm_post
         ARM_FN(exec_arm_undefined),                 // 0x0D7: exec_arm_undefined
         ARM_FN(exec_arm_strb_imm_post),             // 0x0D8: exec_arm_strb_imm_post
-        ARM_FN(exec_arm_undefined),                 // 0x0D9: exec_arm_undefined
-        ARM_FN(exec_arm_ldrb_imm_post),             // 0x0DA: exec_arm_ldrb_imm_post
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0D9-0x0DA: exec_arm_undefined
         ARM_FN(exec_arm_undefined),                 // 0x0DB: exec_arm_undefined
         ARM_FN(exec_arm_strb_imm_post),             // 0x0DC: exec_arm_strb_imm_post
-        ARM_FN(exec_arm_undefined),                 // 0x0DD: exec_arm_undefined
-        ARM_FN(exec_arm_ldrb_imm_post),             // 0x0DE: exec_arm_ldrb_imm_post
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0DD-0x0DE: exec_arm_undefined
         ARM_FN(exec_arm_undefined),                 // 0x0DF: exec_arm_undefined
         ARM_FN(exec_arm_str_imm_pre),               // 0x0E0: exec_arm_str_imm_pre
         ARM_FN(exec_arm_undefined),                 // 0x0E1: exec_arm_undefined
@@ -114,12 +138,10 @@
         ARM_FN(exec_arm_ldr_imm_pre),               // 0x0E6: exec_arm_ldr_imm_pre
         ARM_FN(exec_arm_undefined),                 // 0x0E7: exec_arm_undefined
         ARM_FN(exec_arm_strb_imm_pre),              // 0x0E8: exec_arm_strb_imm_pre
-        ARM_FN(exec_arm_undefined),                 // 0x0E9: exec_arm_undefined
-        ARM_FN(exec_arm_ldrb_imm_pre),              // 0x0EA: exec_arm_ldrb_imm_pre
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0E9-0x0EA: exec_arm_undefined
         ARM_FN(exec_arm_undefined),                 // 0x0EB: exec_arm_undefined
         ARM_FN(exec_arm_strb_imm_pre),              // 0x0EC: exec_arm_strb_imm_pre
-        ARM_FN(exec_arm_undefined),                 // 0x0ED: exec_arm_undefined
-        ARM_FN(exec_arm_ldrb_imm_pre),              // 0x0EE: exec_arm_ldrb_imm_pre
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0ED-0x0EE: exec_arm_undefined
         ARM_FN(exec_arm_undefined),                 // 0x0EF: exec_arm_undefined
         ARM_FN(exec_arm_str_imm_pre),               // 0x0F0: exec_arm_str_imm_pre
         ARM_FN(exec_arm_undefined),                 // 0x0F1: exec_arm_undefined
@@ -130,12 +152,10 @@
         ARM_FN(exec_arm_ldr_imm_pre),               // 0x0F6: exec_arm_ldr_imm_pre
         ARM_FN(exec_arm_undefined),                 // 0x0F7: exec_arm_undefined
         ARM_FN(exec_arm_strb_imm_pre),              // 0x0F8: exec_arm_strb_imm_pre
-        ARM_FN(exec_arm_undefined),                 // 0x0F9: exec_arm_undefined
-        ARM_FN(exec_arm_ldrb_imm_pre),              // 0x0FA: exec_arm_ldrb_imm_pre
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0F9-0x0FA: exec_arm_undefined
         ARM_FN(exec_arm_undefined),                 // 0x0FB: exec_arm_undefined
         ARM_FN(exec_arm_strb_imm_pre),              // 0x0FC: exec_arm_strb_imm_pre
-        ARM_FN(exec_arm_undefined),                 // 0x0FD: exec_arm_undefined
-        ARM_FN(exec_arm_ldrb_imm_pre),              // 0x0FE: exec_arm_ldrb_imm_pre
+        REPEAT_2(ARM_FN(exec_arm_undefined)),       // 0x0FD-0x0FE: exec_arm_undefined
         ARM_FN(exec_arm_undefined),                 // 0x0FF: exec_arm_undefined
         REPEAT_ALT(ARM_FN(exec_arm_stm), ARM_FN(exec_arm_ldm)), // 0x100-0x103: exec_arm_stm/exec_arm_ldm ABAB
         REPEAT_ALT(ARM_FN(exec_arm_stm), ARM_FN(exec_arm_ldm)), // 0x104-0x107: exec_arm_stm/exec_arm_ldm ABAB
