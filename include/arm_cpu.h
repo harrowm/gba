@@ -113,7 +113,8 @@ private:
     void exec_arm_ldrsh(uint32_t instruction);
     void exec_arm_strh(uint32_t instruction);
     void exec_arm_undefined(uint32_t instruction);
-    void exec_arm_strb_reg(uint32_t instruction);
+    void exec_arm_strb_reg_pre(uint32_t instruction);
+    void exec_arm_strb_reg_post(uint32_t instruction);
     void exec_arm_strb_imm_pre(uint32_t instruction);
     void exec_arm_strb_imm_post(uint32_t instruction);
     void exec_arm_ldrb_reg_pre(uint32_t instruction);

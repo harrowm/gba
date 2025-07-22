@@ -229,6 +229,18 @@ TEST_F(ArmCoreTest, MemoryOperations) {
     EXPECT_EQ(cpu.R()[2], (uint32_t)0x00000104) << "R2 not incremented after pre-indexed addressing test";
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x12345678) << "STR R1, [R2, #4]! failed";
 
+    // Demonstrate pre-indexed addressing: STR R1, [R2, R4]!
+    uint32_t str_pre_reg_instruction = 0xE7A21004;
+    cpu.R()[2] = 0x00000100; // Set up R2 for pre-indexed addressing test
+    cpu.R()[15] = 0x00000018;
+    cpu.R()[4] = 0x00000010; // Offset to add
+    memory.write32(0x00000018, str_pre_reg_instruction);
+    EXPECT_EQ(cpu.R()[2], (uint32_t)0x00000100) << "R2 not set up for pre-indexed addressing test";
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], (uint32_t)0x00000110) << "R2 not incremented after pre-indexed reg addressing test";
+    EXPECT_EQ(cpu.R()[1], (uint32_t)0x12345678) << "STR R1, [R2, #4]! failed";
+
+
     // Block transfer demonstration
     cpu.R()[0] = 0xAAAAAAAA;
     cpu.R()[1] = 0xBBBBBBBB;

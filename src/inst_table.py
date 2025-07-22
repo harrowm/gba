@@ -74,21 +74,22 @@ def classify(bits_27_20, mul_swp_bit):
     # Single Data Transfer: b27=0, b26=1, mul_swp_bit=0
     if b27 == 0 and b26 == 1 and mul_swp_bit == 0:
         # STR/LDR/STRB/LDRB immediate: distinguish pre/post by b24
-        if b20 == 0 and b22 == 0 and b25 == 1:
+        if b20 == 0 and b22 == 0 and b25 == 0:
             return "STR_IMM_PRE" if b24 == 1 else "STR_IMM_POST"
-        elif b20 == 0 and b22 == 0 and b25 == 0:
+        elif b20 == 0 and b22 == 0 and b25 == 1:
             return "STR_REG_PRE" if b24 == 1 else "STR_REG_POST"
-        elif b20 == 0 and b22 == 1 and b25 == 1:
+        elif b20 == 0 and b22 == 1 and b25 == 0:
             return "STRB_IMM_PRE" if b24 == 1 else "STRB_IMM_POST"
-        elif b20 == 0 and b22 == 1 and b25 == 0:
-            return "STRB_REG"
-        elif b20 == 1 and b22 == 0 and b25 == 1:
-            return "LDR_IMM_PRE" if b24 == 1 else "LDR_IMM_POST"
-        elif b20 == 0 and b22 == 1 and b25 == 0:
+        elif b20 == 0 and b22 == 1 and b25 == 1:
             return "STRB_REG_PRE" if b24 == 1 else "STRB_REG_POST"
+        
         elif b20 == 1 and b22 == 0 and b25 == 0:
+            return "LDR_IMM_PRE" if b24 == 1 else "LDR_IMM_POST"
+        elif b20 == 1 and b22 == 0 and b25 == 1:
             return "LDR_REG_PRE" if b24 == 1 else "LDR_REG_POST"
         elif b20 == 1 and b22 == 1 and b25 == 0:
+            return "LDRB_IMM_PRE" if b24 == 1 else "LDRB_IMM_POST"
+        elif b20 == 1 and b22 == 1 and b25 == 1:
             return "LDRB_REG_PRE" if b24 == 1 else "LDRB_REG_POST"
         else:
             return "Other SDT"
@@ -141,81 +142,97 @@ def classify(bits_27_20, mul_swp_bit):
     return "Undefined/Reserved"
 
 type_to_handler = {
-    "STR_IMM_PRE": "exec_arm_str_imm_pre",
-    "STR_IMM_POST": "exec_arm_str_imm_post",
-    "STRB_IMM_PRE": "exec_arm_strb_imm_pre",
-    "STRB_IMM_POST": "exec_arm_strb_imm_post",
-    "LDR_IMM_PRE": "exec_arm_ldr_imm_pre",
+    # Data Transfer (LDR/STR/LDRB/STRB)
     "LDR_IMM_POST": "exec_arm_ldr_imm_post",
-    "LDRB_IMM_PRE": "exec_arm_ldrb_imm_pre",
-    "LDRB_IMM_POST": "exec_arm_ldrb_imm_post",
-    "LDRB_REG_PRE": "exec_arm_ldrb_reg_pre",
-    "LDRB_REG_POST": "exec_arm_ldrb_reg_post",
-    "LDR_REG_PRE": "exec_arm_ldr_reg_pre",
+    "LDR_IMM_PRE": "exec_arm_ldr_imm_pre",
     "LDR_REG_POST": "exec_arm_ldr_reg_post",
-    "MULS": "exec_arm_mul",
-    "MLAS": "exec_arm_mla",
-    "UMULLS": "exec_arm_umull",
-    "UMLALS": "exec_arm_umlal",
-    "SMULLS": "exec_arm_smull",
-    "SMLALS": "exec_arm_smlal",
-    "MUL": "exec_arm_mul",
+    "LDR_REG_PRE": "exec_arm_ldr_reg_pre",
+    "LDRB_IMM_POST": "exec_arm_ldrb_imm_post",
+    "LDRB_IMM_PRE": "exec_arm_ldrb_imm_pre",
+    "LDRB_REG_POST": "exec_arm_ldrb_reg_post",
+    "LDRB_REG_PRE": "exec_arm_ldrb_reg_pre",
+    "STR_IMM_POST": "exec_arm_str_imm_post",
+    "STR_IMM_PRE": "exec_arm_str_imm_pre",
+    "STR_REG_POST": "exec_arm_str_reg_post",
+    "STR_REG_PRE": "exec_arm_str_reg_pre",
+    "STRB_IMM_POST": "exec_arm_strb_imm_post",
+    "STRB_IMM_PRE": "exec_arm_strb_imm_pre",
+    "STRB_REG_POST": "exec_arm_strb_reg_post",
+    "STRB_REG_PRE": "exec_arm_strb_reg_pre",
+
+    # Multiply/Swap
     "MLA": "exec_arm_mla",
-    "UMULL": "exec_arm_umull",
-    "UMLAL": "exec_arm_umlal",
-    "SMULL": "exec_arm_smull",
+    "MLAS": "exec_arm_mla",
+    "MUL": "exec_arm_mul",
+    "MULS": "exec_arm_mul",
     "SMLAL": "exec_arm_smlal",
+    "SMLALS": "exec_arm_smlal",
+    "SMULL": "exec_arm_smull",
+    "SMULLS": "exec_arm_smull",
     "SWP": "exec_arm_swp",
     "SWPB": "exec_arm_swpb",
-    "AND_REG": "exec_arm_and_reg",
-    "AND_IMM": "exec_arm_and_imm",
-    "EOR_REG": "exec_arm_eor_reg",
-    "EOR_IMM": "exec_arm_eor_imm",
-    "SUB_REG": "exec_arm_sub_reg",
-    "SUB_IMM": "exec_arm_sub_imm",
-    "RSB_REG": "exec_arm_rsb_reg",
-    "RSB_IMM": "exec_arm_rsb_imm",
-    "ADD_REG": "exec_arm_add_reg",
-    "ADD_IMM": "exec_arm_add_imm",
-    "ADC_REG": "exec_arm_adc_reg",
+    "UMLAL": "exec_arm_umlal",
+    "UMLALS": "exec_arm_umlal",
+    "UMULL": "exec_arm_umull",
+    "UMULLS": "exec_arm_umull",
+
+    # Data Processing
     "ADC_IMM": "exec_arm_adc_imm",
-    "SBC_REG": "exec_arm_sbc_reg",
-    "SBC_IMM": "exec_arm_sbc_imm",
-    "RSC_REG": "exec_arm_rsc_reg",
-    "RSC_IMM": "exec_arm_rsc_imm",
-    "TST_REG": "exec_arm_tst_reg",
-    "TST_IMM": "exec_arm_tst_imm",
-    "TEQ_REG": "exec_arm_teq_reg",
-    "TEQ_IMM": "exec_arm_teq_imm",
-    "CMP_REG": "exec_arm_cmp_reg",
-    "CMP_IMM": "exec_arm_cmp_imm",
-    "CMN_REG": "exec_arm_cmn_reg",
-    "CMN_IMM": "exec_arm_cmn_imm",
-    "ORR_REG": "exec_arm_orr_reg",
-    "ORR_IMM": "exec_arm_orr_imm",
-    "MOV_REG": "exec_arm_mov_reg",
-    "MOV_IMM": "exec_arm_mov_imm",
-    "BIC_REG": "exec_arm_bic_reg",
+    "ADC_REG": "exec_arm_adc_reg",
+    "ADD_IMM": "exec_arm_add_imm",
+    "ADD_REG": "exec_arm_add_reg",
+    "AND_IMM": "exec_arm_and_imm",
+    "AND_REG": "exec_arm_and_reg",
     "BIC_IMM": "exec_arm_bic_imm",
-    "MVN_REG": "exec_arm_mvn_reg",
+    "BIC_REG": "exec_arm_bic_reg",
+    "CMN_IMM": "exec_arm_cmn_imm",
+    "CMN_REG": "exec_arm_cmn_reg",
+    "CMP_IMM": "exec_arm_cmp_imm",
+    "CMP_REG": "exec_arm_cmp_reg",
+    "EOR_IMM": "exec_arm_eor_imm",
+    "EOR_REG": "exec_arm_eor_reg",
+    "MOV_IMM": "exec_arm_mov_imm",
+    "MOV_REG": "exec_arm_mov_reg",
     "MVN_IMM": "exec_arm_mvn_imm",
-    "STR_IMM": "exec_arm_str_imm",
-    "STR_REG_PRE": "exec_arm_str_reg_pre",
-    "STR_REG_POST": "exec_arm_str_reg_post",
-    "LDM": "exec_arm_ldm",
-    "STM": "exec_arm_stm",
+    "MVN_REG": "exec_arm_mvn_reg",
+    "ORR_IMM": "exec_arm_orr_imm",
+    "ORR_REG": "exec_arm_orr_reg",
+    "RSB_IMM": "exec_arm_rsb_imm",
+    "RSB_REG": "exec_arm_rsb_reg",
+    "RSC_IMM": "exec_arm_rsc_imm",
+    "RSC_REG": "exec_arm_rsc_reg",
+    "SBC_IMM": "exec_arm_sbc_imm",
+    "SBC_REG": "exec_arm_sbc_reg",
+    "SUB_IMM": "exec_arm_sub_imm",
+    "SUB_REG": "exec_arm_sub_reg",
+    "TEQ_IMM": "exec_arm_teq_imm",
+    "TEQ_REG": "exec_arm_teq_reg",
+    "TST_IMM": "exec_arm_tst_imm",
+    "TST_REG": "exec_arm_tst_reg",
+
+    # Branch/Block Transfer
     "B": "exec_arm_b",
     "BL": "exec_arm_bl",
+    "LDM": "exec_arm_ldm",
+    "STM": "exec_arm_stm",
+
+    # Software Interrupt
     "SWI": "exec_arm_software_interrupt",
+
+    # Coprocessor
     "LDC_IMM": "exec_arm_ldc_imm",
     "LDC_REG": "exec_arm_ldc_reg",
+    "MCR": "exec_arm_mcr",
+    "MRC": "exec_arm_mrc",
     "STC_IMM": "exec_arm_stc_imm",
     "STC_REG": "exec_arm_stc_reg",
-    "MRC": "exec_arm_mrc",
-    "MCR": "exec_arm_mcr",
+
+    # Miscellaneous
     "BX (possible)": "exec_arm_bx_possible",
     "MRS": "exec_arm_mrs",
     "MSR": "exec_arm_msr",
+
+    # Undefined
     "Undefined/Reserved": "exec_arm_undefined"
 }
 
