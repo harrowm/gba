@@ -84,12 +84,12 @@ def classify(bits_27_20, mul_swp_bit):
             return "STRB_REG"
         elif b20 == 1 and b22 == 0 and b25 == 1:
             return "LDR_IMM_PRE" if b24 == 1 else "LDR_IMM_POST"
+        elif b20 == 0 and b22 == 1 and b25 == 0:
+            return "STRB_REG_PRE" if b24 == 1 else "STRB_REG_POST"
         elif b20 == 1 and b22 == 0 and b25 == 0:
-            return "LDR_REG"
-        elif b20 == 1 and b22 == 1 and b25 == 1:
-            return "LDRB_IMM_PRE" if b24 == 1 else "LDRB_IMM_POST"
+            return "LDR_REG_PRE" if b24 == 1 else "LDR_REG_POST"
         elif b20 == 1 and b22 == 1 and b25 == 0:
-            return "LDRB_REG"
+            return "LDRB_REG_PRE" if b24 == 1 else "LDRB_REG_POST"
         else:
             return "Other SDT"
         
@@ -149,6 +149,10 @@ type_to_handler = {
     "LDR_IMM_POST": "exec_arm_ldr_imm_post",
     "LDRB_IMM_PRE": "exec_arm_ldrb_imm_pre",
     "LDRB_IMM_POST": "exec_arm_ldrb_imm_post",
+    "LDRB_REG_PRE": "exec_arm_ldrb_reg_pre",
+    "LDRB_REG_POST": "exec_arm_ldrb_reg_post",
+    "LDR_REG_PRE": "exec_arm_ldr_reg_pre",
+    "LDR_REG_POST": "exec_arm_ldr_reg_post",
     "MULS": "exec_arm_mul",
     "MLAS": "exec_arm_mla",
     "UMULLS": "exec_arm_umull",
