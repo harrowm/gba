@@ -6,7 +6,8 @@
 FORCE_INLINE void ARMCPU::updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result) {
     uint32_t n = (result >> 31) & 1;
     uint32_t z = (result == 0) ? 1 : 0;
-    uint32_t c = (op1 >= op2) ? 1 : 0;
+    uint32_t c = (op1 >= op2) ? 1 : 0; // Carry: no borrow
+    // Overflow: if sign(op1) != sign(op2) and sign(op1) != sign(result)
     uint32_t v = (((op1 ^ op2) & (op1 ^ result)) >> 31) & 1;
     uint32_t cpsr = parentCPU.CPSR();
     cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
@@ -144,25 +145,6 @@ void ARMCPU::exec_arm_sub_imm(uint32_t instruction) {
     }
 }
 
-void ARMCPU::exec_arm_sub_reg(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_sub_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
-    uint8_t rn = bits<19,16>(instruction);
-    uint8_t rd = bits<15,12>(instruction);
-    uint8_t rs = bits<11,8>(instruction);
-    uint8_t shift_type = bits<6,5>(instruction);
-    uint8_t rm = bits<3,0>(instruction);
-    uint32_t value = parentCPU.R()[rm];
-    uint32_t shift_val;
-    shift_val = parentCPU.R()[rs] & 0xFF;
-    value = arm_shift(value, shift_type, shift_val);
-    uint32_t result = parentCPU.R()[rn] - value;
-    parentCPU.R()[rd] = result;
-    if (rd != 15) {
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
-        bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsSub(parentCPU.R()[rn], value, result);
-    }
-}
 void ARMCPU::exec_arm_rsb_imm(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_rsb_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rn = bits<19,16>(instruction);
@@ -178,6 +160,27 @@ void ARMCPU::exec_arm_rsb_imm(uint32_t instruction) {
         if (set_flags) updateFlagsSub(value, parentCPU.R()[rn], result);
     }
 }
+
+void ARMCPU::exec_arm_sub_reg(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_sub_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rs = bits<11,8>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
+    uint8_t reg_shift = bits<4,4>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+    value = arm_shift(value, shift_type, shift_val);
+    uint32_t result = parentCPU.R()[rn] - value;
+    parentCPU.R()[rd] = result;
+    if (rd != 15) {
+        parentCPU.R()[15] += 4; // Increment PC for next instruction
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) updateFlagsSub(parentCPU.R()[rn], value, result);
+    }
+}
+
 void ARMCPU::exec_arm_rsb_reg(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_rsb_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rn = bits<19,16>(instruction);
@@ -1023,10 +1026,8 @@ void ARMCPU::exec_arm_ldrsh(uint32_t instruction) {
 
 void ARMCPU::exec_arm_undefined(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
-    DEBUG_LOG("[UNDEFINED] Before handleException: PC=" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", LR=" + DEBUG_TO_HEX_STRING(parentCPU.R()[14], 8) + ", CPSR=0x" + DEBUG_TO_HEX_STRING(parentCPU.CPSR(), 8));
     // Trigger ARM undefined instruction exception
     handleException(0x04, 0x1B, true, false); // Vector 0x04, mode 0x1B (Undefined), disable IRQ
-    DEBUG_LOG("[UNDEFINED] After handleException: PC=" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", LR=" + DEBUG_TO_HEX_STRING(parentCPU.R()[14], 8) + ", CPSR=0x" + DEBUG_TO_HEX_STRING(parentCPU.CPSR(), 8));
 }
 
 void ARMCPU::exec_arm_mov_imm(uint32_t instruction) {
@@ -1051,9 +1052,15 @@ void ARMCPU::exec_arm_mov_reg(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t shift_type = bits<6,5>(instruction);
-    uint8_t rs = bits<11,8>(instruction);
-    uint32_t shift_val = parentCPU.R()[rs] & 0xFF;
+    uint8_t reg_shift = bits<4,4>(instruction);
     uint32_t value = parentCPU.R()[rm];
+    uint32_t shift_val;
+    if (reg_shift) {
+        uint8_t rs = bits<11,8>(instruction);
+        shift_val = parentCPU.R()[rs] & 0xFF;
+    } else {
+        shift_val = bits<11,7>(instruction);
+    }
     value = arm_shift(value, shift_type, shift_val);
     parentCPU.R()[rd] = value;
 
@@ -1093,5 +1100,59 @@ void ARMCPU::exec_arm_stc_imm(uint32_t instruction) {
 void ARMCPU::exec_arm_stc_reg(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_stc_reg: Coprocessor STC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor STC (reg) logic if needed
+    parentCPU.R()[15] += 4; // Increment PC for next instruction
+}
+
+void ARMCPU::exec_arm_mrs(uint32_t instruction) {
+    // Bits 19-16: Rd
+    uint32_t rd = bits<19,16>(instruction);
+    // Bit 22: PSR source (0 = CPSR, 1 = SPSR)
+    uint32_t psr_source = (instruction >> 22) & 1;
+    uint32_t value = 0;
+    if (psr_source == 0) {
+        value = parentCPU.CPSR();
+    } else {
+        // SPSR not implemented, return 0 or log warning
+        DEBUG_LOG("MRS: SPSR read not implemented, returning 0");
+        value = 0;
+    }
+    parentCPU.R()[rd] = value;
+    if (rd != 15) {
+        parentCPU.R()[15] += 4; // Increment PC for next instruction
+    }
+    DEBUG_INFO("MRS: Rd=r" + std::to_string(rd) + " <= " + debug_to_hex_string(value, 8));
+}
+
+void ARMCPU::exec_arm_msr(uint32_t instruction) {
+    // Bit 22: PSR destination (0 = CPSR, 1 = SPSR)
+    uint32_t psr_dest = (instruction >> 22) & 1;
+    // Bits 19-16: source register (if operand is register)
+    // Bit 25: 0 = reg, 1 = imm
+    uint32_t is_imm = (instruction >> 25) & 1;
+    uint32_t value = 0;
+    if (is_imm) {
+        // Immediate operand: bits 7-0 and rotate
+        uint32_t imm = instruction & 0xFF;
+        uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
+        value = (imm >> rotate) | (imm << (32 - rotate));
+    } else {
+        // Register operand: bits 3-0
+        uint32_t rm = instruction & 0xF;
+        value = parentCPU.R()[rm];
+    }
+    // Only implement CPSR write (SPSR not implemented)
+    if (psr_dest == 0) {
+        // Mask: bits 19-16 (field mask)
+        uint32_t mask = (instruction >> 16) & 0xF;
+        // Only allow control field (bit 0) for safety
+        if (mask & 1) {
+            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
+            DEBUG_INFO("MSR: CPSR control field set to " + debug_to_hex_string(value & 0xFF, 2));
+        } else {
+            DEBUG_LOG("MSR: Only control field supported, mask=" + std::to_string(mask));
+        }
+    } else {
+        DEBUG_LOG("MSR: SPSR write not implemented");
+    }
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
