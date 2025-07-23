@@ -553,6 +553,14 @@ void ARMCPU::exec_arm_cmp_imm(uint32_t instruction) {
 void ARMCPU::exec_arm_cmp_reg(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_cmp_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rn = bits<19,16>(instruction);
+    
+    // MRS and MSR were added to the ARM instruction set late and reuse TST TEQ CMN and CMP with rn==15
+    if (rn == 15) {
+        DEBUG_INFO("CMP REG with rn=15, divert to MRS");
+        exec_arm_mrs(instruction);
+        return;
+    }
+
     uint8_t rs = bits<11,8>(instruction);
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
@@ -580,6 +588,14 @@ void ARMCPU::exec_arm_cmn_imm(uint32_t instruction) {
 void ARMCPU::exec_arm_cmn_reg(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_cmn_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rn = bits<19,16>(instruction);
+
+    // MRS and MSR were added to the ARM instruction set late and reuse TST TEQ CMN and CMP with rn==15
+    if (rn == 15) {
+        DEBUG_INFO("CMN REG with rn=15, divert to MSR");
+        exec_arm_msr(instruction);
+        return;
+    }
+
     uint8_t rs = bits<11,8>(instruction);
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
