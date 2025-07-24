@@ -1,0 +1,33 @@
+#include "arm_cpu.h"
+#include "debug.h"
+#include <cstdio>
+
+void ARMCPU::exec_arm_ldrb_reg_pre(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldrb_reg_pre: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t offset = parentCPU.R()[rm];
+    uint32_t addr = up ? base + offset : base - offset;
+    parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
+    if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
+}
+
+void ARMCPU::exec_arm_ldrb_reg_post(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_ldrb_reg_post: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint8_t rd = bits<15,12>(instruction);
+    uint8_t rn = bits<19,16>(instruction);
+    uint8_t rm = bits<3,0>(instruction);
+    bool up = bits<23,23>(instruction);
+    bool writeback = bits<21,21>(instruction);
+    uint32_t base = parentCPU.R()[rn];
+    uint32_t offset = parentCPU.R()[rm];
+    parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
+    uint32_t addr = up ? base + offset : base - offset;
+    if (writeback) parentCPU.R()[rn] = addr;
+    if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
+}

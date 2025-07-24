@@ -75,23 +75,102 @@ def classify(bits_27_20, mul_swp_bit):
     # Single Data Transfer: b27=0, b26=1, mul_swp_bit=0
     if b27 == 0 and b26 == 1 and mul_swp_bit == 0:
         # STR/LDR/STRB/LDRB immediate: distinguish pre/post by b24
+        # STR_IMM
         if b20 == 0 and b22 == 0 and b25 == 0:
-            return "STR_IMM_PRE" if b24 == 1 else "STR_IMM_POST"
+            if b24 == 1:
+                if b21 == 1:
+                    return "STR_IMM_PRE_WB"
+                else:
+                    return "STR_IMM_PRE_NOWB"
+            else:
+                if b21 == 1:
+                    return "STR_IMM_POST_WB"
+                else:
+                    return "STR_IMM_POST_NOWB"
+        # STR_REG
         elif b20 == 0 and b22 == 0 and b25 == 1:
-            return "STR_REG_PRE" if b24 == 1 else "STR_REG_POST"
+            if b24 == 1:
+                if b21 == 1:
+                    return "STR_REG_PRE_WB"
+                else:
+                    return "STR_REG_PRE_NOWB"
+            else:
+                if b21 == 1:
+                    return "STR_REG_POST_WB"
+                else:
+                    return "STR_REG_POST_NOWB"
+        # STRB_IMM
         elif b20 == 0 and b22 == 1 and b25 == 0:
-            return "STRB_IMM_PRE" if b24 == 1 else "STRB_IMM_POST"
+            if b24 == 1:
+                if b21 == 1:
+                    return "STRB_IMM_PRE_WB"
+                else:
+                    return "STRB_IMM_PRE_NOWB"
+            else:
+                if b21 == 1:
+                    return "STRB_IMM_POST_WB"
+                else:
+                    return "STRB_IMM_POST_NOWB"
+        # STRB_REG
         elif b20 == 0 and b22 == 1 and b25 == 1:
-            return "STRB_REG_PRE" if b24 == 1 else "STRB_REG_POST"
-        
+            if b24 == 1:
+                if b21 == 1:
+                    return "STRB_REG_PRE_WB"
+                else:
+                    return "STRB_REG_PRE_NOWB"
+            else:
+                if b21 == 1:
+                    return "STRB_REG_POST_WB"
+                else:
+                    return "STRB_REG_POST_NOWB"
+        # LDR_IMM
         elif b20 == 1 and b22 == 0 and b25 == 0:
-            return "LDR_IMM_PRE" if b24 == 1 else "LDR_IMM_POST"
+            if b24 == 1:
+                if b21 == 1:
+                    return "LDR_IMM_PRE_WB"
+                else:
+                    return "LDR_IMM_PRE_NOWB"
+            else:
+                if b21 == 1:
+                    return "LDR_IMM_POST_WB"
+                else:
+                    return "LDR_IMM_POST_NOWB"
+        # LDR_REG
         elif b20 == 1 and b22 == 0 and b25 == 1:
-            return "LDR_REG_PRE" if b24 == 1 else "LDR_REG_POST"
+            if b24 == 1:
+                if b21 == 1:
+                    return "LDR_REG_PRE_WB"
+                else:
+                    return "LDR_REG_PRE_NOWB"
+            else:
+                if b21 == 1:
+                    return "LDR_REG_POST_WB"
+                else:
+                    return "LDR_REG_POST_NOWB"
+        # LDRB_IMM
         elif b20 == 1 and b22 == 1 and b25 == 0:
-            return "LDRB_IMM_PRE" if b24 == 1 else "LDRB_IMM_POST"
+            if b24 == 1:
+                if b21 == 1:
+                    return "LDRB_IMM_PRE_WB"
+                else:
+                    return "LDRB_IMM_PRE_NOWB"
+            else:
+                if b21 == 1:
+                    return "LDRB_IMM_POST_WB"
+                else:
+                    return "LDRB_IMM_POST_NOWB"
+        # LDRB_REG
         elif b20 == 1 and b22 == 1 and b25 == 1:
-            return "LDRB_REG_PRE" if b24 == 1 else "LDRB_REG_POST"
+            if b24 == 1:
+                if b21 == 1:
+                    return "LDRB_REG_PRE_WB"
+                else:
+                    return "LDRB_REG_PRE_NOWB"
+            else:
+                if b21 == 1:
+                    return "LDRB_REG_POST_WB"
+                else:
+                    return "LDRB_REG_POST_NOWB"
         else:
             return "Other SDT"
         
@@ -144,22 +223,38 @@ def classify(bits_27_20, mul_swp_bit):
 
 type_to_handler = {
     # Data Transfer (LDR/STR/LDRB/STRB)
-    "LDR_IMM_POST": "exec_arm_ldr_imm_post",
-    "LDR_IMM_PRE": "exec_arm_ldr_imm_pre",
-    "LDR_REG_POST": "exec_arm_ldr_reg_post",
-    "LDR_REG_PRE": "exec_arm_ldr_reg_pre",
-    "LDRB_IMM_POST": "exec_arm_ldrb_imm_post",
-    "LDRB_IMM_PRE": "exec_arm_ldrb_imm_pre",
-    "LDRB_REG_POST": "exec_arm_ldrb_reg_post",
-    "LDRB_REG_PRE": "exec_arm_ldrb_reg_pre",
-    "STR_IMM_POST": "exec_arm_str_imm_post",
-    "STR_IMM_PRE": "exec_arm_str_imm_pre",
-    "STR_REG_POST": "exec_arm_str_reg_post",
-    "STR_REG_PRE": "exec_arm_str_reg_pre",
-    "STRB_IMM_POST": "exec_arm_strb_imm_post",
-    "STRB_IMM_PRE": "exec_arm_strb_imm_pre",
-    "STRB_REG_POST": "exec_arm_strb_reg_post",
-    "STRB_REG_PRE": "exec_arm_strb_reg_pre",
+    "LDR_IMM_PRE_WB": "exec_arm_ldr_imm_pre_wb",
+    "LDR_IMM_PRE_NOWB": "exec_arm_ldr_imm_pre_nowb",
+    "LDR_IMM_POST_WB": "exec_arm_ldr_imm_post_wb",
+    "LDR_IMM_POST_NOWB": "exec_arm_ldr_imm_post_nowb",
+    "LDR_REG_PRE_WB": "exec_arm_ldr_reg_pre_wb",
+    "LDR_REG_PRE_NOWB": "exec_arm_ldr_reg_pre_nowb",
+    "LDR_REG_POST_WB": "exec_arm_ldr_reg_post_wb",
+    "LDR_REG_POST_NOWB": "exec_arm_ldr_reg_post_nowb",
+    "LDRB_IMM_PRE_WB": "exec_arm_ldrb_imm_pre_wb",
+    "LDRB_IMM_PRE_NOWB": "exec_arm_ldrb_imm_pre_nowb",
+    "LDRB_IMM_POST_WB": "exec_arm_ldrb_imm_post_wb",
+    "LDRB_IMM_POST_NOWB": "exec_arm_ldrb_imm_post_nowb",
+    "LDRB_REG_PRE_WB": "exec_arm_ldrb_reg_pre_wb",
+    "LDRB_REG_PRE_NOWB": "exec_arm_ldrb_reg_pre_nowb",
+    "LDRB_REG_POST_WB": "exec_arm_ldrb_reg_post_wb",
+    "LDRB_REG_POST_NOWB": "exec_arm_ldrb_reg_post_nowb",
+    "STR_IMM_PRE_WB": "exec_arm_str_imm_pre_wb",
+    "STR_IMM_PRE_NOWB": "exec_arm_str_imm_pre_nowb",
+    "STR_IMM_POST_WB": "exec_arm_str_imm_post_wb",
+    "STR_IMM_POST_NOWB": "exec_arm_str_imm_post_nowb",
+    "STR_REG_PRE_WB": "exec_arm_str_reg_pre_wb",
+    "STR_REG_PRE_NOWB": "exec_arm_str_reg_pre_nowb",
+    "STR_REG_POST_WB": "exec_arm_str_reg_post_wb",
+    "STR_REG_POST_NOWB": "exec_arm_str_reg_post_nowb",
+    "STRB_IMM_PRE_WB": "exec_arm_strb_imm_pre_wb",
+    "STRB_IMM_PRE_NOWB": "exec_arm_strb_imm_pre_nowb",
+    "STRB_IMM_POST_WB": "exec_arm_strb_imm_post_wb",
+    "STRB_IMM_POST_NOWB": "exec_arm_strb_imm_post_nowb",
+    "STRB_REG_PRE_WB": "exec_arm_strb_reg_pre_wb",
+    "STRB_REG_PRE_NOWB": "exec_arm_strb_reg_pre_nowb",
+    "STRB_REG_POST_WB": "exec_arm_strb_reg_post_wb",
+    "STRB_REG_POST_NOWB": "exec_arm_strb_reg_post_nowb",
 
     # Multiply/Swap
     "MLA": "exec_arm_mla",
