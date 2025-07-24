@@ -19,6 +19,7 @@ RUN_BASIC_SRCS = run_basic.cpp \
   ../../src/arm_cpu.cpp \
   ../../src/debug.cpp \
   ../../src/arm_decode.cpp \
+  ../../src/arm_exec_single_data_transfers.cpp \
   ../../src/cpu.cpp \
   ../../src/memory.cpp \
   ../../src/thumb_cpu.cpp \
