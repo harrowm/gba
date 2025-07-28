@@ -2,6 +2,9 @@
 # always 1 - I think this is a typo and it should be I.
 # There is also confusion over what 0 and 1 mean, in summary, 0=reg, 1=imm.
 
+import re
+
+
 def classify(bits_27_20, mul_swp_bit):
     # bits 27-20
     b27 = (bits_27_20 >> 7) & 1
@@ -74,105 +77,57 @@ def classify(bits_27_20, mul_swp_bit):
 
     # Single Data Transfer: b27=0, b26=1, mul_swp_bit=0
     if b27 == 0 and b26 == 1 and mul_swp_bit == 0:
+        # POST index always writebacks as per ARM spec
         # STR/LDR/STRB/LDRB immediate: distinguish pre/post by b24
         # STR_IMM
         if b20 == 0 and b22 == 0 and b25 == 0:
-            if b24 == 1:
-                if b21 == 1:
-                    return "STR_IMM_PRE_WB"
-                else:
-                    return "STR_IMM_PRE_NOWB"
-            else:
-                if b21 == 1:
-                    return "STR_IMM_POST_WB"
-                else:
-                    return "STR_IMM_POST_NOWB"
+            if b24 == 0:
+                return "STR_IMM_POST_WB"
+            return "STR_IMM_PRE_WB" if b21 == 1 else "STR_IMM_PRE_NOWB"    
         # STR_REG
         elif b20 == 0 and b22 == 0 and b25 == 1:
-            if b24 == 1:
-                if b21 == 1:
-                    return "STR_REG_PRE_WB"
-                else:
-                    return "STR_REG_PRE_NOWB"
-            else:
-                if b21 == 1:
-                    return "STR_REG_POST_WB"
-                else:
-                    return "STR_REG_POST_NOWB"
+            if b24 == 0:
+                return "STR_REG_POST_WB"
+            return "STR_REG_PRE_WB" if b21 == 1 else "STR_REG_PRE_NOWB"    
         # STRB_IMM
         elif b20 == 0 and b22 == 1 and b25 == 0:
-            if b24 == 1:
-                if b21 == 1:
-                    return "STRB_IMM_PRE_WB"
-                else:
-                    return "STRB_IMM_PRE_NOWB"
-            else:
-                if b21 == 1:
-                    return "STRB_IMM_POST_WB"
-                else:
-                    return "STRB_IMM_POST_NOWB"
+            if b24 == 0:
+                return "STRB_IMM_POST_WB"
+            return "STRB_IMM_PRE_WB" if b21 == 1 else "STRB_IMM_PRE_NOWB"
         # STRB_REG
         elif b20 == 0 and b22 == 1 and b25 == 1:
-            if b24 == 1:
-                if b21 == 1:
-                    return "STRB_REG_PRE_WB"
-                else:
-                    return "STRB_REG_PRE_NOWB"
-            else:
-                if b21 == 1:
-                    return "STRB_REG_POST_WB"
-                else:
-                    return "STRB_REG_POST_NOWB"
+            if b24 == 0:
+                return "STRB_REG_POST_WB"
+            return "STRB_REG_PRE_WB" if b21 == 1 else "STRB_REG_PRE_NOWB"    
         # LDR_IMM
         elif b20 == 1 and b22 == 0 and b25 == 0:
-            if b24 == 1:
-                if b21 == 1:
-                    return "LDR_IMM_PRE_WB"
-                else:
-                    return "LDR_IMM_PRE_NOWB"
-            else:
-                if b21 == 1:
-                    return "LDR_IMM_POST_WB"
-                else:
-                    return "LDR_IMM_POST_NOWB"
+            if b24 == 0:
+                return "LDR_IMM_POST_WB"
+            return "LDR_IMM_PRE_WB" if b21 == 1 else "LDR_IMM_PRE_NOWB"
         # LDR_REG
         elif b20 == 1 and b22 == 0 and b25 == 1:
-            if b24 == 1:
-                if b21 == 1:
-                    return "LDR_REG_PRE_WB"
-                else:
-                    return "LDR_REG_PRE_NOWB"
-            else:
-                if b21 == 1:
-                    return "LDR_REG_POST_WB"
-                else:
-                    return "LDR_REG_POST_NOWB"
+            if b24 == 0:
+                return "LDR_REG_POST_WB"
+            return "LDR_REG_PRE_WB" if b21 == 1 else "LDR_REG_PRE_NOWB"
         # LDRB_IMM
         elif b20 == 1 and b22 == 1 and b25 == 0:
-            if b24 == 1:
-                if b21 == 1:
-                    return "LDRB_IMM_PRE_WB"
-                else:
-                    return "LDRB_IMM_PRE_NOWB"
-            else:
-                if b21 == 1:
-                    return "LDRB_IMM_POST_WB"
-                else:
-                    return "LDRB_IMM_POST_NOWB"
+            if b24 == 0:
+                return "LDRB_IMM_POST_WB"
+            return "LDRB_IMM_PRE_WB" if b21 == 1 else "LDRB_IMM_PRE_NOWB"
         # LDRB_REG
         elif b20 == 1 and b22 == 1 and b25 == 1:
-            if b24 == 1:
-                if b21 == 1:
-                    return "LDRB_REG_PRE_WB"
-                else:
-                    return "LDRB_REG_PRE_NOWB"
-            else:
-                if b21 == 1:
-                    return "LDRB_REG_POST_WB"
-                else:
-                    return "LDRB_REG_POST_NOWB"
+            if b24 == 0:
+                return "LDRB_REG_POST_WB"
+            return "LDRB_REG_PRE_WB" if b21 == 1 else "LDRB_REG_PRE_NOWB"
         else:
             return "Other SDT"
+
+    # Branch instructions: bits 27-25 = 101
+    if b27 == 1 and b26 == 0 and b25 == 1:
+        if b24 == 0:
+            return "B"
+        elif b24 == 1:
+            return "BL"
         
     # Branch instructions: bits 27-25 = 101
     if b27 == 1 and b26 == 0 and b25 == 1:
@@ -464,7 +419,17 @@ def generate_cpp_table(handler_array):
         i = start
     return "\n".join(output)
 
+# Generate synchronized function name array
+def generate_cpp_fn_name_table(handler_array):
+    output = []
+    output.append("static constexpr const char* arm_exec_fn_names[512] = {")
+    for i, handler in enumerate(handler_array):
+        output.append(f'    "{handler}",  // 0x{i:03X}')
+    output.append("};")
+    return "\n".join(output)
+
 if __name__ == "__main__":
     print(boilerplate)
     print(generate_cpp_table(handler_array))
     print(cleanup_boilerplate)
+    print(generate_cpp_fn_name_table(handler_array))

@@ -15,6 +15,7 @@ GTEST_FLAGS = $(GTEST_INCLUDE_FLAGS) $(GTEST_LINK_FLAGS)
 
 
 
+
 RUN_BASIC_SRCS = run_basic.cpp \
   ../../src/arm_cpu.cpp \
   ../../src/debug.cpp \
@@ -30,6 +31,23 @@ RUN_BASIC_SRCS = run_basic.cpp \
   ../../src/gba.cpp \
   ../../src/gpu.cpp
 
+TEST_ARM_SINGLE_DATA_TRANSFERS_SRCS = test_arm_single_data_transfers.cpp \
+  ../../src/arm_cpu.cpp \
+  ../../src/debug.cpp \
+  ../../src/arm_decode.cpp \
+  ../../src/arm_exec_single_data_transfers.cpp \
+  ../../src/cpu.cpp \
+  ../../src/memory.cpp \
+  ../../src/thumb_cpu.cpp \
+  ../../src/arm_timing.c \
+  ../../src/thumb_timing.c \
+  ../../src/timer.c \
+  ../../src/timing.c \
+  ../../src/gba.cpp \
+  ../../src/gpu.cpp
+
+TEST_ARM_SINGLE_DATA_TRANSFERS_OBJS = $(foreach src,$(TEST_ARM_SINGLE_DATA_TRANSFERS_SRCS),$(call make_obj,$(src)))
+
 # Map each source file to build/obj name
 define make_obj
 $(BUILD_DIR)/$(notdir $(basename $(1))).o
@@ -38,7 +56,7 @@ endef
 RUN_BASIC_OBJS = $(foreach src,$(RUN_BASIC_SRCS),$(call make_obj,$(src)))
 
 
-TARGETS = run_basic 
+TARGETS = run_basic test_arm_single_data_transfers
 
 all: $(TARGETS)
 	@echo "Running all ARM core tests..."
@@ -49,8 +67,12 @@ all: $(TARGETS)
 		fi; \
 	done
 
+
 run_basic: $(RUN_BASIC_OBJS) include/inst_table.inc
 	$(CXX) $(CXXFLAGS) -o $@ $(RUN_BASIC_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 && ./run_basic
+
+test_arm_single_data_transfers: $(TEST_ARM_SINGLE_DATA_TRANSFERS_OBJS) include/inst_table.inc
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_ARM_SINGLE_DATA_TRANSFERS_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0
 
 # Ensure build directory exists before compiling object files
 
