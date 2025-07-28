@@ -25,12 +25,28 @@ public:
     // Cache-aware execution method
     void executeInstruction(uint32_t pc, uint32_t instruction);
 
-public:    
-    uint32_t arm_shift(uint32_t value, uint8_t shift_type, uint32_t shift_val);
-  
+public:
     FORCE_INLINE void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result);
     FORCE_INLINE void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result);
-    FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry_out);
+    FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry);
+
+    // ARM shift operations as static inline functions
+    inline static uint32_t shift_lsl(uint32_t value, uint32_t shift_val) {
+        return value << shift_val;
+    }
+    inline static uint32_t shift_lsr(uint32_t value, uint32_t shift_val) {
+        return shift_val ? (value >> shift_val) : 0;
+    }
+    inline static uint32_t shift_asr(uint32_t value, uint32_t shift_val) {
+        return shift_val ? ((int32_t)value >> shift_val) : (value & 0x80000000 ? 0xFFFFFFFF : 0);
+    }
+    inline static uint32_t shift_ror(uint32_t value, uint32_t shift_val) {
+        return shift_val ? ((value >> shift_val) | (value << (32 - shift_val))) : value;
+    }
+    using ShiftFunc = uint32_t(*)(uint32_t, uint32_t);
+    inline static constexpr ShiftFunc arm_shift[4] = {
+        shift_lsl, shift_lsr, shift_asr, shift_ror
+    };
    
     void handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq);
    
@@ -141,7 +157,8 @@ private:
     void exec_arm_mrc(uint32_t instruction);
     void exec_arm_mcr(uint32_t instruction);
     void exec_arm_mrs(uint32_t instruction);
-    void exec_arm_msr(uint32_t instruction);
+    void exec_arm_msr_reg(uint32_t instruction);
+    void exec_arm_msr_imm(uint32_t instruction);
     void exec_arm_software_interrupt(uint32_t instruction);
     void exec_arm_ldc_imm(uint32_t instruction);
     void exec_arm_ldc_reg(uint32_t instruction);

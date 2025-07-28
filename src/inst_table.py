@@ -16,13 +16,18 @@ def classify(bits_27_20, mul_swp_bit):
     b21 = (bits_27_20 >> 1) & 1
     b20 = bits_27_20 & 1
 
-    # MRS / MSR: these are definate matches, some edge cases fall through to TST TEQ CMN and CMP and 
+    # MRS / MSR: these are definite matches, some edge cases fall through to TST TEQ CMN and CMP and 
     # these will be handled in those decode functions.  The MSR/MRS instructions were added late to the ARM instruction set
     # and reuse TST TEQ CMN and CMP with rn==15
     if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 1 and b23 == 0 and b20 == 0 and mul_swp_bit == 0:
-        if b21 == 0:        
-            return "MRS" if b21 == 0 else "MSR"    
-        
+        if b21 == 0:
+            return "MRS"
+        else:
+            return "MSR_REG"
+    # MSR (immediate): b27==0, b26==0, b25==1, b24==1, b23==0, b20==0, mul_swp_bit==0
+    if b27 == 0 and b26 == 0 and b25 == 1 and b24 == 1 and b23 == 0 and b20 == 0 and mul_swp_bit == 0:
+        return "MSR_IMM"
+
     # MUL/MLA: bits 27-22=000000, mul_swp_bit=1
     if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 0 and b23 == 0 and b22 == 0 and mul_swp_bit == 1:
         if b21 == 0:
@@ -281,7 +286,8 @@ type_to_handler = {
     # Miscellaneous
     "BX (possible)": "exec_arm_bx_possible",
     "MRS": "exec_arm_mrs",
-    "MSR": "exec_arm_msr",
+    "MSR_REG": "exec_arm_msr_reg",
+    "MSR_IMM": "exec_arm_msr_imm",
 
     # Undefined
     "Undefined/Reserved": "exec_arm_undefined"

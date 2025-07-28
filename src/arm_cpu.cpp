@@ -5,11 +5,6 @@
 #include "timing.h"
 #include "arm_timing.h"
 
-// Helper for 32-bit rotate right
-static inline uint32_t ror32(uint32_t value, unsigned int amount) {
-    amount &= 31;
-    return (value >> amount) | (value << (32 - amount));
-}
 
 // Secondary decode function for ambiguous region (data processing/MUL/MLA overlap)
 // Phase 1: New entry point for ambiguous region
@@ -125,7 +120,8 @@ const ARMCPU::CondFunc ARMCPU::condTable[16] = {
 void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     UNUSED(pc); // maybe useful for debugging
 
-    uint32_t index = (bits<27,20>(instruction) << 1) | (bits<7,4>(instruction) == 0x9);
+    uint32_t index = (bits<27,20>(instruction) << 1) | ((instruction & 0x90) == 0x90); // bit 7 and 4 are set
+    DEBUG_INFO("bits and 9: " + std::to_string(bits<7,4>(instruction) & 0x9));
     DEBUG_INFO("executeInstruction: PC=0x" + debug_to_hex_string(pc, 8) + 
                 " Instruction=0x" + debug_to_hex_string(instruction, 8) + " using fn table index: 0x" + debug_to_hex_string(index, 3));
     
