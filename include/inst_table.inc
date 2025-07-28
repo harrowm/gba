@@ -24,12 +24,18 @@
         ARM_FN(exec_arm_mrs),                       // 0x020: exec_arm_mrs
         ARM_FN(exec_arm_swp),                       // 0x021: exec_arm_swp
         ARM_FN(exec_arm_tst_reg),                   // 0x022: exec_arm_tst_reg
-        REPEAT_ALT(ARM_FN(exec_arm_swp), ARM_FN(exec_arm_teq_reg)), // 0x023-0x026: exec_arm_swp/exec_arm_teq_reg ABAB
+        ARM_FN(exec_arm_swp),                       // 0x023: exec_arm_swp
+        ARM_FN(exec_arm_msr_reg),                   // 0x024: exec_arm_msr_reg
+        ARM_FN(exec_arm_swp),                       // 0x025: exec_arm_swp
+        ARM_FN(exec_arm_teq_reg),                   // 0x026: exec_arm_teq_reg
         ARM_FN(exec_arm_swp),                       // 0x027: exec_arm_swp
         ARM_FN(exec_arm_mrs),                       // 0x028: exec_arm_mrs
         ARM_FN(exec_arm_swpb),                      // 0x029: exec_arm_swpb
         ARM_FN(exec_arm_cmp_reg),                   // 0x02A: exec_arm_cmp_reg
-        REPEAT_ALT(ARM_FN(exec_arm_swpb), ARM_FN(exec_arm_cmn_reg)), // 0x02B-0x02E: exec_arm_swpb/exec_arm_cmn_reg ABAB
+        ARM_FN(exec_arm_swpb),                      // 0x02B: exec_arm_swpb
+        ARM_FN(exec_arm_msr_reg),                   // 0x02C: exec_arm_msr_reg
+        ARM_FN(exec_arm_swpb),                      // 0x02D: exec_arm_swpb
+        ARM_FN(exec_arm_cmn_reg),                   // 0x02E: exec_arm_cmn_reg
         ARM_FN(exec_arm_swpb),                      // 0x02F: exec_arm_swpb
         REPEAT_ALT(ARM_FN(exec_arm_orr_reg), ARM_FN(exec_arm_undefined)), // 0x030-0x033: exec_arm_orr_reg/exec_arm_undefined ABAB
         REPEAT_ALT(ARM_FN(exec_arm_mov_reg), ARM_FN(exec_arm_undefined)), // 0x034-0x037: exec_arm_mov_reg/exec_arm_undefined ABAB
@@ -43,14 +49,26 @@
         REPEAT_ALT(ARM_FN(exec_arm_adc_imm), ARM_FN(exec_arm_undefined)), // 0x054-0x057: exec_arm_adc_imm/exec_arm_undefined ABAB
         REPEAT_ALT(ARM_FN(exec_arm_sbc_imm), ARM_FN(exec_arm_undefined)), // 0x058-0x05B: exec_arm_sbc_imm/exec_arm_undefined ABAB
         REPEAT_ALT(ARM_FN(exec_arm_rsc_imm), ARM_FN(exec_arm_undefined)), // 0x05C-0x05F: exec_arm_rsc_imm/exec_arm_undefined ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_tst_imm), ARM_FN(exec_arm_undefined)), // 0x060-0x063: exec_arm_tst_imm/exec_arm_undefined ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_teq_imm), ARM_FN(exec_arm_undefined)), // 0x064-0x067: exec_arm_teq_imm/exec_arm_undefined ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_cmp_imm), ARM_FN(exec_arm_undefined)), // 0x068-0x06B: exec_arm_cmp_imm/exec_arm_undefined ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_cmn_imm), ARM_FN(exec_arm_undefined)), // 0x06C-0x06F: exec_arm_cmn_imm/exec_arm_undefined ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_orr_imm), ARM_FN(exec_arm_undefined)), // 0x070-0x073: exec_arm_orr_imm/exec_arm_undefined ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_mov_imm), ARM_FN(exec_arm_undefined)), // 0x074-0x077: exec_arm_mov_imm/exec_arm_undefined ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_bic_imm), ARM_FN(exec_arm_undefined)), // 0x078-0x07B: exec_arm_bic_imm/exec_arm_undefined ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_mvn_imm), ARM_FN(exec_arm_undefined)), // 0x07C-0x07F: exec_arm_mvn_imm/exec_arm_undefined ABAB
+        ARM_FN(exec_arm_msr_imm),                   // 0x060: exec_arm_msr_imm
+        ARM_FN(exec_arm_undefined),                 // 0x061: exec_arm_undefined
+        ARM_FN(exec_arm_tst_imm),                   // 0x062: exec_arm_tst_imm
+        ARM_FN(exec_arm_undefined),                 // 0x063: exec_arm_undefined
+        ARM_FN(exec_arm_msr_imm),                   // 0x064: exec_arm_msr_imm
+        ARM_FN(exec_arm_undefined),                 // 0x065: exec_arm_undefined
+        ARM_FN(exec_arm_teq_imm),                   // 0x066: exec_arm_teq_imm
+        ARM_FN(exec_arm_undefined),                 // 0x067: exec_arm_undefined
+        ARM_FN(exec_arm_msr_imm),                   // 0x068: exec_arm_msr_imm
+        ARM_FN(exec_arm_undefined),                 // 0x069: exec_arm_undefined
+        ARM_FN(exec_arm_cmp_imm),                   // 0x06A: exec_arm_cmp_imm
+        ARM_FN(exec_arm_undefined),                 // 0x06B: exec_arm_undefined
+        ARM_FN(exec_arm_msr_imm),                   // 0x06C: exec_arm_msr_imm
+        ARM_FN(exec_arm_undefined),                 // 0x06D: exec_arm_undefined
+        ARM_FN(exec_arm_cmn_imm),                   // 0x06E: exec_arm_cmn_imm
+        REPEAT_ALT(ARM_FN(exec_arm_undefined), ARM_FN(exec_arm_orr_imm)), // 0x06F-0x072: exec_arm_undefined/exec_arm_orr_imm ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_undefined), ARM_FN(exec_arm_mov_imm)), // 0x073-0x076: exec_arm_undefined/exec_arm_mov_imm ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_undefined), ARM_FN(exec_arm_bic_imm)), // 0x077-0x07A: exec_arm_undefined/exec_arm_bic_imm ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_undefined), ARM_FN(exec_arm_mvn_imm)), // 0x07B-0x07E: exec_arm_undefined/exec_arm_mvn_imm ABAB
+        ARM_FN(exec_arm_undefined),                 // 0x07F: exec_arm_undefined
         ARM_FN(exec_arm_str_imm_post_wb),           // 0x080: exec_arm_str_imm_post_wb
         ARM_FN(exec_arm_undefined),                 // 0x081: exec_arm_undefined
         ARM_FN(exec_arm_ldr_imm_post_wb),           // 0x082: exec_arm_ldr_imm_post_wb
@@ -266,7 +284,7 @@ static constexpr const char* arm_exec_fn_names[512] = {
     "exec_arm_swp",  // 0x021
     "exec_arm_tst_reg",  // 0x022
     "exec_arm_swp",  // 0x023
-    "exec_arm_teq_reg",  // 0x024
+    "exec_arm_msr_reg",  // 0x024
     "exec_arm_swp",  // 0x025
     "exec_arm_teq_reg",  // 0x026
     "exec_arm_swp",  // 0x027
@@ -274,7 +292,7 @@ static constexpr const char* arm_exec_fn_names[512] = {
     "exec_arm_swpb",  // 0x029
     "exec_arm_cmp_reg",  // 0x02A
     "exec_arm_swpb",  // 0x02B
-    "exec_arm_cmn_reg",  // 0x02C
+    "exec_arm_msr_reg",  // 0x02C
     "exec_arm_swpb",  // 0x02D
     "exec_arm_cmn_reg",  // 0x02E
     "exec_arm_swpb",  // 0x02F
@@ -326,19 +344,19 @@ static constexpr const char* arm_exec_fn_names[512] = {
     "exec_arm_undefined",  // 0x05D
     "exec_arm_rsc_imm",  // 0x05E
     "exec_arm_undefined",  // 0x05F
-    "exec_arm_tst_imm",  // 0x060
+    "exec_arm_msr_imm",  // 0x060
     "exec_arm_undefined",  // 0x061
     "exec_arm_tst_imm",  // 0x062
     "exec_arm_undefined",  // 0x063
-    "exec_arm_teq_imm",  // 0x064
+    "exec_arm_msr_imm",  // 0x064
     "exec_arm_undefined",  // 0x065
     "exec_arm_teq_imm",  // 0x066
     "exec_arm_undefined",  // 0x067
-    "exec_arm_cmp_imm",  // 0x068
+    "exec_arm_msr_imm",  // 0x068
     "exec_arm_undefined",  // 0x069
     "exec_arm_cmp_imm",  // 0x06A
     "exec_arm_undefined",  // 0x06B
-    "exec_arm_cmn_imm",  // 0x06C
+    "exec_arm_msr_imm",  // 0x06C
     "exec_arm_undefined",  // 0x06D
     "exec_arm_cmn_imm",  // 0x06E
     "exec_arm_undefined",  // 0x06F

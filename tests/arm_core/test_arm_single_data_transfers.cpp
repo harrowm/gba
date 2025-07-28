@@ -364,14 +364,14 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRH_Reg) {
 }
 
 // STRH (register offset)
-// Instruction: 0x00012003
+// Instruction: 0xE18120B3
 // STRH r2, [r1, r3]
 TEST_F(ARMCPUSingleDataTransferTest, STRH_Reg) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0xABCD;
     cpu.R()[3] = 0x2;
     cpu.R()[15] = 0x00000000;
-    memory.write32(cpu.R()[15], 0x00012003);
+    memory.write32(cpu.R()[15], 0xE18120B3);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read16(0x1002), (uint16_t)0xABCD);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
