@@ -317,7 +317,7 @@ TEST_F(ArmCoreTest, ExceptionHandling) {
 
     // --- Undefined Instruction Exception ---
     reset_to_user();
-    uint32_t undef_instruction = 0xE1A00090;
+    uint32_t undef_instruction = 0xE0400090;
     memory.write32(cpu.R()[15], undef_instruction);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x04) << "Undefined did not branch to correct vector";

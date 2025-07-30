@@ -704,12 +704,12 @@ void ARMCPU::exec_arm_mul(uint32_t instruction) {
 void ARMCPU::exec_arm_mla(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_mla: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     
-    if (bits<5,5>(instruction)) {
-        // Divert to STRH
-        DEBUG_ERROR("exec_arm_mul: Diverting to STRH");
-        exec_arm_strh(instruction);
-        return;
-    }
+    // if (bits<5,5>(instruction)) {
+    //     // Divert to STRH
+    //     DEBUG_ERROR("exec_arm_mul: Diverting to STRH");
+    //     exec_arm_strh(instruction);
+    //     return;
+    // }
     
     uint8_t rd = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
