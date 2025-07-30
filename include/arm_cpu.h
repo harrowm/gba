@@ -135,6 +135,16 @@ private:
     void exec_arm_strb_reg_pre_nowb(uint32_t instruction);
     void exec_arm_strb_reg_post_wb(uint32_t instruction);
 
+    // LDRH immediate offset variants
+    void exec_arm_ldrh_imm_pre_wb(uint32_t instruction);
+    void exec_arm_ldrh_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrh_imm_post_wb(uint32_t instruction);
+
+    // STRH immediate offset variants
+    void exec_arm_strh_imm_pre_wb(uint32_t instruction);
+    void exec_arm_strh_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_strh_imm_post_wb(uint32_t instruction);
+
     void exec_arm_mul(uint32_t instruction);
     void exec_arm_mla(uint32_t instruction);
     void exec_arm_umull(uint32_t instruction);
@@ -143,10 +153,14 @@ private:
     void exec_arm_smlal(uint32_t instruction);
     void exec_arm_swp(uint32_t instruction);
     void exec_arm_swpb(uint32_t instruction);
-    void exec_arm_ldrh(uint32_t instruction);
+    void exec_arm_ldrh_reg_pre_wb(uint32_t instruction);
+    void exec_arm_ldrh_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrh_reg_post_wb(uint32_t instruction);
     void exec_arm_ldrsb(uint32_t instruction);
     void exec_arm_ldrsh(uint32_t instruction);
-    void exec_arm_strh(uint32_t instruction);
+    void exec_arm_strh_reg_pre_wb(uint32_t instruction);
+    void exec_arm_strh_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_strh_reg_post_wb(uint32_t instruction);
     void exec_arm_undefined(uint32_t instruction);
 
     void exec_arm_stm(uint32_t instruction);
