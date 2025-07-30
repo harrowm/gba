@@ -680,8 +680,8 @@ void ARMCPU::exec_arm_mul(uint32_t instruction) {
     
     if (bits<5,5>(instruction)) {
         // Divert to STRH
-        DEBUG_ERROR("exec_arm_mul: Diverting to STRH");
-        exec_arm_strh(instruction);
+        DEBUG_ERROR("exec_arm_mul: Diverting to exec_arm_strh_reg_pre_nowb");
+        exec_arm_strh_reg_pre_nowb(instruction);
         return;
     }
 

@@ -127,6 +127,28 @@ def classify(bits_27_20, mul_swp_bit):
         else:
             return "Other SDT"
 
+    # LDRH/STRH immediate offset variants (ARM7TDMI, bits 27-20)
+    # LDRH/STRH immediate: bits 27-25=000, b20=1 for LDRH, b20=0 for STRH, b4=1, b6=1 (not fully available here)
+    # We approximate using available bits:
+    # Pre-indexed with writeback (P=1, W=1)
+    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 1 and b21 == 1:
+        if b20 == 1:
+            return "LDRH_IMM_PRE_WB"
+        else:
+            return "STRH_IMM_PRE_WB"
+    # Pre-indexed no writeback (P=1, W=0)
+    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 1 and b21 == 0:
+        if b20 == 1:
+            return "LDRH_IMM_PRE_NOWB"
+        else:
+            return "STRH_IMM_PRE_NOWB"
+    # Post-indexed (P=0, W=1)
+    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 0 and b21 == 1:
+        if b20 == 1:
+            return "LDRH_IMM_POST_WB"
+        else:
+            return "STRH_IMM_POST_WB"
+
     # Branch instructions: bits 27-25 = 101
     if b27 == 1 and b26 == 0 and b25 == 1:
         if b24 == 0:
@@ -215,6 +237,14 @@ type_to_handler = {
     "STRB_REG_PRE_NOWB": "exec_arm_strb_reg_pre_nowb",
     "STRB_REG_POST_WB": "exec_arm_strb_reg_post_wb",
     "STRB_REG_POST_NOWB": "exec_arm_strb_reg_post_nowb",
+
+    # LDRH/STRH immediate offset variants
+    "LDRH_IMM_PRE_WB": "exec_arm_ldrh_imm_pre_wb",
+    "LDRH_IMM_PRE_NOWB": "exec_arm_ldrh_imm_pre_nowb",
+    "LDRH_IMM_POST_WB": "exec_arm_ldrh_imm_post_wb",
+    "STRH_IMM_PRE_WB": "exec_arm_strh_imm_pre_wb",
+    "STRH_IMM_PRE_NOWB": "exec_arm_strh_imm_pre_nowb",
+    "STRH_IMM_POST_WB": "exec_arm_strh_imm_post_wb",
 
     # Multiply/Swap
     "MLA": "exec_arm_mla",
