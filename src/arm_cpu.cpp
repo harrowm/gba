@@ -131,8 +131,7 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
         return ;
 
     // .. and call the exec handler for the instruction
-    auto exec_func = arm_exec_table[index];
-    (this->*exec_func)(instruction);
+    (this->*arm_exec_table[index])(instruction);
 }
 
 // Optimized flag update function for logical operations (AND, EOR, TST, TEQ, etc.)
