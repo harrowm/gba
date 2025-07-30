@@ -11,7 +11,10 @@
 class CPU; // Forward declaration
 
 class ARMCPU {
+
 public:
+    using CondFunc = bool(*)(uint32_t);
+    static const CondFunc condTable[16];
     // Must be declared before use in static decode table macros
     bool exception_taken = false;
     CPU& parentCPU; // Reference to the parent CPU
@@ -69,116 +72,114 @@ public:
     static bool cond_al(uint32_t)        { return true; }
     static bool cond_nv(uint32_t)        { return false; }
 
-    using CondFunc = bool(*)(uint32_t);
-    static const CondFunc condTable[16];
 private:
-    // ARM7TDMI instruction decode table using bits 27-20 and a check to see if 
-    // bits 7-4 are "1001" (9 bits total).  This avoids any secondary decoding
-
-    void exec_arm_and_reg(uint32_t instruction);
-    void exec_arm_and_imm(uint32_t instruction);
-    void exec_arm_eor_reg(uint32_t instruction);
-    void exec_arm_eor_imm(uint32_t instruction);
-    void exec_arm_sub_reg(uint32_t instruction);
-    void exec_arm_sub_imm(uint32_t instruction);
-    void exec_arm_rsb_reg(uint32_t instruction);
-    void exec_arm_rsb_imm(uint32_t instruction);
-    void exec_arm_add_reg(uint32_t instruction);
-    void exec_arm_add_imm(uint32_t instruction);
-    void exec_arm_adc_reg(uint32_t instruction);
     void exec_arm_adc_imm(uint32_t instruction);
-    void exec_arm_sbc_reg(uint32_t instruction);
-    void exec_arm_sbc_imm(uint32_t instruction);
-    void exec_arm_rsc_reg(uint32_t instruction);
-    void exec_arm_rsc_imm(uint32_t instruction);
-    void exec_arm_tst_reg(uint32_t instruction);
-    void exec_arm_tst_imm(uint32_t instruction);
-    void exec_arm_teq_reg(uint32_t instruction);
-    void exec_arm_teq_imm(uint32_t instruction);
-    void exec_arm_cmp_reg(uint32_t instruction);
-    void exec_arm_cmp_imm(uint32_t instruction);
-    void exec_arm_cmn_reg(uint32_t instruction);
-    void exec_arm_cmn_imm(uint32_t instruction);
-    void exec_arm_orr_reg(uint32_t instruction);
-    void exec_arm_orr_imm(uint32_t instruction);
-    void exec_arm_mov_reg(uint32_t instruction);
-    void exec_arm_mov_imm(uint32_t instruction);
-    void exec_arm_bic_reg(uint32_t instruction);
-    void exec_arm_bic_imm(uint32_t instruction);
-    void exec_arm_mvn_reg(uint32_t instruction);
-    void exec_arm_mvn_imm(uint32_t instruction);
-
-        // Single Data Transfer (split by writeback)
-    void exec_arm_ldr_imm_pre_wb(uint32_t instruction);
-    void exec_arm_ldr_imm_pre_nowb(uint32_t instruction);
-    void exec_arm_ldr_imm_post_wb(uint32_t instruction);
-    void exec_arm_ldr_reg_pre_wb(uint32_t instruction);
-    void exec_arm_ldr_reg_pre_nowb(uint32_t instruction);
-    void exec_arm_ldr_reg_post_wb(uint32_t instruction);
-
-    void exec_arm_ldrb_imm_pre_wb(uint32_t instruction);
-    void exec_arm_ldrb_imm_pre_nowb(uint32_t instruction);
-    void exec_arm_ldrb_imm_post_wb(uint32_t instruction);
-    void exec_arm_ldrb_reg_pre_wb(uint32_t instruction);
-    void exec_arm_ldrb_reg_pre_nowb(uint32_t instruction);
-    void exec_arm_ldrb_reg_post_wb(uint32_t instruction);
-    void exec_arm_str_imm_pre_wb(uint32_t instruction);
-    void exec_arm_str_imm_pre_nowb(uint32_t instruction);
-    void exec_arm_str_imm_post_wb(uint32_t instruction);
-    void exec_arm_str_reg_pre_wb(uint32_t instruction);
-    void exec_arm_str_reg_pre_nowb(uint32_t instruction);
-    void exec_arm_str_reg_post_wb(uint32_t instruction);
-    void exec_arm_strb_imm_pre_wb(uint32_t instruction);
-    void exec_arm_strb_imm_pre_nowb(uint32_t instruction);
-    void exec_arm_strb_imm_post_wb(uint32_t instruction);
-    void exec_arm_strb_reg_pre_wb(uint32_t instruction);
-    void exec_arm_strb_reg_pre_nowb(uint32_t instruction);
-    void exec_arm_strb_reg_post_wb(uint32_t instruction);
-
-    // LDRH immediate offset variants
-    void exec_arm_ldrh_imm_pre_wb(uint32_t instruction);
-    void exec_arm_ldrh_imm_pre_nowb(uint32_t instruction);
-    void exec_arm_ldrh_imm_post_wb(uint32_t instruction);
-
-    // STRH immediate offset variants
-    void exec_arm_strh_imm_pre_wb(uint32_t instruction);
-    void exec_arm_strh_imm_pre_nowb(uint32_t instruction);
-    void exec_arm_strh_imm_post_wb(uint32_t instruction);
-
-    void exec_arm_mul(uint32_t instruction);
-    void exec_arm_mla(uint32_t instruction);
-    void exec_arm_umull(uint32_t instruction);
-    void exec_arm_umlal(uint32_t instruction);
-    void exec_arm_smull(uint32_t instruction);
-    void exec_arm_smlal(uint32_t instruction);
-    void exec_arm_swp(uint32_t instruction);
-    void exec_arm_swpb(uint32_t instruction);
-    void exec_arm_ldrh_reg_pre_wb(uint32_t instruction);
-    void exec_arm_ldrh_reg_pre_nowb(uint32_t instruction);
-    void exec_arm_ldrh_reg_post_wb(uint32_t instruction);
-    void exec_arm_ldrsb(uint32_t instruction);
-    void exec_arm_ldrsh(uint32_t instruction);
-    void exec_arm_strh_reg_pre_wb(uint32_t instruction);
-    void exec_arm_strh_reg_pre_nowb(uint32_t instruction);
-    void exec_arm_strh_reg_post_wb(uint32_t instruction);
-    void exec_arm_undefined(uint32_t instruction);
-
-    void exec_arm_stm(uint32_t instruction);
-    void exec_arm_ldm(uint32_t instruction);
+    void exec_arm_adc_reg(uint32_t instruction);
+    void exec_arm_add_imm(uint32_t instruction);
+    void exec_arm_add_reg(uint32_t instruction);
+    void exec_arm_and_imm(uint32_t instruction);
+    void exec_arm_and_reg(uint32_t instruction);
     void exec_arm_b(uint32_t instruction);
+    void exec_arm_bic_imm(uint32_t instruction);
+    void exec_arm_bic_reg(uint32_t instruction);
     void exec_arm_bl(uint32_t instruction);
     void exec_arm_cdp(uint32_t instruction);
-    void exec_arm_mrc(uint32_t instruction);
-    void exec_arm_mcr(uint32_t instruction);
-    void exec_arm_mrs(uint32_t instruction);
-    void exec_arm_msr_reg(uint32_t instruction);
-    void exec_arm_msr_imm(uint32_t instruction);
-    void exec_arm_software_interrupt(uint32_t instruction);
+    void exec_arm_cmn_imm(uint32_t instruction);
+    void exec_arm_cmn_reg(uint32_t instruction);
+    void exec_arm_cmp_imm(uint32_t instruction);
+    void exec_arm_cmp_reg(uint32_t instruction);
+    void exec_arm_eor_imm(uint32_t instruction);
+    void exec_arm_eor_reg(uint32_t instruction);
     void exec_arm_ldc_imm(uint32_t instruction);
     void exec_arm_ldc_reg(uint32_t instruction);
+    void exec_arm_ldm(uint32_t instruction);
+    void exec_arm_ldr_imm_post_wb(uint32_t instruction);
+    void exec_arm_ldr_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_ldr_imm_pre_wb(uint32_t instruction);
+    void exec_arm_ldr_reg_post_wb(uint32_t instruction);
+    void exec_arm_ldr_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_ldr_reg_pre_wb(uint32_t instruction);
+    void exec_arm_ldrb_imm_post_wb(uint32_t instruction);
+    void exec_arm_ldrb_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrb_imm_pre_wb(uint32_t instruction);
+    void exec_arm_ldrb_reg_post_wb(uint32_t instruction);
+    void exec_arm_ldrb_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrb_reg_pre_wb(uint32_t instruction);
+    void exec_arm_ldrh_imm_post_wb(uint32_t instruction);
+    void exec_arm_ldrh_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrh_imm_pre_wb(uint32_t instruction);
+    void exec_arm_ldrh_reg_post_wb(uint32_t instruction);
+    void exec_arm_ldrh_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrh_reg_pre_wb(uint32_t instruction);
+    void exec_arm_ldrsb(uint32_t instruction);
+    void exec_arm_ldrsh(uint32_t instruction);
+    void exec_arm_mcr(uint32_t instruction);
+    void exec_arm_mla(uint32_t instruction);
+    void exec_arm_mov_imm(uint32_t instruction);
+    void exec_arm_mov_reg(uint32_t instruction);
+    void exec_arm_mrc(uint32_t instruction);
+    void exec_arm_mrs(uint32_t instruction);
+    void exec_arm_msr_imm(uint32_t instruction);
+    void exec_arm_msr_reg(uint32_t instruction);
+    void exec_arm_mul(uint32_t instruction);
+    void exec_arm_mvn_imm(uint32_t instruction);
+    void exec_arm_mvn_reg(uint32_t instruction);
+    void exec_arm_orr_imm(uint32_t instruction);
+    void exec_arm_orr_reg(uint32_t instruction);
+    void exec_arm_rsb_imm(uint32_t instruction);
+    void exec_arm_rsb_reg(uint32_t instruction);
+    void exec_arm_rsc_imm(uint32_t instruction);
+    void exec_arm_rsc_reg(uint32_t instruction);
+    void exec_arm_sbc_imm(uint32_t instruction);
+    void exec_arm_sbc_reg(uint32_t instruction);
+    void exec_arm_smlal(uint32_t instruction);
+    void exec_arm_smull(uint32_t instruction);
+    void exec_arm_software_interrupt(uint32_t instruction);
     void exec_arm_stc_imm(uint32_t instruction);
     void exec_arm_stc_reg(uint32_t instruction);
+    void exec_arm_stm(uint32_t instruction);
+    void exec_arm_str_imm_post_wb(uint32_t instruction);
+    void exec_arm_str_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_str_imm_pre_wb(uint32_t instruction);
+    void exec_arm_str_reg_post_wb(uint32_t instruction);
+    void exec_arm_str_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_str_reg_pre_wb(uint32_t instruction);
+    void exec_arm_strb_imm_post_wb(uint32_t instruction);
+    void exec_arm_strb_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_strb_imm_pre_wb(uint32_t instruction);
+    void exec_arm_strb_reg_post_wb(uint32_t instruction);
+    void exec_arm_strb_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_strb_reg_pre_wb(uint32_t instruction);
+    void exec_arm_strh_imm_post_wb(uint32_t instruction);
+    void exec_arm_strh_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_strh_imm_pre_wb(uint32_t instruction);
+    void exec_arm_strh_reg_post_wb(uint32_t instruction);
+    void exec_arm_strh_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_strh_reg_pre_wb(uint32_t instruction);
+    void exec_arm_sub_imm(uint32_t instruction);
+    void exec_arm_sub_reg(uint32_t instruction);
+    void exec_arm_swp(uint32_t instruction);
+    void exec_arm_swpb(uint32_t instruction);
+    void exec_arm_teq_imm(uint32_t instruction);
+    void exec_arm_teq_reg(uint32_t instruction);
+    void exec_arm_tst_imm(uint32_t instruction);
+    void exec_arm_tst_reg(uint32_t instruction);
+    void exec_arm_umlal(uint32_t instruction);
+    void exec_arm_umull(uint32_t instruction);
+    void exec_arm_undefined(uint32_t instruction);
 
+    // Set up further decode table and function
+    // void exec_arm_further_decode(uint32_t instruction);
+    FORCE_INLINE void exec_arm_further_decode(uint32_t instruction) {
+        uint8_t index = bits<24,20>(instruction) << 2 | bits<6,5>(instruction);
+        DEBUG_LOG("exec_arm_further_decode: index=0x" + DEBUG_TO_HEX_STRING(index, 2));
+        (this->*arm_further_decode[index])(instruction);
+    }
+
+    using arm_func_t = void (ARMCPU::*)(uint32_t);
+    static const arm_func_t arm_further_decode[32 * 4];
+
+    #include "arm_fn_macro.inc" // Macro for static function pointers
     #include "inst_table.inc" // Include the generated instruction table
 
 public:

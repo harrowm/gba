@@ -20,6 +20,7 @@ RUN_BASIC_SRCS = run_basic.cpp \
   ../../src/arm_cpu.cpp \
   ../../src/debug.cpp \
   ../../src/arm_decode.cpp \
+  ../../src/arm_further_decode.cpp \
   ../../src/arm_exec_single_data_transfers.cpp \
   ../../src/cpu.cpp \
   ../../src/memory.cpp \
@@ -35,6 +36,7 @@ TEST_ARM_SINGLE_DATA_TRANSFERS_SRCS = test_arm_single_data_transfers.cpp \
   ../../src/arm_cpu.cpp \
   ../../src/debug.cpp \
   ../../src/arm_decode.cpp \
+  ../../src/arm_further_decode.cpp \
   ../../src/arm_exec_single_data_transfers.cpp \
   ../../src/cpu.cpp \
   ../../src/memory.cpp \

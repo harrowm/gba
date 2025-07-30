@@ -645,6 +645,12 @@ void ARMCPU::exec_arm_bl(uint32_t instruction) {
 
 void ARMCPU::exec_arm_swp(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_swp: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+      
+    if (bits<6,5>(instruction) != 0) [[unlikely]] {
+        exec_arm_further_decode(instruction);
+        return;
+    }
+
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
@@ -661,6 +667,12 @@ void ARMCPU::exec_arm_swp(uint32_t instruction) {
 
 void ARMCPU::exec_arm_swpb(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_swpb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+      
+    if (bits<6,5>(instruction) != 0) [[unlikely]] {
+        exec_arm_further_decode(instruction);
+        return;
+    }
+
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
@@ -678,10 +690,8 @@ void ARMCPU::exec_arm_swpb(uint32_t instruction) {
 void ARMCPU::exec_arm_mul(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_mul: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     
-    if (bits<5,5>(instruction)) {
-        // Divert to STRH
-        DEBUG_ERROR("exec_arm_mul: Diverting to exec_arm_strh_reg_pre_nowb");
-        exec_arm_strh_reg_pre_nowb(instruction);
+    if (bits<6,5>(instruction) != 0) [[unlikely]] {
+        exec_arm_further_decode(instruction);
         return;
     }
 
@@ -704,13 +714,11 @@ void ARMCPU::exec_arm_mul(uint32_t instruction) {
 void ARMCPU::exec_arm_mla(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_mla: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     
-    // if (bits<5,5>(instruction)) {
-    //     // Divert to STRH
-    //     DEBUG_ERROR("exec_arm_mul: Diverting to STRH");
-    //     exec_arm_strh(instruction);
-    //     return;
-    // }
-    
+    if (bits<6,5>(instruction) != 0) [[unlikely]] {
+        exec_arm_further_decode(instruction);
+        return;
+    }
+
     uint8_t rd = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
@@ -731,6 +739,12 @@ void ARMCPU::exec_arm_mla(uint32_t instruction) {
 
 void ARMCPU::exec_arm_umull(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_umull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+          
+    if (bits<6,5>(instruction) != 0) [[unlikely]] {
+        exec_arm_further_decode(instruction);
+        return;
+    }
+
     uint8_t rdHi = bits<19,16>(instruction);
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
@@ -747,6 +761,12 @@ void ARMCPU::exec_arm_umull(uint32_t instruction) {
 
 void ARMCPU::exec_arm_umlal(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_umlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+          
+    if (bits<6,5>(instruction) != 0) [[unlikely]] {
+        exec_arm_further_decode(instruction);
+        return;
+    }
+
     uint8_t rdHi = bits<19,16>(instruction);
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
@@ -767,6 +787,12 @@ void ARMCPU::exec_arm_umlal(uint32_t instruction) {
 
 void ARMCPU::exec_arm_smull(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_smull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+      
+    if (bits<6,5>(instruction) != 0) [[unlikely]] {
+        exec_arm_further_decode(instruction);
+        return;
+    }
+    
     uint8_t rdHi = bits<19,16>(instruction);
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
@@ -785,6 +811,12 @@ void ARMCPU::exec_arm_smull(uint32_t instruction) {
 
 void ARMCPU::exec_arm_smlal(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_smlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+      
+    if (bits<6,5>(instruction) != 0) [[unlikely]] {
+        exec_arm_further_decode(instruction);
+        return;
+    }
+
     uint8_t rdHi = bits<19,16>(instruction);
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
