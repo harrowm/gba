@@ -86,61 +86,59 @@ private:
 // Optimized inline implementations for critical memory access functions
 FORCE_INLINE uint32_t Memory::read32(uint32_t address, bool big_endian) {
     #if CHECK_MEMORY_BOUNDS
-    int mappedIndex = mapAddress(address, false);
-    // This error check will only be active when bounds checking is enabled
+    int mappedIndex = mapAddress(address & ~3, false);
     if (mappedIndex == -1) {
         #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
         DEBUG_ERROR("Invalid memory access at address: " + std::to_string(address));
         #endif
-        return 0; // Return default value
+        return 0;
     }
     #else
-    // Ultra-fast path with no bounds checking - directly calculate offset 
-    // This assumes test memory mode in benchmarks (single region starting at 0)
-    int mappedIndex = address;
+    int mappedIndex = address & ~3;
     #endif
-    
-    // Fast path with no mutex locking (critical for performance)
-    uint32_t value = (data[mappedIndex]) | 
+
+    // Read 4 bytes from aligned address
+    uint32_t value = (data[mappedIndex]) |
                     ((uint32_t)data[mappedIndex + 1] << 8) |
-                    ((uint32_t)data[mappedIndex + 2] << 16) | 
+                    ((uint32_t)data[mappedIndex + 2] << 16) |
                     ((uint32_t)data[mappedIndex + 3] << 24);
-    
-    // Only do byte swapping if explicitly requested
+
+    // If unaligned, rotate right by 8 * (address & 3)
+    unsigned shift = (address & 3) * 8;
+    if (shift != 0) {
+        value = (value >> shift) | (value << (32 - shift));
+    }
+
     return big_endian ? __builtin_bswap32(value) : value;
 }
 
 FORCE_INLINE void Memory::write32(uint32_t address, uint32_t value, bool big_endian) {
-    #if CHECK_MEMORY_BOUNDS
-    int mappedIndex = mapAddress(address, true);
-    if (mappedIndex == -1) {
-        #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        DEBUG_ERROR("Invalid memory write at address: " + std::to_string(address));
-        #endif
-        return;
-    }
-    if (mappedIndex == -2) {
-        #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
-        DEBUG_INFO("Attempted write to ROM address: " + std::to_string(address));
-        #endif
-        return;
-    }
-    #else
-    // Ultra-fast path with no bounds checking
-    int mappedIndex = address;
-    #endif
-    
-    // Fast path implementation with no mutex (critical for performance)
     if (big_endian) value = __builtin_bswap32(value);
-    
-    // Write directly to memory in one step
-    data[mappedIndex] = value & 0xFF;
-    data[mappedIndex + 1] = (value >> 8) & 0xFF;
-    data[mappedIndex + 2] = (value >> 16) & 0xFF;
-    data[mappedIndex + 3] = (value >> 24) & 0xFF;
-    
+
+    // Write each byte individually, matching ARM unaligned semantics
+    for (int i = 0; i < 4; ++i) {
+        uint32_t addr = address + i;
+        #if CHECK_MEMORY_BOUNDS
+        int mappedIndex = mapAddress(addr, true);
+        if (mappedIndex == -1) {
+            #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
+            DEBUG_ERROR("Invalid memory write at address: " + std::to_string(addr));
+            #endif
+            continue;
+        }
+        if (mappedIndex == -2) {
+            #if !defined(NDEBUG) && defined(DEBUG_LEVEL) && DEBUG_LEVEL > 0
+            DEBUG_INFO("Attempted write to ROM address: " + std::to_string(addr));
+            #endif
+            continue;
+        }
+        #else
+        int mappedIndex = addr;
+        #endif
+        data[mappedIndex] = (value >> (8 * i)) & 0xFF;
+    }
+
     #if !defined(BENCHMARK_MODE)
-    // Only notify caches if not in benchmark mode
     notifyCacheInvalidation(address, 4);
     #endif
 }
