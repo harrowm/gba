@@ -378,28 +378,28 @@ TEST_F(ARMCPUSingleDataTransferTest, STRH_Reg) {
 }
 
 // LDRSB (register offset)
-// Instruction: 0x00013003
+// Instruction: 0xe19130d3 
 // LDRSB r3, [r1, r3]
 TEST_F(ARMCPUSingleDataTransferTest, LDRSB_Reg) {
     cpu.R()[1] = 0x1000;
     cpu.R()[3] = 0x2;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1002, 0x80); // -128
-    memory.write32(cpu.R()[15], 0x00013003);
+    memory.write32(cpu.R()[15], 0xe19130d3);
     arm_cpu.execute(1);
     EXPECT_EQ((int32_t)cpu.R()[3], -128);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
 // LDRSH (register offset)
-// Instruction: 0x00013003
+// Instruction: 0xe19130f3 
 // LDRSH r3, [r1, r3]
 TEST_F(ARMCPUSingleDataTransferTest, LDRSH_Reg) {
     cpu.R()[1] = 0x1000;
     cpu.R()[3] = 0x2;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1002, 0x8000); // -32768
-    memory.write32(cpu.R()[15], 0x00013003);
+    memory.write32(cpu.R()[15], 0xe19130f3);
     arm_cpu.execute(1);
     EXPECT_EQ((int32_t)cpu.R()[3], -32768);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);

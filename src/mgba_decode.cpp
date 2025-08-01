@@ -1,4 +1,4 @@
-P = POST
+P = PRE
 W = WRITEBACK
 U = UP
 S = SIGNED
@@ -10,6 +10,8 @@ if bits6,5 != 0 then
     U = U, 
     S = S
   }
+
+ 00 01 02 03 08 09 0A 0B 0C 0D 0E 0F 10 14 18 19 1A 1B 1C 1D 1E 1F 
 
 #define DECLARE_ARM_EMITTER_BLOCK(EMITTER) \
 	/* -00---X- */ DECLARE_ARM_ALU_BLOCK(EMITTER, AND, MUL, STRH, ILL, ILL), \
