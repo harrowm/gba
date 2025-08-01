@@ -14,11 +14,8 @@
     static constexpr void (ARMCPU::*arm_exec_table[512])(uint32_t instruction) = {
         REPEAT_ALT(ARM_FN(exec_arm_and_reg), ARM_FN(exec_arm_mul)), // 0x000-0x003: exec_arm_and_reg/exec_arm_mul ABAB
         REPEAT_ALT(ARM_FN(exec_arm_eor_reg), ARM_FN(exec_arm_mla)), // 0x004-0x007: exec_arm_eor_reg/exec_arm_mla ABAB
-        REPEAT_ALT(ARM_FN(exec_arm_sub_reg), ARM_FN(exec_arm_undefined)), // 0x008-0x00B: exec_arm_sub_reg/exec_arm_undefined ABAB
-        ARM_FN(exec_arm_rsb_reg),                   // 0x00C: exec_arm_rsb_reg
-        ARM_FN(exec_arm_strh_imm_post_wb),          // 0x00D: exec_arm_strh_imm_post_wb
-        ARM_FN(exec_arm_rsb_reg),                   // 0x00E: exec_arm_rsb_reg
-        ARM_FN(exec_arm_ldrh_imm_post_wb),          // 0x00F: exec_arm_ldrh_imm_post_wb
+        REPEAT_ALT(ARM_FN(exec_arm_sub_reg), ARM_FN(exec_arm_further_decode)), // 0x008-0x00B: exec_arm_sub_reg/exec_arm_further_decode ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_rsb_reg), ARM_FN(exec_arm_further_decode)), // 0x00C-0x00F: exec_arm_rsb_reg/exec_arm_further_decode ABAB
         REPEAT_ALT(ARM_FN(exec_arm_add_reg), ARM_FN(exec_arm_umull)), // 0x010-0x013: exec_arm_add_reg/exec_arm_umull ABAB
         REPEAT_ALT(ARM_FN(exec_arm_adc_reg), ARM_FN(exec_arm_umlal)), // 0x014-0x017: exec_arm_adc_reg/exec_arm_umlal ABAB
         REPEAT_ALT(ARM_FN(exec_arm_sbc_reg), ARM_FN(exec_arm_smull)), // 0x018-0x01B: exec_arm_sbc_reg/exec_arm_smull ABAB
@@ -26,35 +23,23 @@
         ARM_FN(exec_arm_mrs),                       // 0x020: exec_arm_mrs
         ARM_FN(exec_arm_swp),                       // 0x021: exec_arm_swp
         ARM_FN(exec_arm_tst_reg),                   // 0x022: exec_arm_tst_reg
-        ARM_FN(exec_arm_swp),                       // 0x023: exec_arm_swp
+        ARM_FN(exec_arm_further_decode),            // 0x023: exec_arm_further_decode
         ARM_FN(exec_arm_msr_reg),                   // 0x024: exec_arm_msr_reg
-        ARM_FN(exec_arm_swp),                       // 0x025: exec_arm_swp
+        ARM_FN(exec_arm_further_decode),            // 0x025: exec_arm_further_decode
         ARM_FN(exec_arm_teq_reg),                   // 0x026: exec_arm_teq_reg
-        ARM_FN(exec_arm_swp),                       // 0x027: exec_arm_swp
+        ARM_FN(exec_arm_further_decode),            // 0x027: exec_arm_further_decode
         ARM_FN(exec_arm_mrs),                       // 0x028: exec_arm_mrs
         ARM_FN(exec_arm_swpb),                      // 0x029: exec_arm_swpb
         ARM_FN(exec_arm_cmp_reg),                   // 0x02A: exec_arm_cmp_reg
-        ARM_FN(exec_arm_swpb),                      // 0x02B: exec_arm_swpb
+        ARM_FN(exec_arm_further_decode),            // 0x02B: exec_arm_further_decode
         ARM_FN(exec_arm_msr_reg),                   // 0x02C: exec_arm_msr_reg
-        ARM_FN(exec_arm_swpb),                      // 0x02D: exec_arm_swpb
+        ARM_FN(exec_arm_further_decode),            // 0x02D: exec_arm_further_decode
         ARM_FN(exec_arm_cmn_reg),                   // 0x02E: exec_arm_cmn_reg
-        ARM_FN(exec_arm_swpb),                      // 0x02F: exec_arm_swpb
-        ARM_FN(exec_arm_orr_reg),                   // 0x030: exec_arm_orr_reg
-        ARM_FN(exec_arm_strh_imm_pre_nowb),         // 0x031: exec_arm_strh_imm_pre_nowb
-        ARM_FN(exec_arm_orr_reg),                   // 0x032: exec_arm_orr_reg
-        ARM_FN(exec_arm_ldrh_imm_pre_nowb),         // 0x033: exec_arm_ldrh_imm_pre_nowb
-        ARM_FN(exec_arm_mov_reg),                   // 0x034: exec_arm_mov_reg
-        ARM_FN(exec_arm_strh_imm_pre_wb),           // 0x035: exec_arm_strh_imm_pre_wb
-        ARM_FN(exec_arm_mov_reg),                   // 0x036: exec_arm_mov_reg
-        ARM_FN(exec_arm_ldrh_imm_pre_wb),           // 0x037: exec_arm_ldrh_imm_pre_wb
-        ARM_FN(exec_arm_bic_reg),                   // 0x038: exec_arm_bic_reg
-        ARM_FN(exec_arm_strh_imm_pre_nowb),         // 0x039: exec_arm_strh_imm_pre_nowb
-        ARM_FN(exec_arm_bic_reg),                   // 0x03A: exec_arm_bic_reg
-        ARM_FN(exec_arm_ldrh_imm_pre_nowb),         // 0x03B: exec_arm_ldrh_imm_pre_nowb
-        ARM_FN(exec_arm_mvn_reg),                   // 0x03C: exec_arm_mvn_reg
-        ARM_FN(exec_arm_strh_imm_pre_wb),           // 0x03D: exec_arm_strh_imm_pre_wb
-        ARM_FN(exec_arm_mvn_reg),                   // 0x03E: exec_arm_mvn_reg
-        ARM_FN(exec_arm_ldrh_imm_pre_wb),           // 0x03F: exec_arm_ldrh_imm_pre_wb
+        REPEAT_ALT(ARM_FN(exec_arm_further_decode), ARM_FN(exec_arm_orr_reg)), // 0x02F-0x032: exec_arm_further_decode/exec_arm_orr_reg ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_further_decode), ARM_FN(exec_arm_mov_reg)), // 0x033-0x036: exec_arm_further_decode/exec_arm_mov_reg ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_further_decode), ARM_FN(exec_arm_bic_reg)), // 0x037-0x03A: exec_arm_further_decode/exec_arm_bic_reg ABAB
+        REPEAT_ALT(ARM_FN(exec_arm_further_decode), ARM_FN(exec_arm_mvn_reg)), // 0x03B-0x03E: exec_arm_further_decode/exec_arm_mvn_reg ABAB
+        ARM_FN(exec_arm_further_decode),            // 0x03F: exec_arm_further_decode
         REPEAT_ALT(ARM_FN(exec_arm_and_imm), ARM_FN(exec_arm_undefined)), // 0x040-0x043: exec_arm_and_imm/exec_arm_undefined ABAB
         REPEAT_ALT(ARM_FN(exec_arm_eor_imm), ARM_FN(exec_arm_undefined)), // 0x044-0x047: exec_arm_eor_imm/exec_arm_undefined ABAB
         REPEAT_ALT(ARM_FN(exec_arm_sub_imm), ARM_FN(exec_arm_undefined)), // 0x048-0x04B: exec_arm_sub_imm/exec_arm_undefined ABAB
@@ -271,13 +256,13 @@ static constexpr const char* arm_exec_fn_names[512] = {
     "exec_arm_eor_reg",  // 0x006
     "exec_arm_mla",  // 0x007
     "exec_arm_sub_reg",  // 0x008
-    "exec_arm_undefined",  // 0x009
+    "exec_arm_further_decode",  // 0x009
     "exec_arm_sub_reg",  // 0x00A
-    "exec_arm_undefined",  // 0x00B
+    "exec_arm_further_decode",  // 0x00B
     "exec_arm_rsb_reg",  // 0x00C
-    "exec_arm_strh_imm_post_wb",  // 0x00D
+    "exec_arm_further_decode",  // 0x00D
     "exec_arm_rsb_reg",  // 0x00E
-    "exec_arm_ldrh_imm_post_wb",  // 0x00F
+    "exec_arm_further_decode",  // 0x00F
     "exec_arm_add_reg",  // 0x010
     "exec_arm_umull",  // 0x011
     "exec_arm_add_reg",  // 0x012
@@ -297,35 +282,35 @@ static constexpr const char* arm_exec_fn_names[512] = {
     "exec_arm_mrs",  // 0x020
     "exec_arm_swp",  // 0x021
     "exec_arm_tst_reg",  // 0x022
-    "exec_arm_swp",  // 0x023
+    "exec_arm_further_decode",  // 0x023
     "exec_arm_msr_reg",  // 0x024
-    "exec_arm_swp",  // 0x025
+    "exec_arm_further_decode",  // 0x025
     "exec_arm_teq_reg",  // 0x026
-    "exec_arm_swp",  // 0x027
+    "exec_arm_further_decode",  // 0x027
     "exec_arm_mrs",  // 0x028
     "exec_arm_swpb",  // 0x029
     "exec_arm_cmp_reg",  // 0x02A
-    "exec_arm_swpb",  // 0x02B
+    "exec_arm_further_decode",  // 0x02B
     "exec_arm_msr_reg",  // 0x02C
-    "exec_arm_swpb",  // 0x02D
+    "exec_arm_further_decode",  // 0x02D
     "exec_arm_cmn_reg",  // 0x02E
-    "exec_arm_swpb",  // 0x02F
+    "exec_arm_further_decode",  // 0x02F
     "exec_arm_orr_reg",  // 0x030
-    "exec_arm_strh_imm_pre_nowb",  // 0x031
+    "exec_arm_further_decode",  // 0x031
     "exec_arm_orr_reg",  // 0x032
-    "exec_arm_ldrh_imm_pre_nowb",  // 0x033
+    "exec_arm_further_decode",  // 0x033
     "exec_arm_mov_reg",  // 0x034
-    "exec_arm_strh_imm_pre_wb",  // 0x035
+    "exec_arm_further_decode",  // 0x035
     "exec_arm_mov_reg",  // 0x036
-    "exec_arm_ldrh_imm_pre_wb",  // 0x037
+    "exec_arm_further_decode",  // 0x037
     "exec_arm_bic_reg",  // 0x038
-    "exec_arm_strh_imm_pre_nowb",  // 0x039
+    "exec_arm_further_decode",  // 0x039
     "exec_arm_bic_reg",  // 0x03A
-    "exec_arm_ldrh_imm_pre_nowb",  // 0x03B
+    "exec_arm_further_decode",  // 0x03B
     "exec_arm_mvn_reg",  // 0x03C
-    "exec_arm_strh_imm_pre_wb",  // 0x03D
+    "exec_arm_further_decode",  // 0x03D
     "exec_arm_mvn_reg",  // 0x03E
-    "exec_arm_ldrh_imm_pre_wb",  // 0x03F
+    "exec_arm_further_decode",  // 0x03F
     "exec_arm_and_imm",  // 0x040
     "exec_arm_undefined",  // 0x041
     "exec_arm_and_imm",  // 0x042

@@ -16,6 +16,11 @@ def classify(bits_27_20, mul_swp_bit):
     b21 = (bits_27_20 >> 1) & 1
     b20 = bits_27_20 & 1
 
+
+    # Further decode for specific byte patterns and bits 7-4 == 1xx1
+    if mul_swp_bit and (bits_27_20 in [0x04,0x05,0x06,0x07,0x11,0x12,0x13,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F]):
+        return "FurtherDecode"
+
     # MRS / MSR: these are definite matches, some edge cases fall through to TST TEQ CMN and CMP and 
     # these will be handled in those decode functions.  The MSR/MRS instructions were added late to the ARM instruction set
     # and reuse TST TEQ CMN and CMP with rn==15
@@ -76,18 +81,6 @@ def classify(bits_27_20, mul_swp_bit):
             0xF: "MVN"
         }
 
-        # Further decode for specific byte patterns and bits 7-4 == 1001
-        # Get bytes 2 and 3 (from instruction)
-        # bits_27_20 is bits 27-20, so to get full instruction, we need to pass it in or reconstruct
-        # For this table, we can only use bits_27_20, but if we have access to the full instruction, do:
-        # For now, approximate using bits 11-4 (since bits_27_20 is only part of instruction)
-        # If bits 7-4 == 1001 and bytes 2 or 3 in [0x04,0x05,0x06,0x07,0x11,0x12,0x13,0x15,0x16,0x17]
-        byte2 = (bits_27_20 >> 8) & 0xFF
-        byte3 = (bits_27_20 >> 0) & 0xFF
-        bits_7_4 = (bits_27_20 >> 4) & 0xF
-        further_decode_bytes = [0x04,0x05,0x06,0x07,0x11,0x12,0x13,0x15,0x16,0x17]
-        if bits_7_4 == 0x9 and (byte2 in further_decode_bytes or byte3 in further_decode_bytes):
-            return "FurtherDecode"
         # TST, TEQ, CMP, CMN: generate both _REG and _IMM variants
         if opcode in [0x8, 0x9, 0xA, 0xB]:
             return f"{data_proc_map[opcode]}{suffix}"
@@ -139,28 +132,6 @@ def classify(bits_27_20, mul_swp_bit):
             return "LDRB_REG_PRE_WB" if b21 == 1 else "LDRB_REG_PRE_NOWB"
         else:
             return "Other SDT"
-
-    # LDRH/STRH immediate offset variants (ARM7TDMI, bits 27-20)
-    # LDRH/STRH immediate: bits 27-25=000, b20=1 for LDRH, b20=0 for STRH, b4=1, b6=1 (not fully available here)
-    # We approximate using available bits:
-    # Pre-indexed with writeback (P=1, W=1)
-    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 1 and b21 == 1:
-        if b20 == 1:
-            return "LDRH_IMM_PRE_WB"
-        else:
-            return "STRH_IMM_PRE_WB"
-    # Pre-indexed no writeback (P=1, W=0)
-    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 1 and b21 == 0:
-        if b20 == 1:
-            return "LDRH_IMM_PRE_NOWB"
-        else:
-            return "STRH_IMM_PRE_NOWB"
-    # Post-indexed (P=0, W=1)
-    if b27 == 0 and b26 == 0 and b25 == 0 and b24 == 0 and b21 == 1:
-        if b20 == 1:
-            return "LDRH_IMM_POST_WB"
-        else:
-            return "STRH_IMM_POST_WB"
 
     # Branch instructions: bits 27-25 = 101
     if b27 == 1 and b26 == 0 and b25 == 1:
