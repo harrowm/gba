@@ -424,10 +424,11 @@ void ARMCPU::exec_arm_ldrsh(uint32_t instruction) {
 
 // LDRH immediate offset variants
 void ARMCPU::exec_arm_ldrh_imm_pre_wb(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_ldrh_imm_pre_wb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    DEBUG_LOG(std::string("exec_arm_ldrh_imm_pre_wb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) +
+        ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
-    uint32_t imm = bits<11,0>(instruction);
+    uint32_t imm = (bits<11,8>(instruction) << 4) | bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
@@ -440,7 +441,7 @@ void ARMCPU::exec_arm_ldrh_imm_pre_nowb(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_ldrh_imm_pre_nowb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
-    uint32_t imm = bits<11,0>(instruction);
+    uint32_t imm = (bits<11,8>(instruction) << 4) | bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
@@ -452,7 +453,7 @@ void ARMCPU::exec_arm_ldrh_imm_post_wb(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_ldrh_imm_post_wb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
-    uint32_t imm = bits<11,0>(instruction);
+    uint32_t imm = (bits<11,8>(instruction) << 4) | bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     parentCPU.R()[rd] = parentCPU.getMemory().read16(base);
@@ -466,7 +467,7 @@ void ARMCPU::exec_arm_strh_imm_pre_wb(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_strh_imm_pre_wb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
-    uint32_t imm = bits<11,0>(instruction);
+    uint32_t imm = (bits<11,8>(instruction) << 4) | bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
@@ -479,7 +480,7 @@ void ARMCPU::exec_arm_strh_imm_pre_nowb(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_strh_imm_pre_nowb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
-    uint32_t imm = bits<11,0>(instruction);
+    uint32_t imm = (bits<11,8>(instruction) << 4) | bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
@@ -491,7 +492,7 @@ void ARMCPU::exec_arm_strh_imm_post_wb(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_strh_imm_post_wb: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint8_t rd = bits<15,12>(instruction);
     uint8_t rn = bits<19,16>(instruction);
-    uint32_t imm = bits<11,0>(instruction);
+    uint32_t imm = (bits<11,8>(instruction) << 4) | bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     parentCPU.getMemory().write16(base, parentCPU.R()[rd] & 0xFFFF);
