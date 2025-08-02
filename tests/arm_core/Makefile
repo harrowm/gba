@@ -15,40 +15,39 @@ GTEST_FLAGS = $(GTEST_INCLUDE_FLAGS) $(GTEST_LINK_FLAGS)
 
 
 
-
 RUN_BASIC_SRCS = run_basic.cpp \
-  ../../src/arm_cpu.cpp \
-  ../../src/debug.cpp \
-  ../../src/arm_decode.cpp \
-  ../../src/arm_further_decode.cpp \
-  ../../src/arm_exec_multiply.cpp \
-  ../../src/arm_exec_single_data_transfers.cpp \
-  ../../src/cpu.cpp \
-  ../../src/memory.cpp \
-  ../../src/thumb_cpu.cpp \
-  ../../src/arm_timing.c \
-  ../../src/thumb_timing.c \
-  ../../src/timer.c \
-  ../../src/timing.c \
-  ../../src/gba.cpp \
-  ../../src/gpu.cpp
+	../../src/arm_cpu.cpp \
+	../../src/debug.cpp \
+	../../src/arm_decode.cpp \
+	../../src/arm_further_decode.cpp \
+	../../src/arm_exec_multiply.cpp \
+	../../src/arm_exec_single_data_transfers.cpp \
+	../../src/cpu.cpp \
+	../../src/memory.cpp \
+	../../src/thumb_cpu.cpp \
+	../../src/arm_timing.c \
+	../../src/thumb_timing.c \
+	../../src/timer.c \
+	../../src/timing.c \
+	../../src/gba.cpp \
+	../../src/gpu.cpp
 
 TEST_ARM_SINGLE_DATA_TRANSFERS_SRCS = test_arm_single_data_transfers.cpp \
-  ../../src/arm_cpu.cpp \
-  ../../src/debug.cpp \
-  ../../src/arm_decode.cpp \
-  ../../src/arm_further_decode.cpp \
-  ../../src/arm_exec_multiply.cpp \
-  ../../src/arm_exec_single_data_transfers.cpp \
-  ../../src/cpu.cpp \
-  ../../src/memory.cpp \
-  ../../src/thumb_cpu.cpp \
-  ../../src/arm_timing.c \
-  ../../src/thumb_timing.c \
-  ../../src/timer.c \
-  ../../src/timing.c \
-  ../../src/gba.cpp \
-  ../../src/gpu.cpp
+	../../src/arm_cpu.cpp \
+	../../src/debug.cpp \
+	../../src/arm_decode.cpp \
+	../../src/arm_further_decode.cpp \
+	../../src/arm_exec_multiply.cpp \
+	../../src/arm_exec_single_data_transfers.cpp \
+	../../src/cpu.cpp \
+	../../src/memory.cpp \
+	../../src/thumb_cpu.cpp \
+	../../src/arm_timing.c \
+	../../src/thumb_timing.c \
+	../../src/timer.c \
+	../../src/timing.c \
+	../../src/gba.cpp \
+	../../src/gpu.cpp
 
 TEST_ARM_SINGLE_DATA_TRANSFERS_OBJS = $(foreach src,$(TEST_ARM_SINGLE_DATA_TRANSFERS_SRCS),$(call make_obj,$(src)))
 
@@ -60,7 +59,28 @@ endef
 RUN_BASIC_OBJS = $(foreach src,$(RUN_BASIC_SRCS),$(call make_obj,$(src)))
 
 
-TARGETS = run_basic test_arm_single_data_transfers
+TARGETS = run_basic test_arm_single_data_transfers test_arm_multiply
+# ARM Multiply test sources
+TEST_ARM_MULTIPLY_SRCS = test_arm_multiply.cpp \
+	../../src/arm_cpu.cpp \
+	../../src/debug.cpp \
+	../../src/arm_decode.cpp \
+	../../src/arm_further_decode.cpp \
+	../../src/arm_exec_multiply.cpp \
+	../../src/arm_exec_single_data_transfers.cpp \
+	../../src/cpu.cpp \
+	../../src/memory.cpp \
+	../../src/thumb_cpu.cpp \
+	../../src/arm_timing.c \
+	../../src/thumb_timing.c \
+	../../src/timer.c \
+	../../src/timing.c \
+	../../src/gba.cpp \
+	../../src/gpu.cpp
+
+TEST_ARM_MULTIPLY_OBJS = $(foreach src,$(TEST_ARM_MULTIPLY_SRCS),$(call make_obj,$(src)))
+test_arm_multiply: $(TEST_ARM_MULTIPLY_OBJS) include/inst_table.inc
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_ARM_MULTIPLY_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0
 
 all: $(TARGETS)
 	@echo "Running all ARM core tests..."

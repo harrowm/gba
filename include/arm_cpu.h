@@ -29,10 +29,12 @@ public:
     void executeInstruction(uint32_t pc, uint32_t instruction);
 
 public:
-    void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result);
-    void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result);
+    // void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result);
+    // void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result);
     // void updateFlagsLogical(uint32_t result, uint32_t carry);
 
+    // The functions to update flags need to be inline for speed and hence fully defined
+    // in the header file
     FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry) {
         // N flag: set if result is negative
         uint32_t n = (result >> 31) & 1;
@@ -46,6 +48,37 @@ public:
         // V flag is not affected by logical ops
         parentCPU.CPSR() = cpsr;
     }
+
+    // Update flags after subtraction: N, Z, C, V
+    FORCE_INLINE void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result) {
+        uint32_t n = (result >> 31) & 1;
+        uint32_t z = (result == 0) ? 1 : 0;
+        uint32_t c = (op1 >= op2) ? 1 : 0; // Carry: no borrow
+        // Overflow: if sign(op1) != sign(op2) and sign(op1) != sign(result)
+        uint32_t v = (((op1 ^ op2) & (op1 ^ result)) >> 31) & 1;
+        uint32_t cpsr = parentCPU.CPSR();
+        cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+        cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+        cpsr = (cpsr & ~(1u << 29)) | (c << 29); // C
+        cpsr = (cpsr & ~(1u << 28)) | (v << 28); // V
+        parentCPU.CPSR() = cpsr;
+    }
+
+    // Update flags after addition: N, Z, C, V
+    FORCE_INLINE void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result) {
+        uint32_t n = (result >> 31) & 1;
+        uint32_t z = (result == 0) ? 1 : 0;
+        uint32_t c = (result < op1) ? 1 : 0;
+        uint32_t v = (~(op1 ^ op2) & (op1 ^ result) >> 31) & 1;
+        uint32_t cpsr = parentCPU.CPSR();
+        cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+        cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+        cpsr = (cpsr & ~(1u << 29)) | (c << 29); // C
+        cpsr = (cpsr & ~(1u << 28)) | (v << 28); // V
+        parentCPU.CPSR() = cpsr;
+    }
+
+
 
     // ARM shift operations as static inline functions
     inline static uint32_t shift_lsl(uint32_t value, uint32_t shift_val) {
