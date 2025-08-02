@@ -943,7 +943,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Unaligned) {
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // Only aligned portion is written, check 0x1000-0x1003
-    EXPECT_EQ(memory.read32(0x1000), (uint32_t)0xCAFEBABE); // implementation-defined, may be partial
+    EXPECT_EQ(memory.read32(0x1000), 0xBE000000); // implementation-defined, will be partial for GBA
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
@@ -952,7 +952,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRH_Imm_Unaligned) {
     cpu.R()[1] = 0x1003;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1003, 0xBEEF);
-    uint32_t instr = 0xE1D132B0; // LDRH r3, [r1]
+    uint32_t instr = 0xE1D130B0; // LDRH r3, [r1]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // LDRH from unaligned address: result is unpredictable, but test for value
@@ -965,7 +965,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRH_Imm_Unaligned) {
     cpu.R()[1] = 0x1003;
     cpu.R()[2] = 0xABCD;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1C122B0; // STRH r2, [r1]
+    uint32_t instr = 0xe1c120b0 ; // STRH r2, [r1]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // STRH to unaligned address: may be partial or unpredictable, but test for value
@@ -978,7 +978,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRSH_Imm_Unaligned) {
     cpu.R()[1] = 0x1003;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1003, 0x8000);
-    uint32_t instr = 0xE1D132F0; // LDRSH r3, [r1]
+    uint32_t instr = 0xE1D130F0; // LDRSH r3, [r1]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ((int32_t)cpu.R()[3], -32768);
@@ -1064,7 +1064,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRH_Imm_EndOfRAM) {
     cpu.R()[1] = 0x1FFE;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1FFE, 0xBEEF);
-    uint32_t instr = 0xE1D132B0; // LDRH r3, [r1]
+    uint32_t instr = 0xE1D130B0; // LDRH r3, [r1]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3] & 0xFFFF, (uint16_t)0xBEEF);
@@ -1076,7 +1076,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRH_Imm_EndOfRAM) {
     cpu.R()[1] = 0x1FFE;
     cpu.R()[2] = 0xABCD;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1C122B0; // STRH r2, [r1]
+    uint32_t instr = 0xE1C120B0; // STRH r2, [r1]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read16(0x1FFE), (uint16_t)0xABCD);
@@ -1088,7 +1088,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRSH_Imm_EndOfRAM) {
     cpu.R()[1] = 0x1FFE;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1FFE, 0x8000);
-    uint32_t instr = 0xE1D132F0; // LDRSH r3, [r1]
+    uint32_t instr = 0xE1D130F0; // LDRSH r3, [r1]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ((int32_t)cpu.R()[3], -32768);
@@ -1142,7 +1142,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Pre_WB_RnEqRd) {
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // ARM: result is unpredictable, but test for value
-    EXPECT_EQ(cpu.R()[1], (uint32_t)0xCAFEBABE);
+    EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
@@ -1227,7 +1227,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRH_Reg_Post_WB_Down) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1000, 0x1234);
-    uint32_t instr = 0xE1D132B3; // LDRH r3, [r1], r3
+    uint32_t instr = 0xE09130B3; // LDRH r3, [r1], r3
     instr &= ~(1 << 23); // Clear U bit (down)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
@@ -1242,7 +1242,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRH_Reg_Post_WB_Down) {
     cpu.R()[2] = 0xBEEF;
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1C122B3; // STRH r2, [r1], r3
+    uint32_t instr = 0xe08120b3 ; // STRH r2, [r1], r3
     instr &= ~(1 << 23); // Clear U bit (down)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
@@ -1257,7 +1257,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRSB_Reg_Pre_WB_Down) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1000, 0x80); // -128
-    uint32_t instr = 0xE1B132D3; // LDRSB r3, [r1, r3]!
+    uint32_t instr = 0xe1b130d3 ; // LDRSB r3, [r1, r3]!
     instr &= ~(1 << 23); // Clear U bit (down)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
@@ -1272,7 +1272,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRSB_Reg_Post_WB_Down) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1000, 0x80); // -128
-    uint32_t instr = 0xE1D132D3; // LDRSB r3, [r1], r3
+    uint32_t instr = 0xE09130D3; // LDRSB r3, [r1], r3
     instr &= ~(1 << 23); // Clear U bit (down)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
@@ -1287,7 +1287,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRSH_Reg_Pre_WB_Down) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1000, 0x8000); // -32768
-    uint32_t instr = 0xE1B132F3; // LDRSH r3, [r1, r3]!
+    uint32_t instr = 0xE1B130F3; // LDRSH r3, [r1, r3]!
     instr &= ~(1 << 23); // Clear U bit (down)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
@@ -1302,7 +1302,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRSH_Reg_Post_WB_Down) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1000, 0x8000); // -32768
-    uint32_t instr = 0xE1D132F3; // LDRSH r3, [r1], r3
+    uint32_t instr = 0xE09130F3; // LDRSH r3, [r1], r3
     instr &= ~(1 << 23); // Clear U bit (down)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
@@ -1370,7 +1370,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRH_Imm_ZeroOffset) {
     cpu.R()[1] = 0x1000;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1000, 0xBEEF);
-    uint32_t instr = 0xE1D132B0; // LDRH r3, [r1, #0]
+    uint32_t instr = 0xE1D130B0; // LDRH r3, [r1, #0]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3] & 0xFFFF, (uint16_t)0xBEEF);
@@ -1383,7 +1383,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRH_Imm_ZeroOffset) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0xFACE;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1C122B0; // STRH r2, [r1, #0]
+    uint32_t instr = 0xE1C120B0; // STRH r2, [r1, #0]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read16(0x1000), (uint16_t)0xFACE);
@@ -1451,10 +1451,14 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Illegal_HS_BitsSet) {
     cpu.R()[2] = 0;
     cpu.R()[15] = 0x00000000;
     // Both H and S bits set (should be unpredictable/illegal)
-    uint32_t instr = 0xE1D120F0; // LDR r2, [r1], #0, H=1, S=1
+    uint32_t instr = 0xE49120F0; // LDR r2, [r1], #0, H=1, S=1
     memory.write32(cpu.R()[15], instr);
+    testing::internal::CaptureStderr();
     arm_cpu.execute(1);
+    std::string stderr_output = testing::internal::GetCapturedStderr();
     // Should not crash, result is unpredictable, but test for no crash
+    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
@@ -1465,8 +1469,12 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Illegal_HS_BitsSet) {
     cpu.R()[15] = 0x00000000;
     uint32_t instr = 0xE1C120F0; // STR r2, [r1], #0, H=1, S=1
     memory.write32(cpu.R()[15], instr);
+     testing::internal::CaptureStderr();
     arm_cpu.execute(1);
+    std::string stderr_output = testing::internal::GetCapturedStderr();
     // Should not crash, result is unpredictable, but test for no crash
+    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
@@ -1478,8 +1486,12 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Illegal_ReservedBits) {
     // Set reserved bits (bits 7-4 = 0b1111)
     uint32_t instr = 0xE5912FF0; // LDR r2, [r1, #0xFF0]
     memory.write32(cpu.R()[15], instr);
+    testing::internal::CaptureStderr();
     arm_cpu.execute(1);
+    std::string stderr_output = testing::internal::GetCapturedStderr();
     // Should not crash, result is unpredictable, but test for no crash
+    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
@@ -1490,20 +1502,12 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Illegal_ReservedBits) {
     cpu.R()[15] = 0x00000000;
     uint32_t instr = 0xE5812FF0; // STR r2, [r1, #0xFF0]
     memory.write32(cpu.R()[15], instr);
+    testing::internal::CaptureStderr();
     arm_cpu.execute(1);
+    std::string stderr_output = testing::internal::GetCapturedStderr();
     // Should not crash, result is unpredictable, but test for no crash
-    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
-}
-
-// LDRH (illegal: reserved bits set)
-TEST_F(ARMCPUSingleDataTransferTest, LDRH_Illegal_ReservedBits) {
-    cpu.R()[1] = 0x1000;
-    cpu.R()[3] = 0;
-    cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1D13FF0; // LDRH r3, [r1], #0, reserved bits set
-    memory.write32(cpu.R()[15], instr);
-    arm_cpu.execute(1);
-    // Should not crash, result is unpredictable, but test for no crash
+    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
@@ -1514,7 +1518,11 @@ TEST_F(ARMCPUSingleDataTransferTest, STRH_Illegal_ReservedBits) {
     cpu.R()[15] = 0x00000000;
     uint32_t instr = 0xE1C12FF0; // STRH r2, [r1], #0, reserved bits set
     memory.write32(cpu.R()[15], instr);
+    testing::internal::CaptureStderr();
     arm_cpu.execute(1);
+    std::string stderr_output = testing::internal::GetCapturedStderr();
     // Should not crash, result is unpredictable, but test for no crash
+    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }

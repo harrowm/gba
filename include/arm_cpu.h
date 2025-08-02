@@ -111,8 +111,20 @@ private:
     void exec_arm_ldrh_reg_post_wb(uint32_t instruction);
     void exec_arm_ldrh_reg_pre_nowb(uint32_t instruction);
     void exec_arm_ldrh_reg_pre_wb(uint32_t instruction);
-    void exec_arm_ldrsb(uint32_t instruction);
-    void exec_arm_ldrsh(uint32_t instruction);
+    // LDRSB addressing modes
+    void exec_arm_ldrsb_reg_pre_wb(uint32_t instruction);
+    void exec_arm_ldrsb_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrsb_reg_post_wb(uint32_t instruction);
+    void exec_arm_ldrsb_imm_pre_wb(uint32_t instruction);
+    void exec_arm_ldrsb_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrsb_imm_post_wb(uint32_t instruction);
+    // LDRSH addressing modes
+    void exec_arm_ldrsh_reg_pre_wb(uint32_t instruction);
+    void exec_arm_ldrsh_reg_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrsh_reg_post_wb(uint32_t instruction);
+    void exec_arm_ldrsh_imm_pre_wb(uint32_t instruction);
+    void exec_arm_ldrsh_imm_pre_nowb(uint32_t instruction);
+    void exec_arm_ldrsh_imm_post_wb(uint32_t instruction);
     void exec_arm_mcr(uint32_t instruction);
     void exec_arm_mla(uint32_t instruction);
     void exec_arm_mov_imm(uint32_t instruction);
