@@ -6,7 +6,7 @@
 #include "interrupt.h"
 #include "debug.h"
 #include "thumb_cpu.h"
-#include "arm_cpu.h"
+//#include "arm_cpu.h"
 #include "timing.h"
 #include <array>
 #include <cstdint>
