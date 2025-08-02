@@ -102,17 +102,16 @@ void ARMCPU::exec_arm_umlal(uint32_t instruction) {
 
 void ARMCPU::exec_arm_smull(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_smull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
-      
+
     if (bits<6,5>(instruction) != 0) [[unlikely]] {
         exec_arm_further_decode(instruction);
         return;
     }
-    
+
     uint8_t rdHi = bits<19,16>(instruction);
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
-
     int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs];
     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
     parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
@@ -137,9 +136,16 @@ void ARMCPU::exec_arm_smlal(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
 
-    // Get the accumulator value from RdHi/RdLo
-    int64_t acc = ((int64_t)(int32_t)parentCPU.R()[rdHi] << 32) | (uint32_t)parentCPU.R()[rdLo];
+    DEBUG_LOG("SMLAL decode: rdHi=" + std::to_string(rdHi) + ", rdLo=" + std::to_string(rdLo) + ", rm=" + std::to_string(rm) + ", rs=" + std::to_string(rs));
+    DEBUG_LOG("SMLAL inputs: Rm=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rm], 8) + ", Rs=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rs], 8));
+    DEBUG_LOG("SMLAL acc inputs: RdHi=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdHi], 8) + ", RdLo=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdLo], 8));
+
+    // Get the accumulator value from RdHi/RdLo (unsigned 64-bit)
+    int64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | (uint32_t)parentCPU.R()[rdLo];
+    DEBUG_LOG("SMLAL acc (uint64_t): 0x" + DEBUG_TO_HEX_STRING((uint64_t)acc, 16));
     int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs] + acc;
+    DEBUG_LOG("SMLAL result (dec): " + std::to_string(result));
+    DEBUG_LOG("SMLAL result: hi=0x" + DEBUG_TO_HEX_STRING((uint32_t)(result >> 32), 8) + ", lo=0x" + DEBUG_TO_HEX_STRING((uint32_t)(result & 0xFFFFFFFF), 8));
     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
     parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
 
