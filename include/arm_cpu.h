@@ -29,9 +29,23 @@ public:
     void executeInstruction(uint32_t pc, uint32_t instruction);
 
 public:
-    FORCE_INLINE void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result);
-    FORCE_INLINE void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result);
-    FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry);
+    void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result);
+    void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result);
+    // void updateFlagsLogical(uint32_t result, uint32_t carry);
+
+    FORCE_INLINE void updateFlagsLogical(uint32_t result, uint32_t carry) {
+        // N flag: set if result is negative
+        uint32_t n = (result >> 31) & 1;
+        // Z flag: set if result is zero
+        uint32_t z = (result == 0) ? 1 : 0;
+        // C flag: use provided carry value (if meaningful for the operation)
+        uint32_t cpsr = parentCPU.CPSR();
+        cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+        cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+        cpsr = (cpsr & ~(1u << 29)) | ((carry & 1) << 29); // C
+        // V flag is not affected by logical ops
+        parentCPU.CPSR() = cpsr;
+    }
 
     // ARM shift operations as static inline functions
     inline static uint32_t shift_lsl(uint32_t value, uint32_t shift_val) {

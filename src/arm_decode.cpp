@@ -4,7 +4,7 @@
 #include <bit> // For std::popcount
 
 // Update flags after subtraction: N, Z, C, V
-FORCE_INLINE void ARMCPU::updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result) {
+void ARMCPU::updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result) {
     uint32_t n = (result >> 31) & 1;
     uint32_t z = (result == 0) ? 1 : 0;
     uint32_t c = (op1 >= op2) ? 1 : 0; // Carry: no borrow
@@ -19,7 +19,7 @@ FORCE_INLINE void ARMCPU::updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t re
 }
 
 // Update flags after addition: N, Z, C, V
-FORCE_INLINE void ARMCPU::updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result) {
+void ARMCPU::updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result) {
     uint32_t n = (result >> 31) & 1;
     uint32_t z = (result == 0) ? 1 : 0;
     uint32_t c = (result < op1) ? 1 : 0;
@@ -32,19 +32,19 @@ FORCE_INLINE void ARMCPU::updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t re
     parentCPU.CPSR() = cpsr;
 }
 
-FORCE_INLINE void ARMCPU::updateFlagsLogical(uint32_t result, uint32_t carry) {
-    // N flag: set if result is negative
-    uint32_t n = (result >> 31) & 1;
-    // Z flag: set if result is zero
-    uint32_t z = (result == 0) ? 1 : 0;
-    // C flag: use provided carry value (if meaningful for the operation)
-    uint32_t cpsr = parentCPU.CPSR();
-    cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
-    cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
-    cpsr = (cpsr & ~(1u << 29)) | ((carry & 1) << 29); // C
-    // V flag is not affected by logical ops
-    parentCPU.CPSR() = cpsr;
-}
+// void ARMCPU::updateFlagsLogical(uint32_t result, uint32_t carry) {
+//     // N flag: set if result is negative
+//     uint32_t n = (result >> 31) & 1;
+//     // Z flag: set if result is zero
+//     uint32_t z = (result == 0) ? 1 : 0;
+//     // C flag: use provided carry value (if meaningful for the operation)
+//     uint32_t cpsr = parentCPU.CPSR();
+//     cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+//     cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+//     cpsr = (cpsr & ~(1u << 29)) | ((carry & 1) << 29); // C
+//     // V flag is not affected by logical ops
+//     parentCPU.CPSR() = cpsr;
+// }
 
 void ARMCPU::exec_arm_eor_imm(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_eor_imm: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
@@ -687,153 +687,153 @@ void ARMCPU::exec_arm_swpb(uint32_t instruction) {
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
-void ARMCPU::exec_arm_mul(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_mul: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+// void ARMCPU::exec_arm_mul(uint32_t instruction) {
+//     DEBUG_LOG(std::string("exec_arm_mul: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     
-    if (bits<6,5>(instruction) != 0) [[unlikely]] {
-        exec_arm_further_decode(instruction);
-        return;
-    }
+//     if (bits<6,5>(instruction) != 0) [[unlikely]] {
+//         exec_arm_further_decode(instruction);
+//         return;
+//     }
 
-    uint8_t rd = bits<19,16>(instruction);
-    uint8_t rm = bits<3,0>(instruction);
-    uint8_t rs = bits<11,8>(instruction);
+//     uint8_t rd = bits<19,16>(instruction);
+//     uint8_t rm = bits<3,0>(instruction);
+//     uint8_t rs = bits<11,8>(instruction);
     
-    // Multiply two registers and store the result
-    uint32_t op1 = parentCPU.R()[rm];
-    uint32_t op2 = parentCPU.R()[rs];
-    parentCPU.R()[rd] = op1 * op2;
+//     // Multiply two registers and store the result
+//     uint32_t op1 = parentCPU.R()[rm];
+//     uint32_t op2 = parentCPU.R()[rs];
+//     parentCPU.R()[rd] = op1 * op2;
     
-    if (rd != 15) {
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
-        bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
-    }
-}
+//     if (rd != 15) {
+//         parentCPU.R()[15] += 4; // Increment PC for next instruction
+//         bool set_flags = bits<20,20>(instruction);
+//         if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
+//     }
+// }
 
-void ARMCPU::exec_arm_mla(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_mla: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+// void ARMCPU::exec_arm_mla(uint32_t instruction) {
+//     DEBUG_LOG(std::string("exec_arm_mla: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     
-    if (bits<6,5>(instruction) != 0) [[unlikely]] {
-        exec_arm_further_decode(instruction);
-        return;
-    }
+//     if (bits<6,5>(instruction) != 0) [[unlikely]] {
+//         exec_arm_further_decode(instruction);
+//         return;
+//     }
 
-    uint8_t rd = bits<19,16>(instruction);
-    uint8_t rm = bits<3,0>(instruction);
-    uint8_t rs = bits<11,8>(instruction);
-    uint8_t rn = bits<15,12>(instruction);
+//     uint8_t rd = bits<19,16>(instruction);
+//     uint8_t rm = bits<3,0>(instruction);
+//     uint8_t rs = bits<11,8>(instruction);
+//     uint8_t rn = bits<15,12>(instruction);
 
-    // Multiply and accumulate: Rd = (Rm * Rs) + Rn
-    uint32_t op1 = parentCPU.R()[rm];
-    uint32_t op2 = parentCPU.R()[rs];
-    uint32_t acc = parentCPU.R()[rn];
-    parentCPU.R()[rd] = (op1 * op2) + acc;
+//     // Multiply and accumulate: Rd = (Rm * Rs) + Rn
+//     uint32_t op1 = parentCPU.R()[rm];
+//     uint32_t op2 = parentCPU.R()[rs];
+//     uint32_t acc = parentCPU.R()[rn];
+//     parentCPU.R()[rd] = (op1 * op2) + acc;
 
-    if (rd != 15) {
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
-        bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
-    }
-}
+//     if (rd != 15) {
+//         parentCPU.R()[15] += 4; // Increment PC for next instruction
+//         bool set_flags = bits<20,20>(instruction);
+//         if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
+//     }
+// }
 
-void ARMCPU::exec_arm_umull(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_umull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+// void ARMCPU::exec_arm_umull(uint32_t instruction) {
+//     DEBUG_LOG(std::string("exec_arm_umull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
           
-    if (bits<6,5>(instruction) != 0) [[unlikely]] {
-        exec_arm_further_decode(instruction);
-        return;
-    }
+//     if (bits<6,5>(instruction) != 0) [[unlikely]] {
+//         exec_arm_further_decode(instruction);
+//         return;
+//     }
 
-    uint8_t rdHi = bits<19,16>(instruction);
-    uint8_t rdLo = bits<15,12>(instruction);
-    uint8_t rm = bits<3,0>(instruction);
-    uint8_t rs = bits<11,8>(instruction);
-    uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs];
-    parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
-    parentCPU.R()[rdHi] = (uint32_t)(result >> 32);
-    if (rdHi != 15 && rdLo != 15) {
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
-        bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
-    }
-}
+//     uint8_t rdHi = bits<19,16>(instruction);
+//     uint8_t rdLo = bits<15,12>(instruction);
+//     uint8_t rm = bits<3,0>(instruction);
+//     uint8_t rs = bits<11,8>(instruction);
+//     uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs];
+//     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+//     parentCPU.R()[rdHi] = (uint32_t)(result >> 32);
+//     if (rdHi != 15 && rdLo != 15) {
+//         parentCPU.R()[15] += 4; // Increment PC for next instruction
+//         bool set_flags = bits<20,20>(instruction); 
+//         if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+//     }
+// }
 
-void ARMCPU::exec_arm_umlal(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_umlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+// void ARMCPU::exec_arm_umlal(uint32_t instruction) {
+//     DEBUG_LOG(std::string("exec_arm_umlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
           
-    if (bits<6,5>(instruction) != 0) [[unlikely]] {
-        exec_arm_further_decode(instruction);
-        return;
-    }
+//     if (bits<6,5>(instruction) != 0) [[unlikely]] {
+//         exec_arm_further_decode(instruction);
+//         return;
+//     }
 
-    uint8_t rdHi = bits<19,16>(instruction);
-    uint8_t rdLo = bits<15,12>(instruction);
-    uint8_t rm = bits<3,0>(instruction);
-    uint8_t rs = bits<11,8>(instruction);
+//     uint8_t rdHi = bits<19,16>(instruction);
+//     uint8_t rdLo = bits<15,12>(instruction);
+//     uint8_t rm = bits<3,0>(instruction);
+//     uint8_t rs = bits<11,8>(instruction);
 
-    // Get the accumulator value from RdHi/RdLo
-    uint64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | (uint64_t)parentCPU.R()[rdLo];
-    uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs] + acc;
-    parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
-    parentCPU.R()[rdHi] = (uint32_t)(result >> 32);
+//     // Get the accumulator value from RdHi/RdLo
+//     uint64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | (uint64_t)parentCPU.R()[rdLo];
+//     uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs] + acc;
+//     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+//     parentCPU.R()[rdHi] = (uint32_t)(result >> 32);
 
-    if (rdHi != 15 && rdLo != 15) {
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
-        bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
-    }
-}
+//     if (rdHi != 15 && rdLo != 15) {
+//         parentCPU.R()[15] += 4; // Increment PC for next instruction
+//         bool set_flags = bits<20,20>(instruction); 
+//         if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+//     }
+// }
 
-void ARMCPU::exec_arm_smull(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_smull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+// void ARMCPU::exec_arm_smull(uint32_t instruction) {
+//     DEBUG_LOG(std::string("exec_arm_smull: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
       
-    if (bits<6,5>(instruction) != 0) [[unlikely]] {
-        exec_arm_further_decode(instruction);
-        return;
-    }
+//     if (bits<6,5>(instruction) != 0) [[unlikely]] {
+//         exec_arm_further_decode(instruction);
+//         return;
+//     }
     
-    uint8_t rdHi = bits<19,16>(instruction);
-    uint8_t rdLo = bits<15,12>(instruction);
-    uint8_t rm = bits<3,0>(instruction);
-    uint8_t rs = bits<11,8>(instruction);
+//     uint8_t rdHi = bits<19,16>(instruction);
+//     uint8_t rdLo = bits<15,12>(instruction);
+//     uint8_t rm = bits<3,0>(instruction);
+//     uint8_t rs = bits<11,8>(instruction);
 
-    int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs];
-    parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
-    parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+//     int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs];
+//     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+//     parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
 
-    if (rdHi != 15 && rdLo != 15) {
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
-        bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
-    }
-}
+//     if (rdHi != 15 && rdLo != 15) {
+//         parentCPU.R()[15] += 4; // Increment PC for next instruction
+//         bool set_flags = bits<20,20>(instruction); 
+//         if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+//     }
+// }
 
-void ARMCPU::exec_arm_smlal(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_smlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+// void ARMCPU::exec_arm_smlal(uint32_t instruction) {
+//     DEBUG_LOG(std::string("exec_arm_smlal: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
       
-    if (bits<6,5>(instruction) != 0) [[unlikely]] {
-        exec_arm_further_decode(instruction);
-        return;
-    }
+//     if (bits<6,5>(instruction) != 0) [[unlikely]] {
+//         exec_arm_further_decode(instruction);
+//         return;
+//     }
 
-    uint8_t rdHi = bits<19,16>(instruction);
-    uint8_t rdLo = bits<15,12>(instruction);
-    uint8_t rm = bits<3,0>(instruction);
-    uint8_t rs = bits<11,8>(instruction);
+//     uint8_t rdHi = bits<19,16>(instruction);
+//     uint8_t rdLo = bits<15,12>(instruction);
+//     uint8_t rm = bits<3,0>(instruction);
+//     uint8_t rs = bits<11,8>(instruction);
 
-    // Get the accumulator value from RdHi/RdLo
-    int64_t acc = ((int64_t)(int32_t)parentCPU.R()[rdHi] << 32) | (uint32_t)parentCPU.R()[rdLo];
-    int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs] + acc;
-    parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
-    parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
+//     // Get the accumulator value from RdHi/RdLo
+//     int64_t acc = ((int64_t)(int32_t)parentCPU.R()[rdHi] << 32) | (uint32_t)parentCPU.R()[rdLo];
+//     int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs] + acc;
+//     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
+//     parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
 
-    if (rdHi != 15 && rdLo != 15) {
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
-        bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
-    }
-}
+//     if (rdHi != 15 && rdLo != 15) {
+//         parentCPU.R()[15] += 4; // Increment PC for next instruction
+//         bool set_flags = bits<20,20>(instruction); 
+//         if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+//     }
+// }
 
 void ARMCPU::exec_arm_undefined(uint32_t instruction) {
     DEBUG_ERROR(std::string("exec_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
