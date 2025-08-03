@@ -17,7 +17,9 @@ void ARMCPU::exec_arm_mul(uint32_t instruction) {
     // Multiply two registers and store the result
     uint32_t op1 = parentCPU.R()[rm];
     uint32_t op2 = parentCPU.R()[rs];
-    parentCPU.R()[rd] = op1 * op2;
+    uint32_t result = op1 * op2;
+    DEBUG_LOG("MUL operands: Rm=" + DEBUG_TO_HEX_STRING(op1, 8) + ", Rs=" + DEBUG_TO_HEX_STRING(op2, 8) + ", result=" + DEBUG_TO_HEX_STRING(result, 8));
+    parentCPU.R()[rd] = result;
     
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -136,16 +138,9 @@ void ARMCPU::exec_arm_smlal(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
 
-    DEBUG_LOG("SMLAL decode: rdHi=" + std::to_string(rdHi) + ", rdLo=" + std::to_string(rdLo) + ", rm=" + std::to_string(rm) + ", rs=" + std::to_string(rs));
-    DEBUG_LOG("SMLAL inputs: Rm=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rm], 8) + ", Rs=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rs], 8));
-    DEBUG_LOG("SMLAL acc inputs: RdHi=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdHi], 8) + ", RdLo=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rdLo], 8));
-
     // Get the accumulator value from RdHi/RdLo (unsigned 64-bit)
     int64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | (uint32_t)parentCPU.R()[rdLo];
-    DEBUG_LOG("SMLAL acc (uint64_t): 0x" + DEBUG_TO_HEX_STRING((uint64_t)acc, 16));
     int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs] + acc;
-    DEBUG_LOG("SMLAL result (dec): " + std::to_string(result));
-    DEBUG_LOG("SMLAL result: hi=0x" + DEBUG_TO_HEX_STRING((uint32_t)(result >> 32), 8) + ", lo=0x" + DEBUG_TO_HEX_STRING((uint32_t)(result & 0xFFFFFFFF), 8));
     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
     parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
 
