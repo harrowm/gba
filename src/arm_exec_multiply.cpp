@@ -24,7 +24,7 @@ void ARMCPU::exec_arm_mul(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
+        if (set_flags) updateFlagsMultiply(0, parentCPU.R()[rd]);
     }
 }
 
@@ -50,7 +50,7 @@ void ARMCPU::exec_arm_mla(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
+        if (set_flags) updateFlagsMultiply(0, parentCPU.R()[rd]);
     }
 }
 
@@ -72,7 +72,7 @@ void ARMCPU::exec_arm_umull(uint32_t instruction) {
     if (rdHi != 15 && rdLo != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+        if (set_flags) updateFlagsMultiply(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
     }
 }
 
@@ -98,7 +98,7 @@ void ARMCPU::exec_arm_umlal(uint32_t instruction) {
     if (rdHi != 15 && rdLo != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+        if (set_flags) updateFlagsMultiply(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
     }
 }
 
@@ -121,7 +121,7 @@ void ARMCPU::exec_arm_smull(uint32_t instruction) {
     if (rdHi != 15 && rdLo != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+        if (set_flags) updateFlagsMultiply(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
     }
 }
 
@@ -147,6 +147,6 @@ void ARMCPU::exec_arm_smlal(uint32_t instruction) {
     if (rdHi != 15 && rdLo != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+        if (set_flags) updateFlagsMultiply(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
     }
 }

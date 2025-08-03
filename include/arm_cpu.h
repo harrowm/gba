@@ -1,4 +1,3 @@
-
 #ifndef ARM_CPU_H
 #define ARM_CPU_H
 
@@ -78,6 +77,25 @@ public:
         parentCPU.CPSR() = cpsr;
     }
 
+    // Only update N and Z flags for multiply instructions (preserve C and V)
+    FORCE_INLINE void updateFlagsMultiply(uint32_t hi, uint32_t lo) {
+        //uint32_t result = (hi == 0) ? lo : hi; // For 32-bit ops, hi==0, lo==result; for 64-bit, hi is high word
+        uint32_t cpsr = parentCPU.CPSR();
+        // Clear N and Z
+        cpsr &= ~((1u << 31) | (1u << 30));
+        if (hi == 0 && lo == 0) {
+            cpsr |= (1u << 30); // Z
+        } else if (hi == 0) {
+            if (lo & 0x80000000) cpsr |= (1u << 31); // N
+        } else {
+            if (hi == 0 && lo == 0) {
+                cpsr |= (1u << 30); // Z
+            } else if (hi & 0x80000000) {
+                cpsr |= (1u << 31); // N
+            }
+        }
+        parentCPU.CPSR() = (parentCPU.CPSR() & ~((1u << 31) | (1u << 30))) | (cpsr & ((1u << 31) | (1u << 30)));
+    }
 
 
     // ARM shift operations as static inline functions
