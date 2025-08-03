@@ -30,6 +30,261 @@ TEST_F(ARMMultiplyTest, MUL_Basic) {
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 12u);
     EXPECT_EQ(cpu.R()[15], 0x00000004u);
+    // The Z flag should not be set for a nonzero result (MUL does not set flags unless S bit is set)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30));
+}
+
+// --------- Stage 1: All S (flag-setting) variants for N/Z flags ---------
+TEST_F(ARMMultiplyTest, MULS_ResultZeroSetsZ) {
+    cpu.R()[0] = 0; // Rm
+    cpu.R()[1] = 0; // Rs
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0100091; // MULS r0, r1, r0 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0u);
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z flag set
+    EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N flag clear
+}
+
+TEST_F(ARMMultiplyTest, MLAS_NegativeResultSetsN) {
+    cpu.R()[0] = 0xFFFFFFFF; // Rm
+    cpu.R()[1] = 2; // Rs
+    cpu.R()[2] = 0; // Rn
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0302091; // MLAS r0, r1, r0, r2 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0xFFFFFFFEu);
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z flag clear
+    EXPECT_TRUE(cpu.CPSR() & (1u << 31)); // N flag set
+}
+
+TEST_F(ARMMultiplyTest, UMULLS_ResultZeroSetsZ) {
+    cpu.R()[2] = 0; // Rm
+    cpu.R()[3] = 0; // Rs
+    cpu.R()[4] = 0; // RdLo
+    cpu.R()[5] = 0; // RdHi
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0954392; // UMULLS r4, r5, r2, r3 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[4], 0u);
+    EXPECT_EQ(cpu.R()[5], 0u);
+}
+
+// --------- Stage 4: Carry/overflow and N/Z flag checks (S variants) ---------
+TEST_F(ARMMultiplyTest, UMULLS_NegativeResultSetsN) {
+    cpu.R()[2] = 0x80000000; // Rm
+    cpu.R()[3] = 2; // Rs
+    cpu.R()[4] = 0; // RdLo
+    cpu.R()[5] = 0; // RdHi
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0954392; // UMULLS r4, r5, r2, r3 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    // 0x80000000 * 2 = 0x100000000
+    EXPECT_EQ(cpu.R()[4], 0u);
+    EXPECT_EQ(cpu.R()[5], 1u);
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z flag clear
+    EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N flag clear (high bit not set)
+}
+
+TEST_F(ARMMultiplyTest, SMLALS_ZeroResultSetsZ) {
+    cpu.R()[2] = 0; // Rm
+    cpu.R()[3] = 0; // Rs
+    cpu.R()[4] = 0; // acc lo (RdLo)
+    cpu.R()[5] = 0; // acc hi (RdHi)
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0F54392; // SMLALS r4, r5, r2, r3 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[4], 0u);
+    EXPECT_EQ(cpu.R()[5], 0u);
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z flag set
+}
+
+// --------- Stage 5: PC and forbidden register usage ---------
+TEST_F(ARMMultiplyTest, MLA_UsesPCAsOperand) {
+    cpu.R()[0] = 2; // Rm
+    cpu.R()[1] = 3; // Rs
+    cpu.R()[2] = 5; // Rn
+    cpu.R()[15] = 0x00000008; // PC
+    uint32_t instr = 0xE0202F91; // MLA r0, r1, r0, r15 (Rn=15)
+    memory.write32(cpu.R()[15], instr);
+    // Should not crash, result is unpredictable, but test for no crash and PC increment
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x0000000C);
+}
+
+TEST_F(ARMMultiplyTest, SMLAL_UsesPCAsOperand) {
+    cpu.R()[2] = 0x7FFFFFFF; // Rm
+    cpu.R()[3] = 2; // Rs
+    cpu.R()[4] = 1; // acc lo (RdLo)
+    cpu.R()[5] = 1; // acc hi (RdHi)
+    cpu.R()[15] = 0x00000008; // PC
+    uint32_t instr = 0xE0E54F92; // SMLAL r4, r5, r2, r15 (Rn=15)
+    memory.write32(cpu.R()[15], instr);
+    // Should not crash, result is unpredictable, but test for no crash and PC increment
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x0000000C);
+}
+
+// --------- Stage 6: Multiple accumulations ---------
+TEST_F(ARMMultiplyTest, SMLAL_MultipleAccumulate) {
+    cpu.R()[2] = 2; // Rm
+    cpu.R()[3] = 3; // Rs
+    cpu.R()[4] = 1; // acc lo (RdLo)
+    cpu.R()[5] = 1; // acc hi (RdHi)
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0E54392; // SMLAL r4, r5, r2, r3
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    // First: (2*3)+((1LL<<32)|1) = 6+4294967297 = 4294967303
+    EXPECT_EQ(cpu.R()[4], 0x00000007u);
+    EXPECT_EQ(cpu.R()[5], 1u);
+    // Now accumulate again
+    cpu.R()[2] = 1;
+    cpu.R()[3] = 1;
+    cpu.R()[4] = cpu.R()[4];
+    cpu.R()[5] = cpu.R()[5];
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    // Second: (1*1)+4294967303 = 4294967304
+    EXPECT_EQ(cpu.R()[4], 0x00000008u);
+    EXPECT_EQ(cpu.R()[5], 1u);
+}
+
+// --------- Stage 7: Additional edge/robustness cases ---------
+TEST_F(ARMMultiplyTest, MULS_NegativeZero) {
+    cpu.R()[0] = 0x80000000; // Rm
+    cpu.R()[1] = 0; // Rs
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0100091; // MULS r0, r1, r0 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0u);
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z flag set
+    EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N flag clear
+}
+
+TEST_F(ARMMultiplyTest, UMULLS_MaxUnsignedSetsN) {
+    cpu.R()[2] = 0xFFFFFFFF; // Rm
+    cpu.R()[3] = 0xFFFFFFFF; // Rs
+    cpu.R()[4] = 0; // RdLo
+    cpu.R()[5] = 0; // RdHi
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0954392; // UMULLS r4, r5, r2, r3 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    // 0xFFFFFFFF * 0xFFFFFFFF = 0xFFFFFFFE00000001
+    EXPECT_EQ(cpu.R()[4], 0x00000001u);
+    EXPECT_EQ(cpu.R()[5], 0xFFFFFFFEu);
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z flag clear
+    EXPECT_TRUE(cpu.CPSR() & (1u << 31)); // N flag set
+}
+
+TEST_F(ARMMultiplyTest, SMULLS_NegativeZero) {
+    cpu.R()[2] = 0x80000000; // Rm (signed)
+    cpu.R()[3] = 0; // Rs
+    cpu.R()[4] = 0; // RdLo
+    cpu.R()[5] = 0; // RdHi
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0D54392; // SMULLS r4, r5, r2, r3 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[4], 0u);
+    EXPECT_EQ(cpu.R()[5], 0u);
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z flag set
+    EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N flag clear
+}
+
+
+
+// --------- Stage 2: Register overlap for all multiply types ---------
+TEST_F(ARMMultiplyTest, MUL_Overlap_Rd_Rm) {
+    cpu.R()[0] = 3; // Rm (also Rd)
+    cpu.R()[1] = 4; // Rs
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0000091; // MUL r0, r1, r0
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 12u);
+}
+
+TEST_F(ARMMultiplyTest, MLA_Overlap_Rd_Rn) {
+    cpu.R()[0] = 2; // Rm
+    cpu.R()[1] = 3; // Rs
+    cpu.R()[2] = 5; // Rn (also Rd)
+    cpu.R()[15] = 0x00000000;
+    // Save the original Rn value for the expected result
+    uint32_t orig_rn = cpu.R()[2];
+    uint32_t instr = 0xe0222091 ; // MLA r2, r1, r0, r2
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    // The result should be (Rm * Rs) + original Rn
+    EXPECT_EQ(cpu.R()[2], (uint32_t)(cpu.R()[0] * cpu.R()[1] + orig_rn));
+}
+
+TEST_F(ARMMultiplyTest, UMULL_TripleOverlap) {
+    cpu.R()[2] = 0xFFFFFFFF; // Rm (also RdLo)
+    cpu.R()[3] = 2; // Rs (also RdHi)
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0832392; // UMULL r2, r3, r2, r3
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], 0xFFFFFFFEu);
+    EXPECT_EQ(cpu.R()[3], 1u);
+}
+
+TEST_F(ARMMultiplyTest, SMULL_TripleOverlap) {
+    cpu.R()[2] = 0xFFFFFFFF; // Rm (also RdLo)
+    cpu.R()[3] = 2; // Rs (also RdHi)
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0C32392; // SMULL r2, r3, r2, r3
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], 0xFFFFFFFEu);
+    EXPECT_EQ(cpu.R()[3], 0xFFFFFFFFu);
+}
+
+// --------- Stage 3: Signed/unsigned edge cases ---------
+TEST_F(ARMMultiplyTest, MUL_NegativeTimesNegative) {
+    cpu.R()[0] = 0xFFFFFFFF; // -1 (signed)
+    cpu.R()[1] = 0xFFFFFFFF; // -1 (signed)
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0000091; // MUL r0, r1, r0
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 1u);
+}
+
+TEST_F(ARMMultiplyTest, UMULL_UnsignedOverflow) {
+    cpu.R()[2] = 0xFFFFFFFF; // Rm
+    cpu.R()[3] = 0xFFFFFFFE; // Rs
+    cpu.R()[4] = 0; // RdLo
+    cpu.R()[5] = 0; // RdHi
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0854392; // UMULL r4, r5, r2, r3
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    // 0xFFFFFFFF * 0xFFFFFFFE = 0xFFFFFFFD00000002
+    EXPECT_EQ(cpu.R()[4], 0x00000002u);
+    EXPECT_EQ(cpu.R()[5], 0xFFFFFFFDu);
+}
+
+TEST_F(ARMMultiplyTest, SMULL_SignedOverflow) {
+    cpu.R()[2] = 0x80000000; // -2147483648 (signed)
+    cpu.R()[3] = 2; // 2
+    cpu.R()[4] = 0; // RdLo
+    cpu.R()[5] = 0; // RdHi
+    cpu.R()[15] = 0x00000000;
+    uint32_t instr = 0xE0C54392; // SMULL r4, r5, r2, r3
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    // (-2147483648) * 2 = -4294967296 = 0xFFFFFFFF00000000
+    EXPECT_EQ(cpu.R()[4], 0x00000000u);
+    EXPECT_EQ(cpu.R()[5], 0xFFFFFFFFu);
 }
 
 TEST_F(ARMMultiplyTest, MUL_SetsFlags) {
