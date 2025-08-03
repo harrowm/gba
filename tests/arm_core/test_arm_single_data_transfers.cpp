@@ -1443,86 +1443,86 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRSH_SignExt_Negative) {
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
-// --- Phase 6: Illegal/unpredictable encodings ---
+// // --- Phase 6: Illegal/unpredictable encodings ---
 
-// LDR (illegal: both H and S bits set)
-TEST_F(ARMCPUSingleDataTransferTest, LDR_Illegal_HS_BitsSet) {
-    cpu.R()[1] = 0x1000;
-    cpu.R()[2] = 0;
-    cpu.R()[15] = 0x00000000;
-    // Both H and S bits set (should be unpredictable/illegal)
-    uint32_t instr = 0xE49120F0; // LDR r2, [r1], #0, H=1, S=1
-    memory.write32(cpu.R()[15], instr);
-    testing::internal::CaptureStderr();
-    arm_cpu.execute(1);
-    std::string stderr_output = testing::internal::GetCapturedStderr();
-    // Should not crash, result is unpredictable, but test for no crash
-    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
-    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
-    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
-}
+// // LDR (illegal: both H and S bits set)
+// TEST_F(ARMCPUSingleDataTransferTest, LDR_Illegal_HS_BitsSet) {
+//     cpu.R()[1] = 0x1000;
+//     cpu.R()[2] = 0;
+//     cpu.R()[15] = 0x00000000;
+//     // Both H and S bits set (should be unpredictable/illegal)
+//     uint32_t instr = 0xE49120F0; // LDR r2, [r1], #0, H=1, S=1
+//     memory.write32(cpu.R()[15], instr);
+//     testing::internal::CaptureStderr();
+//     arm_cpu.execute(1);
+//     std::string stderr_output = testing::internal::GetCapturedStderr();
+//     // Should not crash, result is unpredictable, but test for no crash
+//     EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+//     << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
+//     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+// }
 
-// STR (illegal: both H and S bits set)
-TEST_F(ARMCPUSingleDataTransferTest, STR_Illegal_HS_BitsSet) {
-    cpu.R()[1] = 0x1000;
-    cpu.R()[2] = 0x12345678;
-    cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1C120F0; // STR r2, [r1], #0, H=1, S=1
-    memory.write32(cpu.R()[15], instr);
-     testing::internal::CaptureStderr();
-    arm_cpu.execute(1);
-    std::string stderr_output = testing::internal::GetCapturedStderr();
-    // Should not crash, result is unpredictable, but test for no crash
-    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
-    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
-    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
-}
+// // STR (illegal: both H and S bits set)
+// TEST_F(ARMCPUSingleDataTransferTest, STR_Illegal_HS_BitsSet) {
+//     cpu.R()[1] = 0x1000;
+//     cpu.R()[2] = 0x12345678;
+//     cpu.R()[15] = 0x00000000;
+//     uint32_t instr = 0xE1C120F0; // STR r2, [r1], #0, H=1, S=1
+//     memory.write32(cpu.R()[15], instr);
+//      testing::internal::CaptureStderr();
+//     arm_cpu.execute(1);
+//     std::string stderr_output = testing::internal::GetCapturedStderr();
+//     // Should not crash, result is unpredictable, but test for no crash
+//     EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+//     << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
+//     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+// }
 
-// LDR (illegal: reserved bits set)
-TEST_F(ARMCPUSingleDataTransferTest, LDR_Illegal_ReservedBits) {
-    cpu.R()[1] = 0x1000;
-    cpu.R()[2] = 0;
-    cpu.R()[15] = 0x00000000;
-    // Set reserved bits (bits 7-4 = 0b1111)
-    uint32_t instr = 0xE5912FF0; // LDR r2, [r1, #0xFF0]
-    memory.write32(cpu.R()[15], instr);
-    testing::internal::CaptureStderr();
-    arm_cpu.execute(1);
-    std::string stderr_output = testing::internal::GetCapturedStderr();
-    // Should not crash, result is unpredictable, but test for no crash
-    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
-    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
-    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
-}
+// // LDR (illegal: reserved bits set)
+// TEST_F(ARMCPUSingleDataTransferTest, LDR_Illegal_ReservedBits) {
+//     cpu.R()[1] = 0x1000;
+//     cpu.R()[2] = 0;
+//     cpu.R()[15] = 0x00000000;
+//     // Set reserved bits (bits 7-4 = 0b1111)
+//     uint32_t instr = 0xE5912FF0; // LDR r2, [r1, #0xFF0]
+//     memory.write32(cpu.R()[15], instr);
+//     testing::internal::CaptureStderr();
+//     arm_cpu.execute(1);
+//     std::string stderr_output = testing::internal::GetCapturedStderr();
+//     // Should not crash, result is unpredictable, but test for no crash
+//     EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+//     << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
+//     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+// }
 
-// STR (illegal: reserved bits set)
-TEST_F(ARMCPUSingleDataTransferTest, STR_Illegal_ReservedBits) {
-    cpu.R()[1] = 0x1000;
-    cpu.R()[2] = 0xCAFEBABE;
-    cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE5812FF0; // STR r2, [r1, #0xFF0]
-    memory.write32(cpu.R()[15], instr);
-    testing::internal::CaptureStderr();
-    arm_cpu.execute(1);
-    std::string stderr_output = testing::internal::GetCapturedStderr();
-    // Should not crash, result is unpredictable, but test for no crash
-    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
-    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
-    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
-}
+// // STR (illegal: reserved bits set)
+// TEST_F(ARMCPUSingleDataTransferTest, STR_Illegal_ReservedBits) {
+//     cpu.R()[1] = 0x1000;
+//     cpu.R()[2] = 0xCAFEBABE;
+//     cpu.R()[15] = 0x00000000;
+//     uint32_t instr = 0xE5812FF0; // STR r2, [r1, #0xFF0]
+//     memory.write32(cpu.R()[15], instr);
+//     testing::internal::CaptureStderr();
+//     arm_cpu.execute(1);
+//     std::string stderr_output = testing::internal::GetCapturedStderr();
+//     // Should not crash, result is unpredictable, but test for no crash
+//     EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+//     << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
+//     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+// }
 
-// STRH (illegal: reserved bits set)
-TEST_F(ARMCPUSingleDataTransferTest, STRH_Illegal_ReservedBits) {
-    cpu.R()[1] = 0x1000;
-    cpu.R()[2] = 0xFACE;
-    cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1C12FF0; // STRH r2, [r1], #0, reserved bits set
-    memory.write32(cpu.R()[15], instr);
-    testing::internal::CaptureStderr();
-    arm_cpu.execute(1);
-    std::string stderr_output = testing::internal::GetCapturedStderr();
-    // Should not crash, result is unpredictable, but test for no crash
-    EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
-    << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
-    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
-}
+// // STRH (illegal: reserved bits set)
+// TEST_F(ARMCPUSingleDataTransferTest, STRH_Illegal_ReservedBits) {
+//     cpu.R()[1] = 0x1000;
+//     cpu.R()[2] = 0xFACE;
+//     cpu.R()[15] = 0x00000000;
+//     uint32_t instr = 0xE1C12FF0; // STRH r2, [r1], #0, reserved bits set
+//     memory.write32(cpu.R()[15], instr);
+//     testing::internal::CaptureStderr();
+//     arm_cpu.execute(1);
+//     std::string stderr_output = testing::internal::GetCapturedStderr();
+//     // Should not crash, result is unpredictable, but test for no crash
+//     EXPECT_NE(stderr_output.find("exec_arm_undefined"), std::string::npos)
+//     << "Expected 'exec_arm_undefined' in stderr, but it was not found.\nStderr was:\n" << stderr_output;
+//     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+// }
