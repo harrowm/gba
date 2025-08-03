@@ -22,6 +22,7 @@ RUN_BASIC_SRCS = run_basic.cpp \
 	../../src/arm_further_decode.cpp \
 	../../src/arm_exec_multiply.cpp \
 	../../src/arm_exec_single_data_transfers.cpp \
+  ../../src/arm_exec_data_processing.cpp \
 	../../src/cpu.cpp \
 	../../src/memory.cpp \
 	../../src/thumb_cpu.cpp \
@@ -39,6 +40,7 @@ TEST_ARM_SINGLE_DATA_TRANSFERS_SRCS = test_arm_single_data_transfers.cpp \
 	../../src/arm_further_decode.cpp \
 	../../src/arm_exec_multiply.cpp \
 	../../src/arm_exec_single_data_transfers.cpp \
+  ../../src/arm_exec_data_processing.cpp \
 	../../src/cpu.cpp \
 	../../src/memory.cpp \
 	../../src/thumb_cpu.cpp \
@@ -59,7 +61,7 @@ endef
 RUN_BASIC_OBJS = $(foreach src,$(RUN_BASIC_SRCS),$(call make_obj,$(src)))
 
 
-TARGETS = run_basic test_arm_single_data_transfers test_arm_multiply
+TARGETS = run_basic test_arm_single_data_transfers test_arm_multiply test_arm_data_processing
 # ARM Multiply test sources
 TEST_ARM_MULTIPLY_SRCS = test_arm_multiply.cpp \
 	../../src/arm_cpu.cpp \
@@ -68,6 +70,7 @@ TEST_ARM_MULTIPLY_SRCS = test_arm_multiply.cpp \
 	../../src/arm_further_decode.cpp \
 	../../src/arm_exec_multiply.cpp \
 	../../src/arm_exec_single_data_transfers.cpp \
+	../../src/arm_exec_data_processing.cpp \
 	../../src/cpu.cpp \
 	../../src/memory.cpp \
 	../../src/thumb_cpu.cpp \
@@ -81,6 +84,29 @@ TEST_ARM_MULTIPLY_SRCS = test_arm_multiply.cpp \
 TEST_ARM_MULTIPLY_OBJS = $(foreach src,$(TEST_ARM_MULTIPLY_SRCS),$(call make_obj,$(src)))
 test_arm_multiply: $(TEST_ARM_MULTIPLY_OBJS) include/inst_table.inc
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_ARM_MULTIPLY_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0
+
+# ARM Data Processing test sources
+TEST_ARM_DATA_PROCESSING_SRCS = test_arm_data_processing.cpp \
+	../../src/arm_cpu.cpp \
+	../../src/debug.cpp \
+	../../src/arm_decode.cpp \
+	../../src/arm_further_decode.cpp \
+	../../src/arm_exec_multiply.cpp \
+	../../src/arm_exec_single_data_transfers.cpp \
+	../../src/arm_exec_data_processing.cpp \
+	../../src/cpu.cpp \
+	../../src/memory.cpp \
+	../../src/thumb_cpu.cpp \
+	../../src/arm_timing.c \
+	../../src/thumb_timing.c \
+	../../src/timer.c \
+	../../src/timing.c \
+	../../src/gba.cpp \
+	../../src/gpu.cpp
+
+TEST_ARM_DATA_PROCESSING_OBJS = $(foreach src,$(TEST_ARM_DATA_PROCESSING_SRCS),$(call make_obj,$(src)))
+test_arm_data_processing: $(TEST_ARM_DATA_PROCESSING_OBJS) include/inst_table.inc
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_ARM_DATA_PROCESSING_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0
 
 all: $(TARGETS)
 	@echo "Running all ARM core tests..."
@@ -102,12 +128,9 @@ test_arm_single_data_transfers: $(TEST_ARM_SINGLE_DATA_TRANSFERS_OBJS) include/i
 
 
 
-# Ensure all object files depend on ../../include/inst_table.inc and build/include directories
-$(RUN_BASIC_OBJS): ../../include/inst_table.inc $(BUILD_DIR) include
-
-# If you add more object files, add them to this dependency as well
 
 .PHONY: include
+
 
 .PRECIOUS: ../../include/inst_table.inc
 include:
