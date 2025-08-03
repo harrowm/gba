@@ -136,7 +136,7 @@ TEST_F(ARMMultiplyTest, MLA_SetsFlags) {
     cpu.R()[1] = 2; // Rs
     cpu.R()[2] = 1; // Rn
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0220291; // MLAS r0, r1, r0, r2 (S=1)
+    uint32_t instr = 0xe0302091 ; // MLAS r0, r1, r0, r2 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0xFFFFFFFEu + 1u);
@@ -150,13 +150,13 @@ TEST_F(ARMMultiplyTest, UMULL_SetsFlags) {
     cpu.R()[4] = 0; // RdLo
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1953292; // UMULLS r4, r5, r2, r3 (S=1)
+    uint32_t instr = 0xe0954392 ; // UMULLS r4, r5, r2, r3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0x00000001u);
     EXPECT_EQ(cpu.R()[5], 0xFFFFFFFEu);
     EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z flag clear
-    EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N flag clear
+    EXPECT_TRUE(cpu.CPSR() & (1u << 31)); // N flag set
 }
 
 TEST_F(ARMMultiplyTest, UMLAL_SetsFlags) {
@@ -165,7 +165,7 @@ TEST_F(ARMMultiplyTest, UMLAL_SetsFlags) {
     cpu.R()[4] = 0xFFFFFFFF; // acc lo (RdLo)
     cpu.R()[5] = 0xFFFFFFFF; // acc hi (RdHi)
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1B54392; // UMLALS r4, r5, r2, r3 (S=1)
+    uint32_t instr = 0xe0b54392 ; // UMLALS r4, r5, r2, r3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0xFFFFFFFDu);
@@ -180,7 +180,7 @@ TEST_F(ARMMultiplyTest, SMULL_SetsFlags) {
     cpu.R()[4] = 0; // RdLo
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1D54392; // SMULLS r4, r5, r2, r3 (S=1)
+    uint32_t instr = 0xe0d54392 ; // SMULLS r4, r5, r2, r3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0xFFFFFFFEu);
@@ -195,7 +195,7 @@ TEST_F(ARMMultiplyTest, SMLAL_SetsFlags) {
     cpu.R()[4] = 1; // acc lo (RdLo)
     cpu.R()[5] = 1; // acc hi (RdHi)
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1F54392; // SMLALS r4, r5, r2, r3 (S=1)
+    uint32_t instr = 0xe0f54392 ; // SMLALS r4, r5, r2, r3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0xFFFFFFFFu);
@@ -211,7 +211,7 @@ TEST_F(ARMMultiplyTest, UMULL_Overlap_RdLo_Rm) {
     cpu.R()[3] = 2; // Rs
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0852292; // UMULL r2, r5, r2, r3
+    uint32_t instr = 0xe0852392; // UMULL r2, r5, r2, r3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFEu);
@@ -224,7 +224,7 @@ TEST_F(ARMMultiplyTest, UMULL_Overlap_RdHi_Rs) {
     cpu.R()[5] = 2; // Rs (also RdHi)
     cpu.R()[4] = 0; // RdLo
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0A54292; // UMULL r4, r5, r2, r5
+    uint32_t instr = 0xe0854592; // UMULL r4, r5, r2, r5
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0xFFFFFFFEu);
@@ -237,7 +237,7 @@ TEST_F(ARMMultiplyTest, UMULL_Overlap_RdLo_Rs) {
     cpu.R()[4] = 2; // Rs (also RdLo)
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0854292; // UMULL r4, r5, r2, r4
+    uint32_t instr = 0xe0854492 ; // UMULL r4, r5, r2, r4
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0xFFFFFFFEu);
@@ -250,7 +250,7 @@ TEST_F(ARMMultiplyTest, UMULL_Overlap_RdHi_Rm) {
     cpu.R()[3] = 2; // Rs
     cpu.R()[4] = 0; // RdLo
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0A55292; // UMULL r4, r5, r5, r3
+    uint32_t instr = 0xe0854395; // UMULL r4, r5, r5, r3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0xFFFFFFFEu);
@@ -264,7 +264,7 @@ TEST_F(ARMMultiplyTest, SMULL_NegativeTimesNegative) {
     cpu.R()[4] = 0; // RdLo
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0C54392; // SMULL r4, r5, r2, r3
+    uint32_t instr = 0xe0c54392; // SMULL r4, r5, r2, r3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // (-1) * (-1) = 1
@@ -278,7 +278,7 @@ TEST_F(ARMMultiplyTest, SMULL_NegativeTimesPositive) {
     cpu.R()[4] = 0; // RdLo
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0C54392; // SMULL r4, r5, r2, r3
+    uint32_t instr = 0xe0c54392 ; // SMULL r4, r5, r2, r3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // (-1) * 2 = -2
@@ -292,7 +292,7 @@ TEST_F(ARMMultiplyTest, UMULL_HighLowBits) {
     cpu.R()[4] = 0; // RdLo
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0853292; // UMULL r4, r5, r2, r3
+    uint32_t instr = 0xe0854392; // UMULL r4, r5, r2, r3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // 0x80000000 * 2 = 0x100000000
@@ -307,7 +307,7 @@ TEST_F(ARMMultiplyTest, UMULLS_ZeroResultSetsZ) {
     cpu.R()[4] = 0; // RdLo
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1953292; // UMULLS r4, r5, r2, r3 (S=1)
+    uint32_t instr = 0xe0954392 ; // UMULLS r4, r5, r2, r3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0u);
@@ -321,7 +321,7 @@ TEST_F(ARMMultiplyTest, SMULLS_NegativeResultSetsN) {
     cpu.R()[4] = 0; // RdLo
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1D54392; // SMULLS r4, r5, r2, r3 (S=1)
+    uint32_t instr = 0xe0d54392; // SMULLS r4, r5, r2, r3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0xFFFFFFFEu);
@@ -384,7 +384,7 @@ TEST_F(ARMMultiplyTest, UMLAL_MultipleAccumulate) {
     cpu.R()[4] = 0xFFFFFFFF; // acc lo (RdLo)
     cpu.R()[5] = 0xFFFFFFFF; // acc hi (RdHi)
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0A54392; // UMLAL r4, r5, r2, r3
+    uint32_t instr = 0xe0a54392 ; // UMLAL r4, r5, r2, r3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // First: (0xFFFFFFFF * 2) + 0xFFFFFFFFFFFFFFFF = 0x1FFFFFFFFFD
@@ -429,7 +429,7 @@ TEST_F(ARMMultiplyTest, MLA_ZeroAcc) {
     cpu.R()[1] = 3; // Rs
     cpu.R()[2] = 0; // Rn
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xe0202091 ; // MLA r0, r1, r0, r2
+    uint32_t instr = 0xe0202091; // MLA r0, r1, r0, r2
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 6u);
@@ -501,7 +501,7 @@ TEST_F(ARMMultiplyTest, SMLAL_NegativeAcc) {
     uint32_t instr = 0xE0E54392; // SMLAL r4, r5, r2, r3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    // result = (int64_t)0x7FFFFFFF * 2 + 0xFFFFFFFF = 0xFFFFFFFE
-    EXPECT_EQ(cpu.R()[4], 0xFFFFFFFEu);
+    // result = (int64_t)0x7FFFFFFF * 2 + 0xFFFFFFFFFFFFFFFF = 0x100000000FFFFFFFD
+    EXPECT_EQ(cpu.R()[4], 0xFFFFFFFDu);
     EXPECT_EQ(cpu.R()[5], 0u);
 }
