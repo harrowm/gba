@@ -265,7 +265,7 @@ TEST_F(ARMDataProcessingTest, EOR_Basic) {
     cpu.R()[0] = 0xF0F0F0F0;
     cpu.R()[1] = 0x0F0F0F0F;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0201002; // EOR r2, r0, r1
+    uint32_t instr = 0xE0202001; // EOR r2, r0, r1
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu);
@@ -328,10 +328,10 @@ TEST_F(ARMDataProcessingTest, EOR_ShiftedOperand_LSL) {
     cpu.R()[0] = 0xFFFF00FF;
     cpu.R()[1] = 0x0000000F;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0202281; // EOR r2, r0, r1, LSL #5
+    uint32_t instr = 0xe0202281; // EOR r2, r0, r1, LSL #5
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0xFFFF01EFu);
+    EXPECT_EQ(cpu.R()[2], 0xffff011fu);
 }
 
 TEST_F(ARMDataProcessingTest, EOR_ShiftedOperand_LSR) {
@@ -341,7 +341,7 @@ TEST_F(ARMDataProcessingTest, EOR_ShiftedOperand_LSR) {
     uint32_t instr = 0xE02021A1; // EOR r2, r0, r1, LSR #3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0x1F0F0F0Fu);
+    EXPECT_EQ(cpu.R()[2], 0x110F0F0Fu);
 }
 
 TEST_F(ARMDataProcessingTest, EOR_ShiftedOperand_ASR) {
@@ -361,7 +361,7 @@ TEST_F(ARMDataProcessingTest, EOR_ShiftedOperand_ROR) {
     uint32_t instr = 0xE0202161; // EOR r2, r0, r1, ROR #2
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0x3F00FF00u);
+    EXPECT_EQ(cpu.R()[2], 0x3F00FF03u);
 }
 
 TEST_F(ARMDataProcessingTest, EORS_CarryOutFromShifter) {
@@ -369,7 +369,7 @@ TEST_F(ARMDataProcessingTest, EORS_CarryOutFromShifter) {
     cpu.R()[1] = 0x3;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0; // clear all flags
-    uint32_t instr = 0xE23021A1; // EORS r2, r0, r1, LSR #3 (S=1)
+    uint32_t instr = 0xE03021A1; // EORS r2, r0, r1, LSR #3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu);
@@ -473,7 +473,7 @@ TEST_F(ARMDataProcessingTest, SUB_Basic) {
     cpu.R()[0] = 0x10;
     cpu.R()[1] = 0x1;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0401002; // SUB r2, r0, r1
+    uint32_t instr = 0xe0402001; // SUB r2, r0, r1
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFu);
@@ -681,7 +681,7 @@ TEST_F(ARMDataProcessingTest, RSB_Basic) {
     cpu.R()[0] = 0x10;
     cpu.R()[1] = 0x1;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0601002; // RSB r2, r0, r1
+    uint32_t instr = 0xe0602001 ; // RSB r2, r0, r1
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0x1u - 0x10u);
@@ -891,7 +891,7 @@ TEST_F(ARMDataProcessingTest, ADD_Basic) {
     cpu.R()[0] = 0x10;
     cpu.R()[1] = 0x1;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0801002; // ADD r2, r0, r1
+    uint32_t instr = 0xE0802010; // ADD r2, r0, r1
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0x11u);
@@ -3161,7 +3161,7 @@ TEST_F(ARMDataProcessingTest, MVN_ShiftedOperand_LSL) {
     uint32_t instr = 0xE1E02281; // MVN r2, r1, LSL #5
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], ~(0x0000000F << 5));
+    EXPECT_EQ(cpu.R()[2], (uint32_t)~(0x0000000F << 5));
 }
 
 TEST_F(ARMDataProcessingTest, MVN_ShiftedOperand_LSR) {
@@ -3198,7 +3198,7 @@ TEST_F(ARMDataProcessingTest, MVNS_CarryOutFromShifter) {
     uint32_t instr = 0xE1F021A1; // MVNS r2, r1, LSR #3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], ~(0x3 >> 3));
+    EXPECT_EQ(cpu.R()[2], (uint32_t)~(0x3 >> 3));
     EXPECT_FALSE(cpu.CPSR() & (1u << 29)); // C flag should be 0
 }
 
@@ -3262,7 +3262,7 @@ TEST_F(ARMDataProcessingTest, MVN_ShiftedRegister_LSL_Reg) {
     uint32_t instr = 0xE1E02311; // MVN r2, r1, LSL r3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], ~(0x0000000F << 4));
+    EXPECT_EQ(cpu.R()[2], (uint32_t)~(0x0000000F << 4));
 }
 
 TEST_F(ARMDataProcessingTest, MVN_ShiftedOperand_RRX) {

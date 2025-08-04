@@ -99,19 +99,37 @@ public:
 
 
     // ARM shift operations as static inline functions
-    inline static uint32_t shift_lsl(uint32_t value, uint32_t shift_val) {
-        return value << shift_val;
+    // ARM shift operations as static inline functions (now with carry argument)
+    inline static uint32_t shift_lsl(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        uint32_t result = value << shift_val;
+        printf("[DEBUG] shift_lsl: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X\n", value, shift_val, carry, result);
+        return result;
     }
-    inline static uint32_t shift_lsr(uint32_t value, uint32_t shift_val) {
-        return shift_val ? (value >> shift_val) : 0;
+    inline static uint32_t shift_lsr(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        uint32_t result = shift_val ? (value >> shift_val) : 0;
+        printf("[DEBUG] shift_lsr: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X\n", value, shift_val, carry, result);
+        return result;
     }
-    inline static uint32_t shift_asr(uint32_t value, uint32_t shift_val) {
-        return shift_val ? ((int32_t)value >> shift_val) : (value & 0x80000000 ? 0xFFFFFFFF : 0);
+    inline static uint32_t shift_asr(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        uint32_t result = shift_val ? ((int32_t)value >> shift_val) : (value & 0x80000000 ? 0xFFFFFFFF : 0);
+        printf("[DEBUG] shift_asr: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X\n", value, shift_val, carry, result);
+        return result;
     }
-    inline static uint32_t shift_ror(uint32_t value, uint32_t shift_val) {
-        return shift_val ? ((value >> shift_val) | (value << (32 - shift_val))) : value;
+    inline static uint32_t shift_ror(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        uint32_t result;
+        if (shift_val == 0) {
+            // RRX: Rotate right with extend (carry in as bit 31)
+            result = (carry << 31) | (value >> 1);
+            printf("[DEBUG] shift_ror RRX: value=0x%08X, carry=%u, result=0x%08X\n", value, carry, result);
+        } else {
+            // Standard ROR
+            shift_val &= 31;
+            result = (value >> shift_val) | (value << (32 - shift_val));
+            printf("[DEBUG] shift_ror ROR: value=0x%08X, shift_val=%u, result=0x%08X\n", value, shift_val, result);
+        }
+        return result;
     }
-    using ShiftFunc = uint32_t(*)(uint32_t, uint32_t);
+    using ShiftFunc = uint32_t(*)(uint32_t, uint32_t, uint32_t);
     inline static constexpr ShiftFunc arm_shift[4] = {
         shift_lsl, shift_lsr, shift_asr, shift_ror
     };
