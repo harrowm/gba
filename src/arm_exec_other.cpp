@@ -68,56 +68,27 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     bool pre = bits<24,24>(instruction);
     bool up  = bits<23,23>(instruction);
     bool writeback = bits<21,21>(instruction);
-    bool s_bit = bits<22,22>(instruction);
-    uint32_t orig_base = parentCPU.R()[rn];
     int reg_count = std::popcount(reg_list);
-    printf("[LDM] ENTER: pc=0x%08X, instr=0x%08X\n", parentCPU.R()[15], instruction);
-    printf("[LDM] Base reg: R%d=0x%08X, Writeback: %d, S bit: %d, Reglist: 0x%03X\n", rn, parentCPU.R()[rn], writeback, s_bit, reg_list);
-    printf("[LDM] Register count: %d\n", reg_count);
 
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr;
-    // ARM LDM address calculation per mode
-    if (up && pre) addr = base + 4;         // IB
-    else if (!up && pre) addr = base - 4;   // DB
-    else addr = base;                       // IA/DA
-
-    // Debug: print the addresses and values to be loaded, using a local variable
-    uint32_t debug_addr;
-    if (up && pre) debug_addr = base + 4;         // IB
-    else if (!up && pre) debug_addr = base - 4;   // DB
-    else debug_addr = base;                       // IA/DA
-    for (int i = 0; i < 16; ++i) {
-        if (reg_list & (1 << i)) {
-            uint32_t value = parentCPU.getMemory().read32(debug_addr);
-            printf("[LDM] Loading R%d from 0x%08X: 0x%08X\n", i, debug_addr, value);
-            if (!up && !pre) debug_addr -= 4; // DA
-            else if (!up && pre) debug_addr -= 4; // DB
-            else debug_addr += 4;
-        }
-    }
 
     // Main register load loop, always reset addr for the actual loads
     if (up && pre) addr = base + 4;         // IB
     else if (!up && pre) addr = base - 4;   // DB
     else addr = base;                       // IA/DA
-    printf("[LDM] Main loop initial addr: 0x%08X\n", addr);
     bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
-            printf("[LDM] About to load R%d from addr=0x%08X\n", i, addr);
             parentCPU.R()[i] = parentCPU.getMemory().read32(addr);
             if (i == 15) {
-                printf("[LDM] Loading PC (R15) from 0x%08X: 0x%08X\n", addr, parentCPU.R()[i]);
                 r15_updated = true;
             }
             if (!up && !pre) addr -= 4; // DA
             else if (!up && pre) addr -= 4; // DB
             else addr += 4;
-            printf("[LDM] Next addr: 0x%08X\n", addr);
         }
     }
-    printf("[LDM] EXIT: R0=0x%08X, R4=0x%08X, PC=0x%08X\n", parentCPU.R()[0], parentCPU.R()[4], parentCPU.R()[15]);
     if (writeback && reg_count > 0 && !(reg_list & (1 << rn))) {
         uint32_t new_base = up ? base + reg_count * 4 : base - reg_count * 4;
         parentCPU.R()[rn] = new_base;
