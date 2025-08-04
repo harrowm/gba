@@ -400,7 +400,7 @@ void ARMCPU::exec_arm_rsc_reg(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsSub(shifted.value, parentCPU.R()[rn] + (1 - carry), result, shifted.carry_out);
+        if (set_flags) updateFlagsSub(shifted.value, parentCPU.R()[rn] + (1 - carry), result);
     }
 }
 

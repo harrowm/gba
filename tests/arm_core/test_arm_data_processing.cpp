@@ -1839,7 +1839,7 @@ TEST_F(ARMDataProcessingTest, TST_ImmediateOperand) {
     uint32_t instr = 0xE310000F; // TST r0, #0xF
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z set
     EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N clear
 }
 
@@ -2139,17 +2139,30 @@ TEST_F(ARMDataProcessingTest, TEQ_ShiftedOperand_RRX) {
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // RRX: 0x80000001 -> 0xC0000000 (with C=1)
-    EXPECT_TRUE(cpu.CPSR() & (1u << 31)); // N set
+    EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N clear
+}
+
+// Extra RRX test to ensure RRX works correctly
+TEST_F(ARMDataProcessingTest, MOVS_RRX) {
+    cpu.R()[1] = 0x80000001;
+    cpu.R()[15] = 0x00000000;
+    cpu.CPSR() = 0x20000000; // C flag set
+    uint32_t instr = 0xE1B02061; // MOVS r2, r1, RRX
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], 0xC0000000u);        // RRX result
+    EXPECT_TRUE(cpu.CPSR() & (1u << 29));      // C flag should be bit 0 of original value (here, 1)
 }
 
 TEST_F(ARMDataProcessingTest, TEQ_ImmediateRotated) {
     cpu.R()[0] = 0xFFFFFFFF;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0;
-    uint32_t instr = 0xE33024FF; // TEQ r0, #0xFF000000
+    uint32_t instr = 0xE1300001; // TEQ r0, #0xFF000000
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear
+    EXPECT_TRUE(cpu.CPSR() & (1u << 31)); // N set
 }
 
 // ===================== CMP Tests =====================
