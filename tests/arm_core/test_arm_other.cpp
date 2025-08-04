@@ -346,9 +346,7 @@ TEST_F(ARMOtherTest, LDM_PCInList_SBit) {
     uint32_t ldm_instr = 0xE8F48001; // LDMIA R4!, {R0,PC}^ (S bit set)
     cpu.R()[15] = 0x508;
     memory.write32(cpu.R()[15], ldm_instr);
-    printf("[LDM_PCInList_SBit] Before: R4=0x%08X, mem[0x800]=0x%08X, mem[0x804]=0x%08X\n", cpu.R()[4], memory.read32(0x800), memory.read32(0x804));
     arm_cpu.execute(1);
-    printf("[LDM_PCInList_SBit] After:  R0=0x%08X, PC=0x%08X, R4=0x%08X\n", cpu.R()[0], cpu.R()[15], cpu.R()[4]);
     EXPECT_EQ(cpu.R()[0], 0x11111111u);
     EXPECT_EQ(cpu.R()[15], 0x12345678u);
     EXPECT_EQ(cpu.R()[4], 0x808u); // Writeback: R4 updated to point after last loaded register
