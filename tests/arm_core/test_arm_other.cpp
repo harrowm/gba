@@ -282,7 +282,7 @@ TEST_F(ARMOtherTest, SWP_SameRegister) {
     cpu.R()[0] = 0x12345678;
     cpu.R()[1] = 0x208;
     memory.write32(0x208, 0xCAFEBABE);
-    uint32_t swp_instr = 0xE1000090; // SWP R0, R0, [R1]
+    uint32_t swp_instr = 0xE1010090; // SWP R0, R0, [R1]
     cpu.R()[15] = 0x408;
     memory.write32(cpu.R()[15], swp_instr);
     arm_cpu.execute(1);
@@ -295,7 +295,7 @@ TEST_F(ARMOtherTest, SWPB_SameRegister) {
     cpu.R()[3] = 0x55;
     cpu.R()[1] = 0x209;
     memory.write8(0x209, 0xAA);
-    uint32_t swpb_instr = 0xE1433091; // SWPB R3, R3, [R1]
+    uint32_t swpb_instr = 0xE1413093; // SWPB R3, R3, [R1]
     cpu.R()[15] = 0x40C;
     memory.write32(cpu.R()[15], swpb_instr);
     arm_cpu.execute(1);
@@ -309,12 +309,16 @@ TEST_F(ARMOtherTest, LDM_STM_SBitUserSystem) {
     // This is a stub: actual effect depends on CPU model, but should not crash
     cpu.R()[0] = 0x11111111;
     cpu.R()[4] = 0x600;
+    // Initialize memory for LDM
+    memory.write32(0x600, 0x11111111);
+    memory.write32(0x604, 0xCAFEBABE);
     uint32_t ldm_s = 0xE8B40011; // LDMIA R4!, {R0,R4}^ (S bit set)
     cpu.R()[15] = 0x500;
     memory.write32(cpu.R()[15], ldm_s);
     arm_cpu.execute(1);
     // Just check that R0 and R4 are loaded, and no crash
     EXPECT_EQ(cpu.R()[0], 0x11111111u);
+    EXPECT_EQ(cpu.R()[4], 0xCAFEBABEu);
 }
 
 TEST_F(ARMOtherTest, LDM_BaseInListWriteback) {
@@ -339,12 +343,16 @@ TEST_F(ARMOtherTest, LDM_PCInList_SBit) {
     cpu.R()[4] = 0x800;
     memory.write32(0x800, 0x11111111);
     memory.write32(0x804, 0x12345678);
-    uint32_t ldm_instr = 0xE8B40081; // LDMIA R4!, {R0,PC}^ (S bit set)
+    uint32_t ldm_instr = 0xE8F48001; // LDMIA R4!, {R0,PC}^ (S bit set)
     cpu.R()[15] = 0x508;
     memory.write32(cpu.R()[15], ldm_instr);
+    printf("[LDM_PCInList_SBit] Before: R4=0x%08X, mem[0x800]=0x%08X, mem[0x804]=0x%08X\n", cpu.R()[4], memory.read32(0x800), memory.read32(0x804));
     arm_cpu.execute(1);
+    printf("[LDM_PCInList_SBit] After:  R0=0x%08X, PC=0x%08X, R4=0x%08X\n", cpu.R()[0], cpu.R()[15], cpu.R()[4]);
     EXPECT_EQ(cpu.R()[0], 0x11111111u);
     EXPECT_EQ(cpu.R()[15], 0x12345678u);
+    EXPECT_EQ(cpu.R()[4], 0x808u); // Writeback: R4 updated to point after last loaded register
+    // SPSR should be restored if available (not tested here, not implemented)
 }
 
 TEST_F(ARMOtherTest, LDM_STM_OverlappingRegisters) {
