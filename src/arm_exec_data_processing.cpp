@@ -469,7 +469,7 @@ void ARMCPU::exec_arm_cmp_reg(uint32_t instruction) {
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
     uint32_t result = parentCPU.R()[rn] - shifted.value;
-    updateFlagsSub(parentCPU.R()[rn], shifted.value, result, shifted.carry_out);
+    updateFlagsSub(parentCPU.R()[rn], shifted.value, result);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
@@ -497,7 +497,7 @@ void ARMCPU::exec_arm_cmn_reg(uint32_t instruction) {
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
     uint32_t result = parentCPU.R()[rn] + shifted.value;
-    updateFlagsAdd(parentCPU.R()[rn], shifted.value, result, shifted.carry_out);
+    updateFlagsAdd(parentCPU.R()[rn], shifted.value, result);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
