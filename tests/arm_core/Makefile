@@ -17,6 +17,7 @@ RUN_ALL_SRCS = run_basic.cpp \
   test_arm_single_data_transfers.cpp \
   test_arm_multiply.cpp \
   test_arm_data_processing.cpp \
+  test_arm_other.cpp \
 	../../src/arm_cpu.cpp \
 	../../src/debug.cpp \
 	../../src/arm_exec_other.cpp \
