@@ -286,7 +286,7 @@ void ARMCPU::exec_arm_add_reg(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], shifted.value, result, shifted.carry_out);
+        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], shifted.value, result);
     }
 }
 
@@ -303,7 +303,7 @@ void ARMCPU::exec_arm_adc_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], value + carry, result);
+        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], value, result);
     }
 }
 
@@ -324,7 +324,7 @@ void ARMCPU::exec_arm_adc_reg(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], shifted.value + carry, result, shifted.carry_out);
+        if (set_flags) updateFlagsAdd(parentCPU.R()[rn], shifted.value, result);
     }
 }
 

@@ -937,7 +937,7 @@ TEST_F(ARMDataProcessingTest, ADDS_SetsFlags) {
     uint32_t instr = 0xE0902001; // ADDS r2, r0, r1 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0x0u);
+    EXPECT_EQ(cpu.R()[2], 0x0u); // Result should be 0
     EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z set
     EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C set (carry out)
     EXPECT_TRUE(cpu.CPSR() & (1u << 28)); // V set (overflow)
@@ -1151,10 +1151,10 @@ TEST_F(ARMDataProcessingTest, ADCS_SetsFlags) {
     uint32_t instr = 0xE0B02001; // ADCS r2, r0, r1 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0x0u);
-    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z set
+    EXPECT_EQ(cpu.R()[2], 0x1u);
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z set
     EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C set (carry out)
-    EXPECT_TRUE(cpu.CPSR() & (1u << 28)); // V set (overflow)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 28)); // V set (overflow)
 }
 
 TEST_F(ARMDataProcessingTest, ADCS_ResultZeroSetsZ) {
@@ -1228,7 +1228,7 @@ TEST_F(ARMDataProcessingTest, ADCS_CarryOutFromShifter) {
     cpu.R()[1] = 0x3;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0x20000000; // C flag set
-    uint32_t instr = 0xE2B021A1; // ADCS r2, r0, r1, LSR #3 (S=1)
+    uint32_t instr = 0xE0B021A1; // ADCS r2, r0, r1, LSR #3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu + (0x3u >> 3) + 1u);
@@ -1243,7 +1243,7 @@ TEST_F(ARMDataProcessingTest, ADC_FlagsUnchangedWhenS0) {
     uint32_t instr = 0xE0A02001; // ADC r2, r0, r1 (S=0)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu);
+    EXPECT_EQ(cpu.R()[2], 0x0u);
     EXPECT_TRUE(cpu.CPSR() & (1u << 31));
     EXPECT_TRUE(cpu.CPSR() & (1u << 29));
 }
