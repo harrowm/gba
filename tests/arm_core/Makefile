@@ -13,12 +13,13 @@ GTEST_INCLUDE_FLAGS = -I$(GTEST_INCLUDE)
 GTEST_LINK_FLAGS = -L$(GTEST_LIB) -lgtest -lgtest_main
 GTEST_FLAGS = $(GTEST_INCLUDE_FLAGS) $(GTEST_LINK_FLAGS)
 
-
-
-RUN_BASIC_SRCS = run_basic.cpp \
+RUN_ALL_SRCS = run_basic.cpp \
+  test_arm_single_data_transfers.cpp \
+  test_arm_multiply.cpp \
+  test_arm_data_processing.cpp \
 	../../src/arm_cpu.cpp \
 	../../src/debug.cpp \
-	../../src/arm_decode.cpp \
+	../../src/arm_exec_other.cpp \
 	../../src/arm_further_decode.cpp \
 	../../src/arm_exec_multiply.cpp \
 	../../src/arm_exec_single_data_transfers.cpp \
@@ -32,81 +33,15 @@ RUN_BASIC_SRCS = run_basic.cpp \
 	../../src/timing.c \
 	../../src/gba.cpp \
 	../../src/gpu.cpp
-
-TEST_ARM_SINGLE_DATA_TRANSFERS_SRCS = test_arm_single_data_transfers.cpp \
-	../../src/arm_cpu.cpp \
-	../../src/debug.cpp \
-	../../src/arm_decode.cpp \
-	../../src/arm_further_decode.cpp \
-	../../src/arm_exec_multiply.cpp \
-	../../src/arm_exec_single_data_transfers.cpp \
-  ../../src/arm_exec_data_processing.cpp \
-	../../src/cpu.cpp \
-	../../src/memory.cpp \
-	../../src/thumb_cpu.cpp \
-	../../src/arm_timing.c \
-	../../src/thumb_timing.c \
-	../../src/timer.c \
-	../../src/timing.c \
-	../../src/gba.cpp \
-	../../src/gpu.cpp
-
-TEST_ARM_SINGLE_DATA_TRANSFERS_OBJS = $(foreach src,$(TEST_ARM_SINGLE_DATA_TRANSFERS_SRCS),$(call make_obj,$(src)))
 
 # Map each source file to build/obj name
 define make_obj
 $(BUILD_DIR)/$(notdir $(basename $(1))).o
 endef
 
-RUN_BASIC_OBJS = $(foreach src,$(RUN_BASIC_SRCS),$(call make_obj,$(src)))
+RUN_ALL_OBJS = $(foreach src,$(RUN_ALL_SRCS),$(call make_obj,$(src)))
 
-
-TARGETS = run_basic test_arm_single_data_transfers test_arm_multiply test_arm_data_processing
-# ARM Multiply test sources
-TEST_ARM_MULTIPLY_SRCS = test_arm_multiply.cpp \
-	../../src/arm_cpu.cpp \
-	../../src/debug.cpp \
-	../../src/arm_decode.cpp \
-	../../src/arm_further_decode.cpp \
-	../../src/arm_exec_multiply.cpp \
-	../../src/arm_exec_single_data_transfers.cpp \
-	../../src/arm_exec_data_processing.cpp \
-	../../src/cpu.cpp \
-	../../src/memory.cpp \
-	../../src/thumb_cpu.cpp \
-	../../src/arm_timing.c \
-	../../src/thumb_timing.c \
-	../../src/timer.c \
-	../../src/timing.c \
-	../../src/gba.cpp \
-	../../src/gpu.cpp
-
-TEST_ARM_MULTIPLY_OBJS = $(foreach src,$(TEST_ARM_MULTIPLY_SRCS),$(call make_obj,$(src)))
-test_arm_multiply: $(TEST_ARM_MULTIPLY_OBJS) include/inst_table.inc
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_ARM_MULTIPLY_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0
-
-# ARM Data Processing test sources
-TEST_ARM_DATA_PROCESSING_SRCS = test_arm_data_processing.cpp \
-	../../src/arm_cpu.cpp \
-	../../src/debug.cpp \
-	../../src/arm_decode.cpp \
-	../../src/arm_further_decode.cpp \
-	../../src/arm_exec_multiply.cpp \
-	../../src/arm_exec_single_data_transfers.cpp \
-	../../src/arm_exec_data_processing.cpp \
-	../../src/cpu.cpp \
-	../../src/memory.cpp \
-	../../src/thumb_cpu.cpp \
-	../../src/arm_timing.c \
-	../../src/thumb_timing.c \
-	../../src/timer.c \
-	../../src/timing.c \
-	../../src/gba.cpp \
-	../../src/gpu.cpp
-
-TEST_ARM_DATA_PROCESSING_OBJS = $(foreach src,$(TEST_ARM_DATA_PROCESSING_SRCS),$(call make_obj,$(src)))
-test_arm_data_processing: $(TEST_ARM_DATA_PROCESSING_OBJS) include/inst_table.inc
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_ARM_DATA_PROCESSING_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0
+TARGETS = run_all
 
 all: $(TARGETS)
 	@echo "Running all ARM core tests..."
@@ -118,19 +53,12 @@ all: $(TARGETS)
 	done
 
 
-run_basic: $(RUN_BASIC_OBJS) include/inst_table.inc
-	$(CXX) $(CXXFLAGS) -o $@ $(RUN_BASIC_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 && ./run_basic
-
-test_arm_single_data_transfers: $(TEST_ARM_SINGLE_DATA_TRANSFERS_OBJS) include/inst_table.inc
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_ARM_SINGLE_DATA_TRANSFERS_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0
+run_all: $(RUN_ALL_OBJS) include/inst_table.inc
+	$(CXX) $(CXXFLAGS) -o $@ $(RUN_ALL_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 && ./run_all
 
 # Ensure build directory exists before compiling object files
 
-
-
-
 .PHONY: include
-
 
 .PRECIOUS: ../../include/inst_table.inc
 include:
@@ -142,9 +70,7 @@ include:
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-
 # Pattern rules for object files in build directory
-
 
 # Pattern rules for object files in build directory, all depend on ../../include/inst_table.inc and include/build directories
 $(BUILD_DIR)/%.o: %.cpp ../../include/inst_table.inc $(BUILD_DIR) include

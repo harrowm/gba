@@ -120,8 +120,9 @@ public:
     inline static ShiftResult shift_lsr(uint32_t value, uint32_t shift_val, uint32_t carry) {
         ShiftResult res;
         if (shift_val == 0) {
-            res.value = value;
-            res.carry_out = carry;
+            // ARM: LSR #0 means LSR #32
+            res.value = 0;
+            res.carry_out = (value >> 31) & 1;
         } else if (shift_val < 32) {
             res.value = value >> shift_val;
             res.carry_out = (value >> (shift_val - 1)) & 1;
