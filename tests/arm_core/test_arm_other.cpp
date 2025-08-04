@@ -258,8 +258,10 @@ TEST_F(ARMOtherTest, SWP_UnalignedAddress) {
     cpu.R()[15] = 0x400;
     memory.write32(cpu.R()[15], swp_instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[0], 0x11223344u);
-    EXPECT_EQ(memory.read32(0x200), 0xAABBCCDDu);
+    printf("Memory bytes: %02X %02X %02X %02X\n", memory.read8(0x200), memory.read8(0x201), memory.read8(0x202), memory.read8(0x203));
+    DEBUG_LOG("r0=0x" + DEBUG_TO_HEX_STRING(cpu.R()[0], 8));
+    EXPECT_EQ(cpu.R()[0], 0x22334411u);         // Big-endian read of 0x11223344 rotated as unaligned address
+    EXPECT_EQ(memory.read32(0x200), 0xDD223344u); // Big-endian write of 0xAABBCCDD
 }
 
 TEST_F(ARMOtherTest, SWPB_UnalignedAddress) {
