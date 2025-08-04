@@ -106,7 +106,7 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     bool up = (addressing_mode & 0x2) != 0;
     bool pre = (addressing_mode & 0x1) != 0;
     int reg_count = std::popcount(reg_list);
-    int addr = base;
+    int addr;
     // ARM STM address calculation per mode
     if (up && pre) addr = base + 4;         // IB
     else if (!up && pre) addr = base - 4;   // DB
@@ -119,7 +119,12 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
             if (i == 15) value += 8; // ARM pipeline effect for PC
             printf("[STM] Writing R[%d]=0x%08X to addr=0x%08X\n", i, value, addr);
             parentCPU.getMemory().write32(addr, value);
-            addr += up ? 4 : -4;
+            // For DA, decrement after each write
+            if (!up && !pre) addr -= 4; // DA
+            // For DB, decrement after each write
+            else if (!up && pre) addr -= 4; // DB
+            // For IB/IA, increment after each write
+            else addr += 4;
             if (i == 15) r15_updated = true;
         }
     }
@@ -132,24 +137,26 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
 }
 
 void ARMCPU::exec_arm_b(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_b: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint32_t pc_before = parentCPU.R()[15];
     int32_t offset = bits<23,0>(instruction);
-    
+    DEBUG_LOG(std::string("[B] pc_before=0x") + DEBUG_TO_HEX_STRING(pc_before, 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
-    uint32_t branch_offset = (offset << 2) + 8;
-    // Branch to target address
+    int32_t branch_offset = (offset << 2) + 8;
+    DEBUG_LOG(std::string("[B] offset=") + std::to_string(offset) + ", branch_offset=" + std::to_string(branch_offset));
     parentCPU.R()[15] += branch_offset;
+    DEBUG_LOG(std::string("[B] pc_after=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
 }
 
 void ARMCPU::exec_arm_bl(uint32_t instruction) {
-    DEBUG_LOG(std::string("exec_arm_bl: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    uint32_t pc_before = parentCPU.R()[15];
     int32_t offset = bits<23,0>(instruction);
+    DEBUG_LOG(std::string("[BL] pc_before=0x") + DEBUG_TO_HEX_STRING(pc_before, 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
-    uint32_t branch_offset = (offset << 2) + 8;
-    // Set LR to return address (current PC + 4)
+    int32_t branch_offset = (offset << 2) + 8;
+    DEBUG_LOG(std::string("[BL] offset=") + std::to_string(offset) + ", branch_offset=" + std::to_string(branch_offset));
     parentCPU.R()[14] = parentCPU.R()[15] + 4;
-    // Branch to target address
     parentCPU.R()[15] += branch_offset;
+    DEBUG_LOG(std::string("[BL] pc_after=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
 }
 
 void ARMCPU::exec_arm_swp(uint32_t instruction) {
