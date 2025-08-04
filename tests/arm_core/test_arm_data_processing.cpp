@@ -1152,9 +1152,9 @@ TEST_F(ARMDataProcessingTest, ADCS_SetsFlags) {
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0x1u);
-    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z set
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z false
     EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C set (carry out)
-    EXPECT_FALSE(cpu.CPSR() & (1u << 28)); // V set (overflow)
+    EXPECT_TRUE(cpu.CPSR() & (1u << 28)); // V set (overflow)
 }
 
 TEST_F(ARMDataProcessingTest, ADCS_ResultZeroSetsZ) {
@@ -1335,13 +1335,13 @@ TEST_F(ARMDataProcessingTest, ADC_ImmediateRotated) {
 // SBC: Rd = Rn - Operand2 - (1 - C)
 TEST_F(ARMDataProcessingTest, SBC_Basic) {
     cpu.R()[0] = 0x10;
-    cpu.R()[1] = 0x1;
+    cpu.R()[2] = 0x1;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0x20000000; // C flag set
     uint32_t instr = 0xE0C01002; // SBC r1, r0, r2
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[1], 0x10u - 0x1u - 0u);
+    EXPECT_EQ(cpu.R()[1], 0xFu); // 0x10 - 0x1 - (1 - 1) = 0xF;
 }
 
 TEST_F(ARMDataProcessingTest, SBC_AllBitsSet) {
@@ -1452,7 +1452,7 @@ TEST_F(ARMDataProcessingTest, SBCS_CarryOutFromShifter) {
     cpu.R()[1] = 0x3;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0x20000000; // C flag set
-    uint32_t instr = 0xE2D021A1; // SBCS r2, r0, r1, LSR #3 (S=1)
+    uint32_t instr = 0xE0D021A1; // SBCS r2, r0, r1, LSR #3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu - (0x3u >> 3) - 0u);
@@ -1559,7 +1559,7 @@ TEST_F(ARMDataProcessingTest, SBC_ImmediateRotated) {
 // RSC: Rd = Operand2 - Rn - (1 - C)
 TEST_F(ARMDataProcessingTest, RSC_Basic) {
     cpu.R()[0] = 0x10;
-    cpu.R()[1] = 0x1;
+    cpu.R()[2] = 0x1;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0x20000000; // C flag set
     uint32_t instr = 0xE0E01002; // RSC r1, r0, r2
@@ -1676,11 +1676,26 @@ TEST_F(ARMDataProcessingTest, RSCS_CarryOutFromShifter) {
     cpu.R()[1] = 0x3;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0x20000000; // C flag set
-    uint32_t instr = 0xE2F021A1; // RSCS r2, r0, r1, LSR #3 (S=1)
+    uint32_t instr = 0xE0F021A1; // RSCS r2, r0, r1, LSR #3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (0x3u >> 3) - 0xFFFFFFFFu - 0u);
-    EXPECT_TRUE(cpu.CPSR() & (1u << 29));
+    EXPECT_FALSE(cpu.CPSR() & (1u << 29));
+}
+
+TEST_F(ARMDataProcessingTest, RSCS_CarryNotFromShifter) {
+    cpu.R()[0] = 0x0;           // operand1
+    cpu.R()[2] = 0x80000000;    // operand2
+    cpu.R()[15] = 0x00000000;
+    cpu.CPSR() = 0x20000000;    // C flag set (carry_in = 1)
+    uint32_t instr = 0xE0F12122; // RSCS r2, r1, r2, LSR #2 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    // The shifter's carry-out will be 0 (since bit 1 of 0x80000000 is 0), but the C flag after RSCS is set if no borrow occurs.
+    // Here, shifted.value = 0x80000000 >> 2 = 0x20000000, carry_out = 0
+    // result = 0x20000000 - 0x0 - 0 = 0x20000000 (no borrow, so C should be set)
+    EXPECT_EQ(cpu.R()[2], 0x20000000u);
+    EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C flag set (no borrow), not from shifter
 }
 
 TEST_F(ARMDataProcessingTest, RSC_FlagsUnchangedWhenS0) {
