@@ -98,15 +98,13 @@ public:
         parentCPU.CPSR() = (parentCPU.CPSR() & ~((1u << 31) | (1u << 30))) | (cpsr & ((1u << 31) | (1u << 30)));
     }
 
-
-    // ARM shift operations as static inline functions
     // ARM shift operations as static inline functions (now with carry argument)
     struct ShiftResult {
         uint32_t value;
         uint32_t carry_out;
     };
 
-    inline static ShiftResult shift_lsl(uint32_t value, uint32_t shift_val, uint32_t carry) {
+    FORCE_INLINE static ShiftResult shift_lsl(uint32_t value, uint32_t shift_val, uint32_t carry) {
         ShiftResult res;
         res.value = value << shift_val;
         if (shift_val == 0) {
@@ -116,7 +114,8 @@ public:
         }
         return res;
     }
-    inline static ShiftResult shift_lsr(uint32_t value, uint32_t shift_val, uint32_t carry) {
+    FORCE_INLINE static ShiftResult shift_lsr(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        UNUSED(carry);
         ShiftResult res;
         if (shift_val == 0) {
             // ARM: LSR #0 means LSR #32
@@ -134,7 +133,7 @@ public:
         }
         return res;
     }
-    inline static ShiftResult shift_asr(uint32_t value, uint32_t shift_val, uint32_t carry) {
+    FORCE_INLINE static ShiftResult shift_asr(uint32_t value, uint32_t shift_val, uint32_t carry) {
         ShiftResult res;
         if (shift_val == 0) {
             res.value = value;
@@ -148,7 +147,7 @@ public:
         }
         return res;
     }
-    inline static ShiftResult shift_ror(uint32_t value, uint32_t shift_val, uint32_t carry) {
+    FORCE_INLINE static ShiftResult shift_ror(uint32_t value, uint32_t shift_val, uint32_t carry) {
         ShiftResult res;
         if (shift_val == 0) {
             // RRX: Rotate right with extend (carry in as bit 31)
@@ -162,7 +161,7 @@ public:
         return res;
     }
     using ShiftFunc = ShiftResult(*)(uint32_t, uint32_t, uint32_t);
-    inline static constexpr ShiftFunc arm_shift[4] = {
+    static constexpr ShiftFunc arm_shift[4] = {
         shift_lsl, shift_lsr, shift_asr, shift_ror
     };
    
@@ -306,7 +305,7 @@ private:
     using arm_func_t = void (ARMCPU::*)(uint32_t);
     static const arm_func_t arm_further_decode[32 * 4];
 
-    #include "arm_fn_macro.inc" // Macro for static function pointers
+    #define ARM_FN(func) &ARMCPU::func
     #include "inst_table.inc" // Include the generated instruction table
 
 public:
