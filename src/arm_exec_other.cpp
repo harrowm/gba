@@ -1,3 +1,61 @@
+// Reference: STM addressing mode and writeback logic
+// For STM <cond> <amode> <Rn>!, <reglist>
+//
+// Addressing mode table:
+//  IA (Increment After):      start = base,         end = base + 4 * n,  writeback = base + 4 * n
+//  IB (Increment Before):     start = base + 4,     end = base + 4 * (n+1), writeback = base + 4 * n
+//  DA (Decrement After):      start = base,         end = base - 4 * n,  writeback = base - 4 * n
+//  DB (Decrement Before):     start = base - 4,     end = base - 4 * (n+1), writeback = base - 4 * n
+//
+// P/U bits:
+//  P=0, U=1: IA (Increment After)
+//  P=1, U=1: IB (Increment Before)
+//  P=0, U=0: DA (Decrement After)
+//  P=1, U=0: DB (Decrement Before)
+//
+// Pseudocode for STM:
+//   uint32_t orig_base = Rn;
+//   uint32_t addr = orig_base;
+//   if (P) addr += (U ? 4 : -4);
+//   for (int i = 0; i < 16; ++i) {
+//     if (reglist & (1 << i)) {
+//       memory.write32(addr, R[i]);
+//       addr += (U ? 4 : -4);
+//     }
+//   }
+//   if (W) Rn = orig_base + (U ? 4 : -4) * n_regs;
+//
+// For DB (P=1, U=0):
+//   addr = base - 4;
+//   for each reg in reglist (lowest to highest):
+//     memory.write32(addr, R[reg]);
+//     addr -= 4;
+//   writeback = base - 4 * n_regs;
+//
+// For DA (P=0, U=0):
+//   addr = base;
+//   for each reg in reglist (lowest to highest):
+//     memory.write32(addr, R[reg]);
+//     addr -= 4;
+//   writeback = base - 4 * n_regs;
+//
+// For IB (P=1, U=1):
+//   addr = base + 4;
+//   for each reg in reglist (lowest to highest):
+//     memory.write32(addr, R[reg]);
+//     addr += 4;
+//   writeback = base + 4 * n_regs;
+//
+// For IA (P=0, U=1):
+//   addr = base;
+//   for each reg in reglist (lowest to highest):
+//     memory.write32(addr, R[reg]);
+//     addr += 4;
+//   writeback = base + 4 * n_regs;
+//
+// Note: The order of register writes is always from lowest to highest bit in reglist.
+//
+// If base register is in reglist, ARM writes the original value, and writeback is implementation-defined.
 #include "arm_cpu.h"
 #include "debug.h"
 #include <cstdio>
@@ -45,28 +103,30 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     bool writeback = bits<21,21>(instruction);
 
     uint32_t base = parentCPU.R()[rn];
-    // int offset = 0;
-    // Calculate offset direction and order based on addressing_mode
     bool up = (addressing_mode & 0x2) != 0;
     bool pre = (addressing_mode & 0x1) != 0;
-   
     int reg_count = std::popcount(reg_list);
     int addr = base;
-    if (up) {
-        addr += pre ? 4 : 0;
-    } else {
-        addr -= pre ? 4 : 0;
-    }
+    // ARM STM address calculation per mode
+    if (up && pre) addr = base + 4;         // IB
+    else if (!up && pre) addr = base - 4;   // DB
+    else addr = base;                       // IA/DA
+    printf("[STM] base=0x%08X rn=%u reglist=0x%04X up=%d pre=%d reg_count=%d initial_addr=0x%08X\n", base, rn, reg_list, up, pre, reg_count, addr);
     bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
-            parentCPU.getMemory().write32(addr, parentCPU.R()[i]);
+            uint32_t value = parentCPU.R()[i];
+            if (i == 15) value += 8; // ARM pipeline effect for PC
+            printf("[STM] Writing R[%d]=0x%08X to addr=0x%08X\n", i, value, addr);
+            parentCPU.getMemory().write32(addr, value);
             addr += up ? 4 : -4;
             if (i == 15) r15_updated = true;
         }
     }
-    if (writeback) {
-        parentCPU.R()[rn] = up ? base + reg_count * 4 : base - reg_count * 4;
+    if (writeback && reg_count > 0) {
+        uint32_t new_base = up ? base + reg_count * 4 : base - reg_count * 4;
+        printf("[STM] Writeback: R[%u] = 0x%08X\n", rn, new_base);
+        parentCPU.R()[rn] = new_base;
     }
     if (!r15_updated) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
