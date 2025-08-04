@@ -220,7 +220,7 @@ TEST_F(ARMOtherTest, Branch_NegativeOffset) {
     uint32_t b_neg = 0xEAFFFFFC; // B -16 (PC+8-16 = PC-8)
     memory.write32(cpu.R()[15], b_neg);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[15], 0xF0u);
+    EXPECT_EQ(cpu.R()[15], 0xF8u);
 }
 
 TEST_F(ARMOtherTest, Branch_ConditionCodes) {
@@ -371,21 +371,29 @@ TEST_F(ARMOtherTest, LDM_STM_OverlappingRegisters) {
 TEST_F(ARMOtherTest, Branch_AllConditionCodes) {
     // Test all ARM condition codes for B (only a few shown for brevity)
     struct { uint32_t instr; uint32_t cpsr; bool should_branch; } cases[] = {
-        {0x0A000001, 1 << 30, true},   // BEQ, Z=1
-        {0x1A000001, 0, false},        // BNE, Z=0
+        {0x0A000001, 1 << 30, true},   // BEQ, Z=1 (should branch)
+        {0x0A000001, 0, false},        // BEQ, Z=0 (should NOT branch)
+        {0x1A000001, 0, true},         // BNE, Z=0 (should branch)
         {0x2A000001, 1 << 29, true},   // BCS, C=1
         {0x3A000001, 0, true},         // BCC, C=0
         {0xAA000001, 0, true},         // BAL (always)
     };
-    for (int i = 0; i < 5; ++i) {
-        cpu.R()[15] = 0xA00 + i * 0x10;
+    for (int i = 0; i < 6; ++i) {
+        uint32_t orig_pc = 0xA00 + i * 0x10;
+        cpu.R()[15] = orig_pc;
         cpu.CPSR() = 0x10 | cases[i].cpsr;
         memory.write32(cpu.R()[15], cases[i].instr);
         arm_cpu.execute(1);
-        if (cases[i].should_branch)
-            EXPECT_EQ(cpu.R()[15], cpu.R()[15] + 8 + 4);
-        else
-            EXPECT_EQ(cpu.R()[15], (uint32_t)(0xA00 + i * 0x10 + 4));
+        if (cases[i].should_branch) {
+            int32_t offset = (cases[i].instr & 0x00FFFFFF);
+            if (offset & 0x00800000) offset |= 0xFF000000; // sign extend
+            uint32_t expected = orig_pc + 8 + (offset << 2);
+            DEBUG_INFO("Branch i: " + std::to_string(i));
+            EXPECT_EQ(cpu.R()[15], expected);
+        } else {
+            DEBUG_INFO("No branch i: " + std::to_string(i));
+            EXPECT_EQ(cpu.R()[15], orig_pc + 4);
+        }
     }
 }
 

@@ -127,36 +127,15 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     
     // Check if condition is met before executing instruction
     uint8_t condition = bits<31, 28>(instruction);
-    if(!ARMCPU::condTable[condition](parentCPU.CPSR() >> 28)) 
+    if(!ARMCPU::condTable[condition](parentCPU.CPSR() >> 28)) {
+        DEBUG_INFO("Condition not met, skipping instruction, incrementing PC");
+        parentCPU.R()[15] += 4; // Increment PC for next instruction
         return ;
+    }
 
     // .. and call the exec handler for the instruction
     (this->*arm_exec_table[index])(instruction);
 }
-
-// Optimized flag update function for logical operations (AND, EOR, TST, TEQ, etc.)
-// FORCE_INLINE void ARMCPU::updateFlagsLogical(uint32_t result, uint32_t carry_out) {
-//     // Get current CPSR value once to reduce memory access
-//     uint32_t cpsr = parentCPU.CPSR();
-    
-//     // Clear N, Z flags and set them based on result (bits 31 and 30)
-//     cpsr &= ~(0x80000000 | 0x40000000); // Clear N (bit 31) and Z (bit 30)
-    
-//     // Set N if result is negative (bit 31 set)
-//     cpsr |= (result & 0x80000000);
-    
-//     // Set Z if result is zero (bit 30)
-//     if (result == 0) {
-//         cpsr |= 0x40000000;
-//     }
-    
-//     // Clear and set carry flag based on carry_out (bit 29)
-//     cpsr &= ~(1U << 29);
-//     cpsr |= (carry_out << 29);
-    
-//     // Update CPSR by setting directly
-//     parentCPU.CPSR() = cpsr;
-// }
 
 void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq) {
     DEBUG_LOG("handleException ENTRY: vector=0x" + debug_to_hex_string(vector_address, 8) + ", new_mode=0x" + debug_to_hex_string(new_mode, 2) + ", PC=0x" + debug_to_hex_string(parentCPU.R()[15], 8));
