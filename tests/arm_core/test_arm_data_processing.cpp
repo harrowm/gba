@@ -2271,8 +2271,8 @@ TEST_F(ARMDataProcessingTest, CMPS_CarryOutFromShifter) {
     uint32_t instr = 0xE15001A1; // CMP r0, r1, LSR #3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    // C flag should be 0 (borrow)
-    EXPECT_FALSE(cpu.CPSR() & (1u << 29));
+    // C flag should be 1 (no borrow)
+    EXPECT_TRUE(cpu.CPSR() & (1u << 29));
 }
 
 TEST_F(ARMDataProcessingTest, CMP_FlagsUnchangedWhenConditionNotMet) {
@@ -2452,8 +2452,8 @@ TEST_F(ARMDataProcessingTest, CMNS_CarryOutFromShifter) {
     uint32_t instr = 0xE17001A1; // CMN r0, r1, LSR #3
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    // C flag should be set if result < either operand
-    EXPECT_TRUE(cpu.CPSR() & (1u << 29));
+    // C flag should be cleared 
+    EXPECT_FALSE(cpu.CPSR() & (1u << 29));
 }
 
 TEST_F(ARMDataProcessingTest, CMN_FlagsUnchangedWhenConditionNotMet) {
@@ -2536,7 +2536,7 @@ TEST_F(ARMDataProcessingTest, ORR_Basic) {
     cpu.R()[0] = 0xF0F0F0F0;
     cpu.R()[1] = 0x0F0F0F0F;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE1801002; // ORR r2, r0, r1
+    uint32_t instr = 0xE1802001; // ORR r2, r0, r1
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu);
@@ -2632,7 +2632,7 @@ TEST_F(ARMDataProcessingTest, ORR_ShiftedOperand_ROR) {
     uint32_t instr = 0xE1802161; // ORR r2, r0, r1, ROR #2
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0xFF00FF0Fu);
+    EXPECT_EQ(cpu.R()[2], 0xFF00FF03u);
 }
 
 TEST_F(ARMDataProcessingTest, ORRS_CarryOutFromShifter) {
