@@ -581,7 +581,7 @@ TEST_F(ARMDataProcessingTest, SUBS_CarryOutFromShifter) {
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu - 0x0u);
-    EXPECT_FALSE(cpu.CPSR() & (1u << 29)); 
+    EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C flag should be set
 }
 
 TEST_F(ARMDataProcessingTest, SUBS_CarryOutFromShifter_CarrySet) {

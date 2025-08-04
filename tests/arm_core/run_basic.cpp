@@ -92,12 +92,12 @@ TEST_F(ArmCoreTest, DataProcessing) {
     EXPECT_EQ(cpu.R()[0], (uint32_t)125) << "ADD R0, R1, R2 failed";
 
     // Test SUB R4, R1, R2 with flag setting
-    uint32_t sub2_instruction = 0xE0514002  | (1 << 20); // Set S bit;
+    uint32_t sub2_instruction = 0xE0514002; // SUBS R4, R1, R2
     memory.write32(0x00000014, sub2_instruction);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[4], (uint32_t)75) << "SUB R4, R1, R2 failed";
+    EXPECT_EQ(cpu.R()[4], (uint32_t)75) << "SUBS R4, R1, R2 failed";
     uint32_t expected_flags = CPU::FLAG_C; // No borrow so set C flag
-    EXPECT_EQ(cpu.CPSR() & 0xF0000000, (uint32_t)expected_flags) << "SUB R4, R1, R2 flag test failed";
+    EXPECT_EQ(cpu.CPSR() & 0xF0000000, (uint32_t)expected_flags) << "SUBS R4, R1, R2 flag test failed";
 
     // Test with shifts: MOV R5, R1, LSL #2
     uint32_t mov_shift_instruction = 0xE1A05101;

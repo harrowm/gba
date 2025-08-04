@@ -124,7 +124,7 @@ void ARMCPU::exec_arm_sub_reg(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsSub(parentCPU.R()[rn], shifted.value, result, shifted.carry_out);
+        if (set_flags) updateFlagsSub(parentCPU.R()[rn], shifted.value, result);
     }
 }
 
@@ -145,7 +145,7 @@ void ARMCPU::exec_arm_rsb_reg(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsSub(shifted.value, parentCPU.R()[rn], result, shifted.carry_out);
+        if (set_flags) updateFlagsSub(shifted.value, parentCPU.R()[rn], result);
     }
 }
 
