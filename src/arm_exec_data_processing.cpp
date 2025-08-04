@@ -28,10 +28,10 @@ void ARMCPU::exec_arm_eor_reg(uint32_t instruction) {
     uint32_t op1 = parentCPU.R()[rn];
     uint32_t op2 = parentCPU.R()[rm];
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
+
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted = arm_shift[shift_type](op2, shift_val, carry);
     uint32_t result = op1 ^ shifted.value;
-    printf("[DEBUG] EOR: rn=R[%u]=0x%08X, rm=R[%u]=0x%08X, shift_type=%u, shift_val=%u, shifted=0x%08X, result=0x%08X, carry_out=%u\n", rn, op1, rm, op2, shift_type, shift_val, shifted.value, result, shifted.carry_out);
     parentCPU.R()[rd] = result;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction

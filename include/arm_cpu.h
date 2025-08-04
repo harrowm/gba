@@ -114,7 +114,6 @@ public:
         } else {
             res.carry_out = (value >> (32 - shift_val)) & 1;
         }
-        printf("[DEBUG] shift_lsl: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X, carry_out=%u\n", value, shift_val, carry, res.value, res.carry_out);
         return res;
     }
     inline static ShiftResult shift_lsr(uint32_t value, uint32_t shift_val, uint32_t carry) {
@@ -133,7 +132,6 @@ public:
             res.value = 0;
             res.carry_out = 0;
         }
-        printf("[DEBUG] shift_lsr: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X, carry_out=%u\n", value, shift_val, carry, res.value, res.carry_out);
         return res;
     }
     inline static ShiftResult shift_asr(uint32_t value, uint32_t shift_val, uint32_t carry) {
@@ -148,7 +146,6 @@ public:
             res.value = (value & 0x80000000) ? 0xFFFFFFFF : 0;
             res.carry_out = (value & 0x80000000) ? 1 : 0;
         }
-        printf("[DEBUG] shift_asr: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X, carry_out=%u\n", value, shift_val, carry, res.value, res.carry_out);
         return res;
     }
     inline static ShiftResult shift_ror(uint32_t value, uint32_t shift_val, uint32_t carry) {
@@ -157,12 +154,10 @@ public:
             // RRX: Rotate right with extend (carry in as bit 31)
             res.value = (carry << 31) | (value >> 1);
             res.carry_out = value & 1;
-            printf("[DEBUG] shift_ror RRX: value=0x%08X, carry=%u, result=0x%08X, carry_out=%u\n", value, carry, res.value, res.carry_out);
         } else {
             shift_val &= 31;
             res.value = (value >> shift_val) | (value << (32 - shift_val));
             res.carry_out = (value >> (shift_val - 1)) & 1;
-            printf("[DEBUG] shift_ror ROR: value=0x%08X, shift_val=%u, result=0x%08X, carry_out=%u\n", value, shift_val, res.value, res.carry_out);
         }
         return res;
     }

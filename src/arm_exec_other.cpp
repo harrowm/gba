@@ -111,13 +111,11 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     if (up && pre) addr = base + 4;         // IB
     else if (!up && pre) addr = base - 4;   // DB
     else addr = base;                       // IA/DA
-    printf("[STM] base=0x%08X rn=%u reglist=0x%04X up=%d pre=%d reg_count=%d initial_addr=0x%08X\n", base, rn, reg_list, up, pre, reg_count, addr);
     bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
             uint32_t value = parentCPU.R()[i];
             if (i == 15) value += 8; // ARM pipeline effect for PC
-            printf("[STM] Writing R[%d]=0x%08X to addr=0x%08X\n", i, value, addr);
             parentCPU.getMemory().write32(addr, value);
             // For DA, decrement after each write
             if (!up && !pre) addr -= 4; // DA
@@ -130,7 +128,6 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     }
     if (writeback && reg_count > 0) {
         uint32_t new_base = up ? base + reg_count * 4 : base - reg_count * 4;
-        printf("[STM] Writeback: R[%u] = 0x%08X\n", rn, new_base);
         parentCPU.R()[rn] = new_base;
     }
     if (!r15_updated) parentCPU.R()[15] += 4; // Increment PC for next instruction
