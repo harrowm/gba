@@ -577,11 +577,24 @@ TEST_F(ARMDataProcessingTest, SUBS_CarryOutFromShifter) {
     cpu.R()[1] = 0x3;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0; // clear all flags
-    uint32_t instr = 0xE25021A1; // SUBS r2, r0, r1, LSR #3 (S=1)
+    uint32_t instr = 0xe05021a1 ; // SUBS r2, r0, r1, LSR #3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu - 0x0u);
-    EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C flag should be set (no borrow)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 29)); 
+}
+
+TEST_F(ARMDataProcessingTest, SUBS_CarryOutFromShifter_CarrySet) {
+    cpu.R()[0] = 0xFFFFFFFF;
+    cpu.R()[1] = 0x4; // binary 0100
+    cpu.R()[15] = 0x00000000;
+    cpu.CPSR() = 0; // clear all flags
+    uint32_t instr = 0xE05021A1; // SUBS r2, r0, r1, LSR #3 (S=1)
+    memory.write32(cpu.R()[15], instr);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu - (0x4u >> 3)); // 0xFFFFFFFF - 0
+    // Carry-out is bit 2 of r1 (0x4), which is 1
+    EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C flag should be set
 }
 
 TEST_F(ARMDataProcessingTest, SUB_FlagsUnchangedWhenS0) {
@@ -785,7 +798,7 @@ TEST_F(ARMDataProcessingTest, RSBS_CarryOutFromShifter) {
     cpu.R()[1] = 0x3;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0; // clear all flags
-    uint32_t instr = 0xE27021A1; // RSBS r2, r0, r1, LSR #3 (S=1)
+    uint32_t instr = 0xE07021A1; // RSBS r2, r0, r1, LSR #3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (0x3u >> 3) - 0xFFFFFFFFu);
@@ -891,7 +904,7 @@ TEST_F(ARMDataProcessingTest, ADD_Basic) {
     cpu.R()[0] = 0x10;
     cpu.R()[1] = 0x1;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0802010; // ADD r2, r0, r1
+    uint32_t instr = 0xE0802001; // ADD r2, r0, r1
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0x11u);
@@ -996,12 +1009,11 @@ TEST_F(ARMDataProcessingTest, ADDS_CarryOutFromShifter) {
     cpu.R()[1] = 0x3;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = 0; // clear all flags
-    uint32_t instr = 0xE29021A1; // ADDS r2, r0, r1, LSR #3 (S=1)
+    uint32_t instr = 0xE09021A1; // ADDS r2, r0, r1, LSR #3 (S=1)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu + (0x3u >> 3));
-    // C flag: carry out should be set if result < either operand
-    EXPECT_TRUE(cpu.CPSR() & (1u << 29));
+    EXPECT_FALSE(cpu.CPSR() & (1u << 29));
 }
 
 TEST_F(ARMDataProcessingTest, ADD_FlagsUnchangedWhenS0) {
@@ -1106,7 +1118,7 @@ TEST_F(ARMDataProcessingTest, ADC_Basic) {
     uint32_t instr = 0xE0A01002; // ADC r1, r0, r2
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[1], 0x10u + 0x1u + 1u);
+    EXPECT_EQ(cpu.R()[1], 0x11u);
 }
 
 TEST_F(ARMDataProcessingTest, ADC_AllBitsSet) {

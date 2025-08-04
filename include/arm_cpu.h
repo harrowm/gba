@@ -49,11 +49,11 @@ public:
     }
 
     // Update flags after subtraction: N, Z, C, V
-    FORCE_INLINE void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result) {
+    FORCE_INLINE void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result, int carry_override = -1) {
         uint32_t n = (result >> 31) & 1;
         uint32_t z = (result == 0) ? 1 : 0;
-        uint32_t c = (op1 >= op2) ? 1 : 0; // Carry: no borrow
-        // Overflow: if sign(op1) != sign(op2) and sign(op1) != sign(result)
+        uint32_t c = (op1 >= op2) ? 1 : 0;
+        if (carry_override >= 0) c = carry_override;
         uint32_t v = (((op1 ^ op2) & (op1 ^ result)) >> 31) & 1;
         uint32_t cpsr = parentCPU.CPSR();
         cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
@@ -64,10 +64,11 @@ public:
     }
 
     // Update flags after addition: N, Z, C, V
-    FORCE_INLINE void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result) {
+    FORCE_INLINE void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result, int carry_override = -1) {
         uint32_t n = (result >> 31) & 1;
         uint32_t z = (result == 0) ? 1 : 0;
         uint32_t c = (result < op1) ? 1 : 0;
+        if (carry_override >= 0) c = carry_override;
         uint32_t v = (~(op1 ^ op2) & (op1 ^ result) >> 31) & 1;
         uint32_t cpsr = parentCPU.CPSR();
         cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
@@ -100,36 +101,71 @@ public:
 
     // ARM shift operations as static inline functions
     // ARM shift operations as static inline functions (now with carry argument)
-    inline static uint32_t shift_lsl(uint32_t value, uint32_t shift_val, uint32_t carry) {
-        uint32_t result = value << shift_val;
-        printf("[DEBUG] shift_lsl: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X\n", value, shift_val, carry, result);
-        return result;
+    struct ShiftResult {
+        uint32_t value;
+        uint32_t carry_out;
+    };
+
+    inline static ShiftResult shift_lsl(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        ShiftResult res;
+        res.value = value << shift_val;
+        if (shift_val == 0) {
+            res.carry_out = carry;
+        } else {
+            res.carry_out = (value >> (32 - shift_val)) & 1;
+        }
+        printf("[DEBUG] shift_lsl: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X, carry_out=%u\n", value, shift_val, carry, res.value, res.carry_out);
+        return res;
     }
-    inline static uint32_t shift_lsr(uint32_t value, uint32_t shift_val, uint32_t carry) {
-        uint32_t result = shift_val ? (value >> shift_val) : 0;
-        printf("[DEBUG] shift_lsr: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X\n", value, shift_val, carry, result);
-        return result;
+    inline static ShiftResult shift_lsr(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        ShiftResult res;
+        if (shift_val == 0) {
+            res.value = value;
+            res.carry_out = carry;
+        } else if (shift_val < 32) {
+            res.value = value >> shift_val;
+            res.carry_out = (value >> (shift_val - 1)) & 1;
+        } else if (shift_val == 32) {
+            res.value = 0;
+            res.carry_out = (value >> 31) & 1;
+        } else {
+            res.value = 0;
+            res.carry_out = 0;
+        }
+        printf("[DEBUG] shift_lsr: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X, carry_out=%u\n", value, shift_val, carry, res.value, res.carry_out);
+        return res;
     }
-    inline static uint32_t shift_asr(uint32_t value, uint32_t shift_val, uint32_t carry) {
-        uint32_t result = shift_val ? ((int32_t)value >> shift_val) : (value & 0x80000000 ? 0xFFFFFFFF : 0);
-        printf("[DEBUG] shift_asr: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X\n", value, shift_val, carry, result);
-        return result;
+    inline static ShiftResult shift_asr(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        ShiftResult res;
+        if (shift_val == 0) {
+            res.value = value;
+            res.carry_out = carry;
+        } else if (shift_val < 32) {
+            res.value = ((int32_t)value) >> shift_val;
+            res.carry_out = (value >> (shift_val - 1)) & 1;
+        } else {
+            res.value = (value & 0x80000000) ? 0xFFFFFFFF : 0;
+            res.carry_out = (value & 0x80000000) ? 1 : 0;
+        }
+        printf("[DEBUG] shift_asr: value=0x%08X, shift_val=%u, carry=%u, result=0x%08X, carry_out=%u\n", value, shift_val, carry, res.value, res.carry_out);
+        return res;
     }
-    inline static uint32_t shift_ror(uint32_t value, uint32_t shift_val, uint32_t carry) {
-        uint32_t result;
+    inline static ShiftResult shift_ror(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        ShiftResult res;
         if (shift_val == 0) {
             // RRX: Rotate right with extend (carry in as bit 31)
-            result = (carry << 31) | (value >> 1);
-            printf("[DEBUG] shift_ror RRX: value=0x%08X, carry=%u, result=0x%08X\n", value, carry, result);
+            res.value = (carry << 31) | (value >> 1);
+            res.carry_out = value & 1;
+            printf("[DEBUG] shift_ror RRX: value=0x%08X, carry=%u, result=0x%08X, carry_out=%u\n", value, carry, res.value, res.carry_out);
         } else {
-            // Standard ROR
             shift_val &= 31;
-            result = (value >> shift_val) | (value << (32 - shift_val));
-            printf("[DEBUG] shift_ror ROR: value=0x%08X, shift_val=%u, result=0x%08X\n", value, shift_val, result);
+            res.value = (value >> shift_val) | (value << (32 - shift_val));
+            res.carry_out = (value >> (shift_val - 1)) & 1;
+            printf("[DEBUG] shift_ror ROR: value=0x%08X, shift_val=%u, result=0x%08X, carry_out=%u\n", value, shift_val, res.value, res.carry_out);
         }
-        return result;
+        return res;
     }
-    using ShiftFunc = uint32_t(*)(uint32_t, uint32_t, uint32_t);
+    using ShiftFunc = ShiftResult(*)(uint32_t, uint32_t, uint32_t);
     inline static constexpr ShiftFunc arm_shift[4] = {
         shift_lsl, shift_lsr, shift_asr, shift_ror
     };
