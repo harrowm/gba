@@ -24,18 +24,6 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     DEBUG_LOG("Timing system initialized");
 }
 
-void CPU::setFlag(uint32_t flag) {
-    cpsr |= flag;
-}
-
-void CPU::clearFlag(uint32_t flag) {
-    cpsr &= ~flag;
-}
-
-bool CPU::getFlag(uint32_t flag) const {
-    return (cpsr & flag) != 0;
-}
-
 CPU::CPUState CPU::getCPUState() const {
     DEBUG_INFO("Getting CPU state");
     CPUState state;

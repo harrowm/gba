@@ -6,8 +6,8 @@
 #include "interrupt.h"
 #include "debug.h"
 #include "thumb_cpu.h"
-//#include "arm_cpu.h"
 #include "timing.h"
+#include "utility_macros.h"
 #include <array>
 #include <cstdint>
 
@@ -281,9 +281,18 @@ public:
     static constexpr uint32_t FLAG_T = 1 << 5;  // Thumb mode flag
     static constexpr uint32_t FLAG_E = 1 << 9;  // Endianness flag
     
-    void setFlag(uint32_t flag);
-    void clearFlag(uint32_t flag);
-    bool getFlag(uint32_t flag) const;
+
+    FORCE_INLINE void setFlag(uint32_t flag) {
+        cpsr |= flag;
+    }
+
+    FORCE_INLINE void clearFlag(uint32_t flag) {
+        cpsr &= ~flag;
+    }
+
+    FORCE_INLINE bool getFlag(uint32_t flag) const {
+        return (cpsr & flag) != 0;
+    }
 
     CPUState getCPUState() const;
     void printCPUState() const;

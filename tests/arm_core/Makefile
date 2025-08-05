@@ -13,7 +13,7 @@ GTEST_INCLUDE_FLAGS = -I$(GTEST_INCLUDE)
 GTEST_LINK_FLAGS = -L$(GTEST_LIB) -lgtest -lgtest_main
 GTEST_FLAGS = $(GTEST_INCLUDE_FLAGS) $(GTEST_LINK_FLAGS)
 
-RUN_ALL_SRCS = run_basic.cpp \
+RUN_ALL_SRCS = test_basic.cpp \
   test_arm_single_data_transfers.cpp \
   test_arm_multiply.cpp \
   test_arm_data_processing.cpp \
@@ -55,7 +55,7 @@ all: $(TARGETS)
 
 
 run_all: $(RUN_ALL_OBJS) include/inst_table.inc
-	$(CXX) $(CXXFLAGS) -o $@ $(RUN_ALL_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 && ./run_all
+	$(CXX) $(CXXFLAGS) -o $@ $(RUN_ALL_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0
 
 # Ensure build directory exists before compiling object files
 

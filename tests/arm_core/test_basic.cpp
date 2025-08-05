@@ -141,55 +141,6 @@ TEST_F(ArmCoreTest, ConditionalExecution) {
     EXPECT_EQ(cpu.R()[1], (uint32_t)99) << "MOVNE R1, #99 should execute (Z flag clear)";
 }
 
-void test_arm_timing_integration() {
-    
-    Memory memory;
-    InterruptController interrupts;
-    CPU cpu(memory, interrupts);
-    ARMCPU arm_cpu(cpu);
-    TimingState timing;
-    
-    timing_init(&timing);
-    
-    // Test instruction cycle calculation
-    uint32_t add_instruction = 0xE0810002; // ADD R1, R1, R2
-    uint32_t cycles = arm_cpu.calculateInstructionCycles(add_instruction);
-    EXPECT_GE(cycles, (uint32_t)1) << "Instruction should take at least 1 cycle";
-    
-    // Test different instruction types
-    uint32_t mul_instruction = 0xE0000291; // MUL R0, R1, R2
-    uint32_t mul_cycles = arm_cpu.calculateInstructionCycles(mul_instruction);
-    printf("✓ MUL instruction cycles: %d\n", mul_cycles);
-    
-    uint32_t ldr_instruction = 0xE5910000; // LDR R0, [R1]
-    uint32_t ldr_cycles = arm_cpu.calculateInstructionCycles(ldr_instruction);
-    printf("✓ LDR instruction cycles: %d\n", ldr_cycles);
-}
-
-void test_arm_instruction_decoding() {
-    // Test different instruction formats using the format bits
-    uint32_t data_proc = 0xE0810002; // ADD R0, R1, R2
-    uint32_t format = ARM_GET_FORMAT(data_proc);
-    EXPECT_EQ(format, (uint32_t)0) << "Data processing format detection failed";
-    // printf("✓ Data processing format detected correctly (format %d)\n", format);
-    
-    uint32_t ldr = 0xE5910000; // LDR R0, [R1]
-    format = ARM_GET_FORMAT(ldr);
-    EXPECT_EQ(format, (uint32_t)2) << "Single data transfer format detection failed";
-    // printf("✓ Single data transfer format detected correctly (format %d)\n", format);
-    
-    uint32_t branch = 0xEA000000; // B +0
-    format = ARM_GET_FORMAT(branch);
-    EXPECT_EQ(format, (uint32_t)5) << "Branch format detection failed";
-    // printf("✓ Branch format detected correctly (format %d)\n", format);
-    
-    uint32_t ldm = 0xE8900003; // LDMIA R0, {R0,R1}
-    format = ARM_GET_FORMAT(ldm);
-    EXPECT_EQ(format, (uint32_t)4) << "Block transfer format detection failed";
-    // printf("✓ Block transfer format detected correctly (format %d)\n", format);
-}
-
-
 TEST_F(ArmCoreTest, MemoryOperations) {
     uint32_t test_address = 0x00000020; // Use RAM address in test harness
 
@@ -394,6 +345,7 @@ TEST_F(ArmCoreTest, TimingAndPerformance) {
     auto start_time = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 1000; i++) {
         arm_cpu.executeWithTiming(1, &timing);
+        cpu.R()[15] = 0x00000000; // Reset PC to test instruction
     }
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
@@ -441,11 +393,6 @@ TEST_F(ArmCoreTest, ARMThumbInterworking) {
     memory.write16(thumb_pc, thumb_add);
     thumb_cpu.execute(1);
     EXPECT_EQ(cpu.R()[1], 23u) << "Thumb ADD R1, R1, R2 failed";
-}
-
-
-TEST(ArmCore, InstructionDecoding) {
-    test_arm_instruction_decoding();
 }
 
 

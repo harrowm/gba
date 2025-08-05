@@ -126,14 +126,21 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     
     // Check if condition is met before executing instruction
     uint8_t condition = bits<31, 28>(instruction);
-    if(!ARMCPU::condTable[condition](parentCPU.CPSR() >> 28)) {
+    if ((condition == 0xE) || (ARMCPU::condTable[condition](parentCPU.CPSR() >> 28))) { // Check 0xE for speed !
+        (this->*arm_exec_table[index])(instruction);
+    } else {
         DEBUG_INFO("Condition not met, skipping instruction, incrementing PC");
         parentCPU.R()[15] += 4; // Increment PC for next instruction
-        return ;
     }
 
-    // .. and call the exec handler for the instruction
-    (this->*arm_exec_table[index])(instruction);
+    // if(!ARMCPU::condTable[condition](parentCPU.CPSR() >> 28)) {
+    //     DEBUG_INFO("Condition not met, skipping instruction, incrementing PC");
+    //     parentCPU.R()[15] += 4; // Increment PC for next instruction
+    //     return ;
+    // }
+
+    // // .. and call the exec handler for the instruction
+    // (this->*arm_exec_table[index])(instruction);
 }
 
 void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq) {
