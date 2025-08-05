@@ -14,27 +14,13 @@
 #define OUTPUT_BENCHMARK_RESULTS 0
 #endif
 
-// Debug flag to help track segmentation faults
-bool g_debug_mode = false;
-
-// Function to ensure output is not optimized away
-void force_output(const std::string& message) {
-    #if OUTPUT_BENCHMARK_RESULTS || !defined(NDEBUG)
-    std::cout << message << std::flush;
-    #else
-    // Still reference message to prevent it being optimized away
-    volatile char c = message.empty() ? 0 : message[0];
-    (void)c;
-    #endif
-}
-
 // Function to output benchmark results (won't be optimized away)
 void output_benchmark_result(uint32_t iterations, uint32_t instructions, double ips) {
     std::stringstream ss;
     ss << std::setw(12) << iterations 
        << std::setw(15) << instructions
-       << std::setw(15) << std::fixed << std::setprecision(0) << ips << std::endl;
-    force_output(ss.str());
+       << std::setw(15) << std::fixed << std::setprecision(2) << ips/1000000.0 << std::endl;
+    std::cout << ss.str() << std::flush; // Ensure output is flushed immediately
 }
 
 // ARM Benchmark tests for measuring instruction execution speed
@@ -42,12 +28,10 @@ void output_benchmark_result(uint32_t iterations, uint32_t instructions, double 
 class ARMBenchmarkTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Save original debug level
-        originalDebugLevel = Debug::Config::debugLevel;
         
         // Set debug level to Off during benchmarks - do this BEFORE creating GBA
-        Debug::Config::debugLevel = Debug::Level::Off;
-        
+        g_debug_level = DEBUG_LEVEL_OFF;
+
         // Create GBA in test mode with minimal memory
         gba = std::make_unique<GBA>(true); // Test mode
         auto& cpu = gba->getCPU();
@@ -64,8 +48,6 @@ protected:
     }
     
     void TearDown() override {
-        // Restore original debug level
-        Debug::Config::debugLevel = originalDebugLevel;
     }
     
     // Helper to load an ARM program into memory
@@ -102,7 +84,7 @@ protected:
     }
 
     std::unique_ptr<GBA> gba;
-    Debug::Level originalDebugLevel;
+    // Debug::Level originalDebugLevel;
 };
 
 // Test with simple arithmetic instructions (ADD)
@@ -117,19 +99,18 @@ TEST_F(ARMBenchmarkTest, ArithmeticInstructions) {
     gba->getCPU().R()[2] = 1;
     
     // Run the benchmark with different iteration counts
-    std::vector<uint32_t> iterations = {1000, 10000, 100000};
+    std::vector<uint32_t> iterations = {100000, 1000000, 10000000};
     
-    force_output("\n=== ARM Arithmetic Instruction Benchmark ===\n");
-    force_output("Instruction: ADD R1, R1, R2 (R1 = R1 + R2)\n\n");
-    force_output(std::string(std::setw(12)) + "Iterations" + std::string(std::setw(15)) + "Instructions" 
-              + std::string(std::setw(15)) + "IPS" + "\n");
-    force_output(std::string(45, '-') + "\n");
+    std::cout << "\n=== ARM Arithmetic Instruction Benchmark ===\n";
+    std::cout << "Instruction: ADD R1, R1, R2 (R1 = R1 + R2)\n\n";
+    std::cout << std::setw(12) << "Iterations" << std::setw(15) << "Instructions" << std::setw(15) << "IPS" << "\n";
+    std::cout << std::string(45, '-') << "\n";
     
     for (auto iter : iterations) {
         double ips = runBenchmark(program.size(), iter);
-        std::cout << std::setw(12) << iter 
-                  << std::setw(15) << program.size() * iter
-                  << std::setw(15) << std::fixed << std::setprecision(0) << ips << std::endl;
+        // std::cout << std::setw(12) << iter 
+        //           << std::setw(15) << program.size() * iter
+        //           << std::setw(15) << std::fixed << std::setprecision(2) << ips/1000000.0 << std::endl;
         output_benchmark_result(iter, program.size() * iter, ips); // Explicit output
     }
     
@@ -167,9 +148,9 @@ TEST_F(ARMBenchmarkTest, MemoryAccessInstructions) {
     
     for (auto iter : iterations) {
         double ips = runBenchmark(program.size(), iter);
-        std::cout << std::setw(12) << iter 
-                  << std::setw(15) << program.size() * iter
-                  << std::setw(15) << std::fixed << std::setprecision(0) << ips << std::endl;
+        // std::cout << std::setw(12) << iter 
+        //           << std::setw(15) << program.size() * iter
+        //           << std::setw(15) << std::fixed << std::setprecision(0) << ips << std::endl;
         output_benchmark_result(iter, program.size() * iter, ips); // Explicit output
     }
     
@@ -199,7 +180,7 @@ TEST_F(ARMBenchmarkTest, BranchingCode) {
               << std::setw(15) << "IPS" << std::endl;
     std::cout << std::string(45, '-') << std::endl;
     
-    std::vector<uint32_t> loop_counts = {100}; // Reduce iterations to minimize memory errors
+    std::vector<uint32_t> loop_counts = {100000}; // Reduce iterations to minimize memory errors
     
     for (auto count : loop_counts) {
         // Initialize R0 with loop count
@@ -218,10 +199,10 @@ TEST_F(ARMBenchmarkTest, BranchingCode) {
         
         double ips = expected_instructions / elapsed.count();
         
-        std::cout << std::setw(12) << count 
-                  << std::setw(15) << expected_instructions
-                  << std::setw(15) << std::fixed << std::setprecision(0) << ips << std::endl;
-        
+        // std::cout << std::setw(12) << count 
+        //           << std::setw(15) << expected_instructions
+        //           << std::setw(15) << std::fixed << std::setprecision(0) << ips << std::endl;
+        output_benchmark_result(count, expected_instructions, ips);
         // Verify R0 is 0 after loop completes
         ASSERT_EQ(gba->getCPU().R()[0], 0u);
     }

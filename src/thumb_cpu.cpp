@@ -22,8 +22,6 @@ void ThumbCPU::execute(uint32_t cycles) {
     // Use macro-based debug system
     DEBUG_INFO(("Executing Thumb instructions for " + std::to_string(cycles) + " cycles").c_str());
     
-    DEBUG_INFO("Parent CPU memory size: " + std::to_string(parentCPU.getMemory().getSize()) + " bytes");
-    
     while (cycles > 0) {
         // Check if we're still in Thumb mode - if not, break out early
         if (!parentCPU.getFlag(CPU::FLAG_T)) {
