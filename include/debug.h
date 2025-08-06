@@ -57,10 +57,19 @@
 #define DEBUG_FILE_ARM   (1 << 1) 
 #define DEBUG_FILE_CPU   (1 << 2)
 #define DEBUG_FILE_THUMB (1 << 3)
+#define DEBUG_FILE_MEMORY (1 << 4)
 
 // Global debug configuration (can be modified at runtime)
 extern int g_debug_level;
 extern int g_debug_file_mask;
+
+// DEBUG: Print when debug macros are used and show mask/level logic
+#ifdef DEBUG_BUILD
+#include <cstdio>
+inline void debug_macro_trace(const char* macro, const char* file, int line, int level, int mask, bool enabled) {
+    fprintf(stderr, "[DEBUG_TRACE] macro=%s file=%s line=%d level=%d mask=0x%X enabled=%d\n", macro, file, line, level, mask, enabled);
+}
+#endif
 
 // Helper function to check if debug output is enabled for a file
 inline bool debug_is_file_enabled(const char* filename) {
@@ -69,6 +78,7 @@ inline bool debug_is_file_enabled(const char* filename) {
     if (strstr(filename, "arm") && (g_debug_file_mask & DEBUG_FILE_ARM)) return true;
     if (strstr(filename, "cpu") && (g_debug_file_mask & DEBUG_FILE_CPU)) return true;
     if (strstr(filename, "thumb") && (g_debug_file_mask & DEBUG_FILE_THUMB)) return true;
+    if (strstr(filename, "memory") && (g_debug_file_mask & DEBUG_FILE_MEMORY)) return true;
     return false;
 }
 
@@ -98,7 +108,8 @@ inline std::string debug_to_hex_string(uint32_t value, int width) {
 
 #define DEBUG_LOG(msg) \
     do { \
-        if (g_debug_level >= DEBUG_LEVEL_VERBOSE && debug_is_file_enabled(__FILE__)) { \
+        bool enabled = (g_debug_level >= DEBUG_LEVEL_VERBOSE && debug_is_file_enabled(__FILE__)); \
+        if (enabled) { \
             std::string debug_msg = msg; \
             fprintf(stderr, "%s[DEBUG] %s:%d: %s%s\n", \
                 DEBUG_COLOR_CYAN, __FILE__, __LINE__, debug_msg.c_str(), DEBUG_COLOR_RESET); \
@@ -107,7 +118,8 @@ inline std::string debug_to_hex_string(uint32_t value, int width) {
 
 #define DEBUG_TRACE(msg) \
     do { \
-        if (g_debug_level >= DEBUG_LEVEL_VERY_VERBOSE && debug_is_file_enabled(__FILE__)) { \
+        bool enabled = (g_debug_level >= DEBUG_LEVEL_VERY_VERBOSE && debug_is_file_enabled(__FILE__)); \
+        if (enabled) { \
             std::string debug_msg = msg; \
             fprintf(stderr, "%s[TRACE] %s:%d: %s%s\n", \
                 DEBUG_COLOR_MAGENTA, __FILE__, __LINE__, debug_msg.c_str(), DEBUG_COLOR_RESET); \

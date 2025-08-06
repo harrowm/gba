@@ -1,13 +1,7 @@
 #include "debug.h"
+int g_debug_level = 2;        // Default debug level (can be changed at runtime)
+int g_debug_file_mask = 0xFF; // Default file mask (enable all files, or adjust as needed)
 
-#ifdef DEBUG_BUILD
-// Define the global debug configuration variables
-int g_debug_level = DEBUG_LEVEL_VERBOSE;  
-int g_debug_file_mask = DEBUG_FILE_MAIN | DEBUG_FILE_ARM | DEBUG_FILE_CPU | DEBUG_FILE_THUMB;  // Enable all file types by default
-#endif
-
-#ifndef DEBUG_BUILD
-// Provide default values for release/non-debug builds
-int g_debug_level = 0; // No debug
-int g_debug_file_mask = 0; // No debug files enabled
-#endif
+// DEBUG: Print when debug.cpp is loaded
+#include <cstdio>
+static struct DebugCppPrint { DebugCppPrint() { fprintf(stderr, "[DEBUG] debug.cpp loaded\n"); } } _debug_cpp_print;

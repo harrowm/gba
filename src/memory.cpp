@@ -1,5 +1,6 @@
 // Memory class implementation for GBA emulator (region pointer table version)
 #include "memory.h"
+#include "debug.h"
 #include <cstring>
 #include <cstdint>
 #include <cstdlib>

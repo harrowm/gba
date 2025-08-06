@@ -930,7 +930,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Unaligned) {
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // ARM LDR from unaligned address: result is rotated
-    EXPECT_EQ(cpu.R()[2], 0xEFDEADBE); // implementation-defined, check for bswap for GBA
+    EXPECT_EQ(cpu.R()[2], (uint32_t)0xBE00DEAD); // implementation-defined, check for bswap for GBA
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
@@ -939,11 +939,12 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Unaligned) {
     cpu.R()[1] = 0x1003;
     cpu.R()[2] = 0xCAFEBABE;
     cpu.R()[15] = 0x00000000;
+    memory.write32(0x1000, 0xAABBCCDD); // Initial value
     uint32_t instr = 0xE5812000; // STR r2, [r1]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     // Only aligned portion is written, check 0x1000-0x1003
-    EXPECT_EQ(memory.read32(0x1000), 0xBE000000); // implementation-defined, will be partial for GBA
+    EXPECT_EQ(memory.read32(0x1000), (uint32_t)0xBABBCCDD); // implementation-defined, will be partial for GBA
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 

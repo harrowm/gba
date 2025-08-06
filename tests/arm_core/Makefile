@@ -18,22 +18,22 @@ RUN_ALL_SRCS = test_basic.cpp \
   test_arm_multiply.cpp \
   test_arm_data_processing.cpp \
   test_arm_other.cpp \
-	../../src/arm_cpu.cpp \
-	../../src/debug.cpp \
-	../../src/arm_exec_other.cpp \
-	../../src/arm_further_decode.cpp \
-	../../src/arm_exec_multiply.cpp \
-	../../src/arm_exec_single_data_transfers.cpp \
+  ../../src/arm_cpu.cpp \
+  ../../src/arm_exec_other.cpp \
+  ../../src/arm_further_decode.cpp \
+  ../../src/arm_exec_multiply.cpp \
+  ../../src/arm_exec_single_data_transfers.cpp \
   ../../src/arm_exec_data_processing.cpp \
-	../../src/cpu.cpp \
-	../../src/memory.cpp \
-	../../src/thumb_cpu.cpp \
-	../../src/arm_timing.c \
-	../../src/thumb_timing.c \
-	../../src/timer.c \
-	../../src/timing.c \
-	../../src/gba.cpp \
-	../../src/gpu.cpp
+  ../../src/cpu.cpp \
+  ../../src/debug.cpp \
+  ../../src/memory.cpp \
+  ../../src/thumb_cpu.cpp \
+  ../../src/arm_timing.c \
+  ../../src/thumb_timing.c \
+  ../../src/timer.c \
+  ../../src/timing.c \
+  ../../src/gba.cpp \
+  ../../src/gpu.cpp
 
 # Map each source file to build/obj name
 define make_obj
