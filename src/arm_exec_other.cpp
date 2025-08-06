@@ -168,10 +168,12 @@ void ARMCPU::exec_arm_swp(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
 
-    // Read word from memory address in rn
-    uint32_t addr = parentCPU.R()[rn];
+    // SWP is only defined for word-aligned addresses; mask to word alignment
+    uint32_t addr = parentCPU.R()[rn] & ~0x3;
+    DEBUG_LOG(std::string("SWP: masked address = 0x") + DEBUG_TO_HEX_STRING(addr, 8));
+    // Read word from memory address in rn (word-aligned)
     uint32_t mem_val = parentCPU.getMemory().read32(addr);
-    // Write value from rm to memory
+    // Write value from rm to memory (word-aligned)
     parentCPU.getMemory().write32(addr, parentCPU.R()[rm]);
     // Store original memory value in rd
     parentCPU.R()[rd] = mem_val;
