@@ -1,21 +1,14 @@
-# Makefile for ARM core tests only
+# Minimal Makefile for ARM Google Benchmark
+
 
 CXX = g++
 CC = gcc
-CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -g -O3 -flto -DDEBUG_BUILD $(GTEST_INCLUDE_FLAGS)
-CFLAGS = -std=c23 -Wall -Wextra -I../../include -g -O3 -flto -DDEBUG_BUILD
+CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -I$(BENCHMARK_INCLUDE) -g -O3 -flto -DDEBUG_BUILD
+BENCHMARK_INCLUDE = /opt/homebrew/include
+BENCHMARK_LIB = /opt/homebrew/lib
+BENCHMARK_FLAGS = -I$(BENCHMARK_INCLUDE) -L$(BENCHMARK_LIB) -lbenchmark -lpthread
 
-BUILD_DIR = build
-BUILD_DIR_PROFILE = build_profile
-
-# Google Test paths (if available)
-GTEST_INCLUDE = /opt/homebrew/include
-GTEST_LIB = /opt/homebrew/lib
-GTEST_INCLUDE_FLAGS = -I$(GTEST_INCLUDE)
-GTEST_LINK_FLAGS = -L$(GTEST_LIB) -lgtest -lgtest_main
-GTEST_FLAGS = $(GTEST_INCLUDE_FLAGS) $(GTEST_LINK_FLAGS)
-
-ARM_BENCHMARK_SRCS = arm_benchmark.cpp \
+CPP_SRCS = arm_benchmark_bench.cpp \
 	../../src/arm_cpu.cpp \
 	../../src/debug.cpp \
 	../../src/arm_exec_other.cpp \
@@ -26,98 +19,44 @@ ARM_BENCHMARK_SRCS = arm_benchmark.cpp \
 	../../src/cpu.cpp \
 	../../src/memory.cpp \
 	../../src/thumb_cpu.cpp \
-	../../src/arm_timing.c \
-	../../src/thumb_timing.c \
-	../../src/timer.c \
-	../../src/timing.c \
 	../../src/gba.cpp \
 	../../src/gpu.cpp
 
-
-# Map each source file to build/obj name (normal)
-define make_obj
-$(BUILD_DIR)/$(notdir $(basename $(1))).o
-endef
-
-# Map each source file to build_profile/obj name (profile)
-define make_obj_profile
-$(BUILD_DIR_PROFILE)/$(notdir $(basename $(1))).o
-endef
-
-ARM_BENCHMARK_OBJS = $(foreach src,$(ARM_BENCHMARK_SRCS),$(call make_obj,$(src)))
-ARM_BENCHMARK_OBJS_PROFILE = $(foreach src,$(ARM_BENCHMARK_SRCS),$(call make_obj_profile,$(src)))
-
-TARGETS = arm_benchmark_profile
-
-all: $(TARGETS)
-	@echo "Running all ARM core tests..."
-	@for t in $(TARGETS); do \
-		if [ -x $$t ]; then \
-			echo "--- Running $$t ---"; \
-			./$$t || exit 1; \
-		fi; \
-	done
-
-CXXFLAGS_PROFILE = $(CXXFLAGS) -pg
-LDFLAGS_PROFILE = -pg
+C_SRCS = ../../src/arm_timing.c \
+	../../src/thumb_timing.c \
+	../../src/timer.c \
+	../../src/timing.c
 
 
-# Profile build target uses build_profile objects
-arm_benchmark_profile: $(ARM_BENCHMARK_OBJS_PROFILE) ../../include/inst_table.inc
-	$(CXX) $(CXXFLAGS_PROFILE) -o $@ $(ARM_BENCHMARK_OBJS_PROFILE) $(GTEST_FLAGS) $(LDFLAGS_PROFILE) -DDEBUG_LEVEL=0
+BUILD_DIR = build
 
-arm_benchmark: $(ARM_BENCHMARK_OBJS) ../../include/inst_table.inc
-	$(CXX) $(CXXFLAGS) -o $@ $(ARM_BENCHMARK_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 && ./arm_benchmark  --gtest_brief=1
+# Map source files to build directory object files
+CPP_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(CPP_SRCS:.cpp=.o)))
+C_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(C_SRCS:.c=.o)))
+
+SRC_MAP_CPP = arm_benchmark_bench.cpp $(filter %.cpp,$(CPP_SRCS))
+SRC_MAP_C = $(filter %.c,$(C_SRCS))
 
 
-.PHONY: include
-
-.PRECIOUS: ../../include/inst_table.inc
-include:
-	mkdir -p ../../include
-
-../../include/inst_table.inc: ../../src/inst_table.py include
-	python3 ../../src/inst_table.py > ../../include/inst_table.inc
-
+all: $(BUILD_DIR) arm_benchmark_bench
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR_PROFILE):
-	mkdir -p $(BUILD_DIR_PROFILE)
-
-
-# Pattern rules for object files in build directory (normal)
-$(BUILD_DIR)/%.o: %.cpp ../../include/inst_table.inc $(BUILD_DIR) include
+# Pattern rules for sources in src and local dir
+$(BUILD_DIR)/%.o: ../../src/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: %.c ../../include/inst_table.inc $(BUILD_DIR) include
-	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD_DIR)/%.o: ../../src/%.c
+	$(CC) -std=c99 -Wall -Wextra -I../../include -g -O3 -flto -c $< -o $@
 
-$(BUILD_DIR)/%.o: ../../src/%.cpp ../../include/inst_table.inc $(BUILD_DIR) include
+$(BUILD_DIR)/arm_benchmark_bench.o: arm_benchmark_bench.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: ../../src/%.c ../../include/inst_table.inc $(BUILD_DIR) include
-	$(CC) $(CFLAGS) -c $< -o $@
+arm_benchmark_bench: $(CPP_OBJS) $(C_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(BENCHMARK_FLAGS)
 
-$(BUILD_DIR)/%.o: ../%.cpp ../../include/inst_table.inc $(BUILD_DIR) include
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# Pattern rules for object files in build_profile directory (profile)
-$(BUILD_DIR_PROFILE)/%.o: %.cpp ../../include/inst_table.inc $(BUILD_DIR_PROFILE) include
-	$(CXX) $(CXXFLAGS_PROFILE) -c $< -o $@
-
-$(BUILD_DIR_PROFILE)/%.o: %.c ../../include/inst_table.inc $(BUILD_DIR_PROFILE) include
-	$(CC) $(CFLAGS) -pg -c $< -o $@
-
-$(BUILD_DIR_PROFILE)/%.o: ../../src/%.cpp ../../include/inst_table.inc $(BUILD_DIR_PROFILE) include
-	$(CXX) $(CXXFLAGS_PROFILE) -c $< -o $@
-
-$(BUILD_DIR_PROFILE)/%.o: ../../src/%.c ../../include/inst_table.inc $(BUILD_DIR_PROFILE) include
-	$(CC) $(CFLAGS) -pg -c $< -o $@
-
-$(BUILD_DIR_PROFILE)/%.o: ../%.cpp ../../include/inst_table.inc $(BUILD_DIR_PROFILE) include
-	$(CXX) $(CXXFLAGS_PROFILE) -c $< -o $@
-
+.PHONY: clean
 clean:
-	rm -rf $(BUILD_DIR) $(TARGETS)
+	rm -f arm_benchmark_bench $(CPP_OBJS) $(C_OBJS)
+	rmdir $(BUILD_DIR) 2>/dev/null || true
