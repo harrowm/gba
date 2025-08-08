@@ -17,6 +17,7 @@ public:
     // Must be declared before use in static decode table macros
     bool exception_taken = false;
     CPU& parentCPU; // Reference to the parent CPU
+    void exec_arm_bx_possible(uint32_t instruction);
 
     template <uint32_t hi, uint32_t lo>
     static constexpr uint32_t bits(uint32_t instruction) {
