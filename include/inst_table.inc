@@ -44,7 +44,7 @@
         ARM_FN(exec_arm_swp),                       // 0x021: exec_arm_swp
         ARM_FN(exec_arm_tst_reg),                   // 0x022: exec_arm_tst_reg
         ARM_FN(exec_arm_further_decode),            // 0x023: exec_arm_further_decode
-        ARM_FN(exec_arm_msr_reg),                   // 0x024: exec_arm_msr_reg
+        ARM_FN(exec_arm_bx_possible),               // 0x024: exec_arm_bx_possible
         ARM_FN(exec_arm_further_decode),            // 0x025: exec_arm_further_decode
         ARM_FN(exec_arm_teq_reg),                   // 0x026: exec_arm_teq_reg
         ARM_FN(exec_arm_further_decode),            // 0x027: exec_arm_further_decode
@@ -271,7 +271,7 @@ static constexpr const char* arm_exec_fn_names[512] = {
     "exec_arm_swp",  // 0x021
     "exec_arm_tst_reg",  // 0x022
     "exec_arm_further_decode",  // 0x023
-    "exec_arm_msr_reg",  // 0x024
+    "exec_arm_bx_possible",  // 0x024
     "exec_arm_further_decode",  // 0x025
     "exec_arm_teq_reg",  // 0x026
     "exec_arm_further_decode",  // 0x027

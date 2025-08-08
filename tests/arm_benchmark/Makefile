@@ -8,7 +8,7 @@ BENCHMARK_INCLUDE = /opt/homebrew/include
 BENCHMARK_LIB = /opt/homebrew/lib
 BENCHMARK_FLAGS = -I$(BENCHMARK_INCLUDE) -L$(BENCHMARK_LIB) -lbenchmark -lpthread
 
-CPP_SRCS = arm_benchmark_bench.cpp \
+CPP_SRCS = arm_benchmark.cpp \
 	../../src/arm_cpu.cpp \
 	../../src/debug.cpp \
 	../../src/arm_exec_other.cpp \
@@ -34,11 +34,11 @@ BUILD_DIR = build
 CPP_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(CPP_SRCS:.cpp=.o)))
 C_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(C_SRCS:.c=.o)))
 
-SRC_MAP_CPP = arm_benchmark_bench.cpp $(filter %.cpp,$(CPP_SRCS))
+SRC_MAP_CPP = arm_benchmark.cpp $(filter %.cpp,$(CPP_SRCS))
 SRC_MAP_C = $(filter %.c,$(C_SRCS))
 
 
-all: $(BUILD_DIR) arm_benchmark_bench
+all: $(BUILD_DIR) arm_benchmark
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -50,13 +50,13 @@ $(BUILD_DIR)/%.o: ../../src/%.cpp
 $(BUILD_DIR)/%.o: ../../src/%.c
 	$(CC) -std=c99 -Wall -Wextra -I../../include -g -O3 -flto -c $< -o $@
 
-$(BUILD_DIR)/arm_benchmark_bench.o: arm_benchmark_bench.cpp
+$(BUILD_DIR)/arm_benchmark.o: arm_benchmark.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-arm_benchmark_bench: $(CPP_OBJS) $(C_OBJS)
+arm_benchmark: $(CPP_OBJS) $(C_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(BENCHMARK_FLAGS)
 
 .PHONY: clean
 clean:
-	rm -f arm_benchmark_bench $(CPP_OBJS) $(C_OBJS)
+	rm -f arm_benchmark $(CPP_OBJS) $(C_OBJS)
 	rmdir $(BUILD_DIR) 2>/dev/null || true

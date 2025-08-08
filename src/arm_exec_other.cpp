@@ -239,3 +239,31 @@ void ARMCPU::exec_arm_stc_reg(uint32_t instruction) {
     // TODO: Implement coprocessor STC (reg) logic if needed
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
+
+// Handler for BX (possible) region: checks for BX, MRS, MSR, else undefined
+void ARMCPU::exec_arm_bx_possible(uint32_t instruction) {
+    DEBUG_LOG(std::string("exec_arm_bx_possible: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    // BX encoding: bits 27-4 == 0001 0010 1111 1111 1111 0001 (0x012FFF10)
+    if ((instruction & 0x0FFFFFF0) == 0x012FFF10) {
+        // BX: Branch and Exchange
+        uint32_t rm = instruction & 0xF;
+        uint32_t target = parentCPU.R()[rm];
+        bool thumb = target & 1;
+        parentCPU.R()[15] = target & ~1u;
+        if (thumb) {
+            parentCPU.setFlag(CPU::FLAG_T);
+        } else {
+            parentCPU.clearFlag(CPU::FLAG_T);
+        }
+        DEBUG_LOG(std::string("[BX] to=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + (thumb ? " (Thumb)" : " (ARM)"));
+        return;
+    }
+    
+    // MSR (register): bits 27-20 == 0x12, bits 19-16 == 0xF, bits 15-12 == 0x0, bit 25 == 0
+    if ((instruction & 0x0FBFF000) == 0x012FF000) {
+        exec_arm_msr_reg(instruction);
+        return;
+    }
+    // Otherwise, undefined
+    exec_arm_undefined(instruction);
+}

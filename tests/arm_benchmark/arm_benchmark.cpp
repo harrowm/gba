@@ -1,209 +1,134 @@
-#include "gtest/gtest.h"
+#include <benchmark/benchmark.h>
 #include "gba.h"
 #include "cpu.h"
 #include "memory.h"
-#include "debug.h"
-#include <chrono>
-#include <iostream>
-#include <iomanip>
 #include <vector>
-#include <cstdlib>  // for std::getenv
+#include <string>
+#include "debug.h"
 
-// Define this to ensure benchmark results are output even with optimizations
-#ifndef OUTPUT_BENCHMARK_RESULTS
-#define OUTPUT_BENCHMARK_RESULTS 0
-#endif
 
-// Function to output benchmark results (won't be optimized away)
-void output_benchmark_result(uint32_t iterations, uint32_t instructions, double ips) {
-    std::stringstream ss;
-    ss << std::setw(12) << iterations 
-       << std::setw(15) << instructions
-       << std::setw(15) << std::fixed << std::setprecision(2) << ips/1000000.0 << std::endl;
-    std::cout << ss.str() << std::flush; // Ensure output is flushed immediately
+static void BM_ALU_Operation(benchmark::State& state, uint32_t opcode) {
+    g_debug_level = DEBUG_LEVEL_OFF; // Disable debug output for benchmarks
+    // Create GBA in test mode
+    GBA gba(true);
+    auto& cpu = gba.getCPU();
+    auto& memory = cpu.getMemory();
+    cpu.CPSR() &= ~CPU::FLAG_T;
+
+    // Create program with 1000 of this instruction
+    std::vector<uint32_t> program(1000, opcode);
+    for (size_t i = 0; i < program.size(); ++i) {
+        memory.write32(i * 4, program[i]);
+    }
+
+    auto& registers = cpu.R();
+    registers.fill(0);
+    registers[1] = 0x12345678;
+    registers[2] = 0x1;
+    registers[15] = 0;
+
+    cpu.execute(10); // Warm up
+    registers[15] = 0;
+
+    int instructions_per_iteration = 1000 * 10; // 1000 instructions per inner loop, 10 inner loops per iteration
+    for (auto _ : state) {
+        for (int i = 0; i < 10; ++i) {
+            cpu.execute(program.size());
+            registers[15] = 0;
+        }
+        // Add 1000*10 instructions per outer iteration
+        state.counters["instructions"] += instructions_per_iteration;
+    }
+    // Optionally, set items processed for compatibility with items_per_second
+    state.SetItemsProcessed(state.iterations() * instructions_per_iteration);
 }
 
-// ARM Benchmark tests for measuring instruction execution speed
+// Helper to load an ARM program into memory
+void loadProgram(GBA& gba, const std::vector<uint32_t>& instructions) {
+    auto& memory = gba.getCPU().getMemory();
+    for (size_t i = 0; i < instructions.size(); ++i) {
+        memory.write32(i * 4, instructions[i]);
+    }
+}
 
-class ARMBenchmarkTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        
-        // Set debug level to Off during benchmarks - do this BEFORE creating GBA
-        g_debug_level = DEBUG_LEVEL_OFF;
-
-        // Create GBA in test mode with minimal memory
-        gba = std::make_unique<GBA>(true); // Test mode
-        auto& cpu = gba->getCPU();
-        
-        // Switch to ARM mode
-        cpu.CPSR() &= ~CPU::FLAG_T; // Clear Thumb bit to use ARM mode
-        
-        // Initialize all registers to 0
-        auto& registers = cpu.R();
-        registers.fill(0);
-        
-        // PC starts at address 0
-        registers[15] = 0;
-    }
-    
-    void TearDown() override {
-    }
-    
-    // Helper to load an ARM program into memory
-    void loadProgram(const std::vector<uint32_t>& instructions) {
-        auto& memory = gba->getCPU().getMemory();
-        for (size_t i = 0; i < instructions.size(); ++i) {
-            memory.write32(i * 4, instructions[i]);
-        }
-    }
-    
-    // Run benchmark for specified number of instructions and iterations
-    double runBenchmark(uint32_t num_instructions, uint32_t iterations) {
-        auto& cpu = gba->getCPU();
-        
-        // Reset PC to beginning of program
+// Arithmetic Instructions Benchmark
+static void BM_ARM_Arithmetic(benchmark::State& state) {
+    g_debug_level = DEBUG_LEVEL_OFF;
+    GBA gba(true);
+    auto& cpu = gba.getCPU();
+    cpu.CPSR() &= ~CPU::FLAG_T;
+    cpu.R().fill(0);
+    cpu.R()[15] = 0;
+    std::vector<uint32_t> program(100, 0xE0811002); // ADD R1, R1, R2
+    loadProgram(gba, program);
+    cpu.R()[1] = 0;
+    cpu.R()[2] = 1;
+    for (auto _ : state) {
         cpu.R()[15] = 0;
-        
-        auto start = std::chrono::high_resolution_clock::now();
-        
-        // Execute the program for the specified number of iterations
-        for (uint32_t i = 0; i < iterations; ++i) {
-            cpu.execute(num_instructions);
-            cpu.R()[15] = 0; // Reset PC back to start of program after each iteration
-        }
-        
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = end - start;
-        
-        // Calculate instructions per second
-        double total_instructions = static_cast<double>(num_instructions) * iterations;
-        double ips = total_instructions / elapsed.count();
-        
-        return ips;
+        cpu.execute(program.size());
     }
-
-    std::unique_ptr<GBA> gba;
-    // Debug::Level originalDebugLevel;
-};
-
-// Test with simple arithmetic instructions (ADD)
-TEST_F(ARMBenchmarkTest, ArithmeticInstructions) {
-    // Create a program of ADD instructions
-    // E0811002: ADD R1, R1, R2 (R1 = R1 + R2)
-    std::vector<uint32_t> program(100, 0xE0811002);
-    loadProgram(program);
-    
-    // Initialize operand registers
-    gba->getCPU().R()[1] = 0;
-    gba->getCPU().R()[2] = 1;
-    
-    // Run the benchmark with different iteration counts
-    std::vector<uint32_t> iterations = {100000, 1000000, 10000000};
-    
-    std::cout << "\n=== ARM Arithmetic Instruction Benchmark ===\n";
-    std::cout << "Instruction: ADD R1, R1, R2 (R1 = R1 + R2)\n\n";
-    std::cout << std::setw(12) << "Iterations" << std::setw(15) << "Instructions" << std::setw(15) << "IPS" << "\n";
-    std::cout << std::string(45, '-') << "\n";
-    
-    for (auto iter : iterations) {
-        double ips = runBenchmark(program.size(), iter);
-        // std::cout << std::setw(12) << iter 
-        //           << std::setw(15) << program.size() * iter
-        //           << std::setw(15) << std::fixed << std::setprecision(2) << ips/1000000.0 << std::endl;
-        output_benchmark_result(iter, program.size() * iter, ips); // Explicit output
-    }
-    
-    // In ARM mode, PC is 8 bytes ahead of the current instruction
-    // So we execute fewer actual add instructions than program.size()
-    // The exact number depends on how execute() is implemented and the pipeline
-    // So we just check that some additions happened instead of an exact count
-    ASSERT_GT(gba->getCPU().R()[1], 0u);
+    benchmark::DoNotOptimize(cpu.R()[1]);
 }
 
-// Test with memory access instructions (LDR/STR)
-TEST_F(ARMBenchmarkTest, MemoryAccessInstructions) {
-    // Create an alternating program of LDR/STR instructions
-    // E5801000: STR R1, [R0]    (store R1 to address in R0)
-    // E5902000: LDR R2, [R0]    (load from address in R0 to R2)
+// Memory Access Instructions Benchmark
+static void BM_ARM_MemoryAccess(benchmark::State& state) {
+    g_debug_level = DEBUG_LEVEL_OFF;
+    GBA gba(true);
+    auto& cpu = gba.getCPU();
+    cpu.CPSR() &= ~CPU::FLAG_T;
+    cpu.R().fill(0);
+    cpu.R()[15] = 0;
     std::vector<uint32_t> program;
     for (int i = 0; i < 50; i++) {
         program.push_back(0xE5801000); // STR R1, [R0]
         program.push_back(0xE5902000); // LDR R2, [R0]
     }
-    loadProgram(program);
-    
-    // Initialize registers
-    gba->getCPU().R()[0] = 0x100; // Memory address to use (within 0x0000-0x1FFF range)
-    gba->getCPU().R()[1] = 0x12345678; // Value to store
-    
-    // Run the benchmark with different iteration counts
-    std::vector<uint32_t> iterations = {1000, 10000};
-    
-    std::cout << "\n=== ARM Memory Access Instruction Benchmark ===\n";
-    std::cout << "Instructions: STR R1, [R0] / LDR R2, [R0] (alternating)\n\n";
-    std::cout << std::setw(12) << "Iterations" << std::setw(15) << "Instructions" 
-              << std::setw(15) << "IPS" << std::endl;
-    std::cout << std::string(45, '-') << std::endl;
-    
-    for (auto iter : iterations) {
-        double ips = runBenchmark(program.size(), iter);
-        // std::cout << std::setw(12) << iter 
-        //           << std::setw(15) << program.size() * iter
-        //           << std::setw(15) << std::fixed << std::setprecision(0) << ips << std::endl;
-        output_benchmark_result(iter, program.size() * iter, ips); // Explicit output
+    loadProgram(gba, program);
+    cpu.R()[0] = 0x100;
+    cpu.R()[1] = 0x12345678;
+    for (auto _ : state) {
+        cpu.R()[15] = 0;
+        cpu.execute(program.size());
     }
-    
-    // Verify memory operations worked correctly
-    ASSERT_EQ(gba->getCPU().R()[2], 0x12345678u);
+    benchmark::DoNotOptimize(cpu.R()[2]);
 }
 
-// Test with branch instructions to simulate more complex code
-TEST_F(ARMBenchmarkTest, BranchingCode) {
-    // Create a small loop program:
-    // 1. Decrement R0
-    // 2. Compare R0 to 0
-    // 3. Branch if not zero back to start
-    // 4. At end, NOP instruction that moves 0 to R0 to ensure it's 0
-    
+// Branching Code Benchmark
+static void BM_ARM_Branching(benchmark::State& state) {
+    g_debug_level = DEBUG_LEVEL_OFF;
+    GBA gba(true);
+    auto& cpu = gba.getCPU();
+    cpu.CPSR() &= ~CPU::FLAG_T;
+    cpu.R().fill(0);
+    cpu.R()[15] = 0;
     std::vector<uint32_t> program = {
-        0xE2400001,  // SUB R0, R0, #1     (decrement R0)
-        0xE3500000,  // CMP R0, #0         (compare with 0)
-        0x1AFFFFFC,  // BNE -16 bytes (4 instructions * 4 bytes)
-        0xE3A00000   // MOV R0, #0         (ensure R0 is 0 at the end)
+        0xE2400001,  // SUB R0, R0, #1
+        0xE3500000,  // CMP R0, #0
+        0x1AFFFFFC,  // BNE -16 bytes
+        0xE3A00000   // MOV R0, #0
     };
-    loadProgram(program);
-    
-    std::cout << "\n=== ARM Branch Instruction Benchmark ===\n";
-    std::cout << "Program: Simple countdown loop with branch\n\n";
-    std::cout << std::setw(12) << "Loop Count" << std::setw(15) << "Instructions" 
-              << std::setw(15) << "IPS" << std::endl;
-    std::cout << std::string(45, '-') << std::endl;
-    
-    std::vector<uint32_t> loop_counts = {100000}; // Reduce iterations to minimize memory errors
-    
-    for (auto count : loop_counts) {
-        // Initialize R0 with loop count
-        gba->getCPU().R()[0] = count;
-        
-        // Each loop iteration executes 3 instructions
-        uint32_t expected_instructions = count * 3 + 1; // 3 instructions per loop + 1 MOV at the end
-        
-        auto start = std::chrono::high_resolution_clock::now();
-        
-        // Execute the program - it will run until the loop completes
-        gba->getCPU().execute(expected_instructions);
-        
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = end - start;
-        
-        double ips = expected_instructions / elapsed.count();
-        
-        // std::cout << std::setw(12) << count 
-        //           << std::setw(15) << expected_instructions
-        //           << std::setw(15) << std::fixed << std::setprecision(0) << ips << std::endl;
-        output_benchmark_result(count, expected_instructions, ips);
-        // Verify R0 is 0 after loop completes
-        ASSERT_EQ(gba->getCPU().R()[0], 0u);
+    loadProgram(gba, program);
+    cpu.R()[0] = state.range(0); // Loop count
+    cpu.R()[15] = 0;
+    uint32_t expected_instructions = cpu.R()[0] * 3 + 1;
+    for (auto _ : state) {
+        cpu.R()[0] = state.range(0);
+        cpu.R()[15] = 0;
+        cpu.execute(expected_instructions);
     }
-};
+    benchmark::DoNotOptimize(cpu.R()[0]);
+}
+
+// Register each ALU operation benchmark
+BENCHMARK_CAPTURE(BM_ALU_Operation, ADD_R1_R1_R2, 0xE0811002);
+BENCHMARK_CAPTURE(BM_ALU_Operation, SUB_R1_R1_R2, 0xE0411002);
+BENCHMARK_CAPTURE(BM_ALU_Operation, MOV_R1_R2,    0xE1A01002);
+BENCHMARK_CAPTURE(BM_ALU_Operation, ORR_R1_R1_R2, 0xE1811002);
+BENCHMARK_CAPTURE(BM_ALU_Operation, AND_R1_R1_R2, 0xE0011002);
+BENCHMARK_CAPTURE(BM_ALU_Operation, CMP_R1_R2,    0xE1510002);
+
+BENCHMARK(BM_ARM_Arithmetic);
+BENCHMARK(BM_ARM_MemoryAccess);
+BENCHMARK(BM_ARM_Branching)->Arg(100000);
+
+BENCHMARK_MAIN();

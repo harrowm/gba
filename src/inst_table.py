@@ -23,6 +23,11 @@ def classify(bits_27_20, mul_swp_bit):
     if mul_swp_bit and (bits_27_20 in [0x04,0x05,0x06,0x07,0x11,0x12,0x13,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F]):
         return "FurtherDecode"
 
+    # BX (Branch and Exchange): bits 27-4 = 000100101111111111110001 (not fully covered by this index, but we can mark possible region)
+    # For this table, BX is not uniquely identified, but it might be a MSR/MRS .. so decode this first then handle in teh bx handler
+    if bits_27_20 == 0x12:
+        return "BX (possible)"
+
     # MRS / MSR: these are definite matches, some edge cases fall through to TST TEQ CMN and CMP and 
     # these will be handled in those decode functions.  The MSR/MRS instructions were added late to the ARM instruction set
     # and reuse TST TEQ CMN and CMP with rn==15
