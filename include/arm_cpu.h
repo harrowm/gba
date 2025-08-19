@@ -1,7 +1,9 @@
 #ifndef ARM_CPU_H
 #define ARM_CPU_H
 
+
 #include <cstdint>
+#include <capstone/capstone.h>
 #include "cpu.h"
 #include "timing.h"
 #include "arm_timing.h"
@@ -9,14 +11,13 @@
 
 class CPU; // Forward declaration
 
-class ARMCPU {
 
+class ARMCPU {
 public:
     using CondFunc = bool(*)(uint32_t);
     static const CondFunc condTable[16];
-    // Must be declared before use in static decode table macros
     bool exception_taken = false;
-    CPU& parentCPU; // Reference to the parent CPU
+    CPU& parentCPU;
     void exec_arm_bx_possible(uint32_t instruction);
 
     template <uint32_t hi, uint32_t lo>
@@ -25,13 +26,12 @@ public:
         return (instruction >> lo) & ((1 << (hi - lo + 1)) - 1);
     }
 
-    // Cache-aware execution method
     void executeInstruction(uint32_t pc, uint32_t instruction);
 
-public:
-    // void updateFlagsSub(uint32_t op1, uint32_t op2, uint32_t result);
-    // void updateFlagsAdd(uint32_t op1, uint32_t op2, uint32_t result);
-    // void updateFlagsLogical(uint32_t result, uint32_t carry);
+    // Capstone handle for ARM disassembly
+    csh capstone_handle = 0;
+
+    // ...existing code...
 
     // The functions to update flags need to be inline for speed and hence fully defined
     // in the header file

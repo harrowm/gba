@@ -1,3 +1,4 @@
+
 #include "thumb_cpu.h"
 #include "debug.h" // Use debug system
 #include "timing.h"
@@ -5,17 +6,25 @@
 #include "utility_macros.h"
 #include <sstream>
 #include <iomanip>
+#include <capstone/capstone.h>
 
 // Define the static constexpr members
 constexpr void (ThumbCPU::*ThumbCPU::thumb_instruction_table[256])(uint16_t);
 constexpr void (ThumbCPU::*ThumbCPU::thumb_alu_operations_table[16])(uint8_t, uint8_t);
 
-ThumbCPU::ThumbCPU(CPU& cpu) : parentCPU(cpu) {
-    // Initialize any Thumb-specific state or resources here
+
+ThumbCPU::ThumbCPU(CPU& cpu) : parentCPU(cpu), capstone_handle(0) {
+    if (cs_open(CS_ARCH_ARM, CS_MODE_THUMB, &capstone_handle) != CS_ERR_OK) {
+        DEBUG_ERROR("Failed to initialize Capstone for Thumb mode");
+    } else {
+        cs_option(capstone_handle, CS_OPT_DETAIL, CS_OPT_ON);
+    }
 }
 
 ThumbCPU::~ThumbCPU() {
-    // Cleanup logic if necessary
+    if (capstone_handle) {
+        cs_close(&capstone_handle);
+    }
 }
 
 void ThumbCPU::execute(uint32_t cycles) {
@@ -40,6 +49,21 @@ void ThumbCPU::execute(uint32_t cycles) {
         // Use debug macros for PC increment logging
         DEBUG_INFO("Incremented PC to: " + debug_to_hex_string(parentCPU.R()[15], 8));
         
+        // Capstone disassembly hook
+        extern bool g_disassemble_enabled;
+        if (g_disassemble_enabled && capstone_handle) {
+            cs_insn* insn;
+            size_t count = cs_disasm(capstone_handle,
+                                     reinterpret_cast<const uint8_t*>(&instruction),
+                                     sizeof(instruction),
+                                     parentCPU.R()[15] - 2, 1, &insn);
+            if (count > 0) {
+                printf("[DISASM][THUMB] 0x%08X: %s %s\n", (unsigned int)(parentCPU.R()[15] - 2), insn[0].mnemonic, insn[0].op_str);
+                cs_free(insn, count);
+            } else {
+                printf("[DISASM][THUMB] 0x%08X: <failed to disassemble>\n", (unsigned int)(parentCPU.R()[15] - 2));
+            }
+        }
         // Decode and execute the instruction
         if (thumb_instruction_table[opcode]) {
             (this->*thumb_instruction_table[opcode])(instruction);

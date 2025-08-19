@@ -1,3 +1,6 @@
+#ifndef UNUSED
+#define UNUSED(x) (void)(x)
+#endif
 // Reference: STM addressing mode and writeback logic
 // For STM <cond> <amode> <Rn>!, <reglist>
 //
@@ -134,7 +137,7 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
 }
 
 void ARMCPU::exec_arm_b(uint32_t instruction) {
-    uint32_t pc_before = parentCPU.R()[15];
+    uint32_t pc_before = parentCPU.R()[15]; UNUSED(pc_before);
     int32_t offset = bits<23,0>(instruction);
     DEBUG_LOG(std::string("[B] pc_before=0x") + DEBUG_TO_HEX_STRING(pc_before, 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
@@ -145,7 +148,7 @@ void ARMCPU::exec_arm_b(uint32_t instruction) {
 }
 
 void ARMCPU::exec_arm_bl(uint32_t instruction) {
-    uint32_t pc_before = parentCPU.R()[15];
+    uint32_t pc_before = parentCPU.R()[15]; UNUSED(pc_before);
     int32_t offset = bits<23,0>(instruction);
     DEBUG_LOG(std::string("[BL] pc_before=0x") + DEBUG_TO_HEX_STRING(pc_before, 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
@@ -203,6 +206,7 @@ void ARMCPU::exec_arm_swpb(uint32_t instruction) {
 }
 
 void ARMCPU::exec_arm_undefined(uint32_t instruction) {
+    UNUSED(instruction);
     DEBUG_ERROR(std::string("exec_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // Trigger ARM undefined instruction exception
     handleException(0x04, 0x1B, true, false); // Vector 0x04, mode 0x1B (Undefined), disable IRQ
@@ -210,31 +214,35 @@ void ARMCPU::exec_arm_undefined(uint32_t instruction) {
 
 void ARMCPU::exec_arm_software_interrupt(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_software_interrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
-    uint32_t swi_imm = bits<23,0>(instruction);
+    uint32_t swi_imm = bits<23,0>(instruction); UNUSED(swi_imm);
     // Handle software interrupt (SWI) here. Triggers Supervisor exception.
     DEBUG_ERROR(std::string("SWI executed: immediate=0x") + DEBUG_TO_HEX_STRING(swi_imm, 8) + ", pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
     handleException(0x08, 0x13, true, false); // Vector 0x08, mode 0x13 (SVC), disable IRQ
 }
 
 void ARMCPU::exec_arm_ldc_imm(uint32_t instruction) {
+    UNUSED(instruction);
     DEBUG_ERROR(std::string("exec_arm_ldc_imm: Coprocessor LDC (imm) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor LDC (imm) logic if needed
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_ldc_reg(uint32_t instruction) {
+    UNUSED(instruction);
     DEBUG_ERROR(std::string("exec_arm_ldc_reg: Coprocessor LDC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor LDC (reg) logic if needed
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_stc_imm(uint32_t instruction) {
+    UNUSED(instruction);
     DEBUG_ERROR(std::string("exec_arm_stc_imm: Coprocessor STC (imm) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor STC (imm) logic if needed
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
 void ARMCPU::exec_arm_stc_reg(uint32_t instruction) {
+    UNUSED(instruction);
     DEBUG_ERROR(std::string("exec_arm_stc_reg: Coprocessor STC (reg) instruction not implemented, pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // TODO: Implement coprocessor STC (reg) logic if needed
     parentCPU.R()[15] += 4; // Increment PC for next instruction

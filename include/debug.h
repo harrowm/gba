@@ -62,6 +62,8 @@
 // Global debug configuration (can be modified at runtime)
 extern int g_debug_level;
 extern int g_debug_file_mask;
+// Global flag to enable Capstone disassembly
+extern bool g_disassemble_enabled;
 
 // DEBUG: Print when debug macros are used and show mask/level logic
 #ifdef DEBUG_BUILD

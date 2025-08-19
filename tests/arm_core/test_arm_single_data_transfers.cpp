@@ -17,7 +17,7 @@ protected:
     CPU cpu;
     ARMCPU arm_cpu;
 
-    ARMCPUSingleDataTransferTest() : cpu(memory, interrupts), arm_cpu(cpu) {}
+    ARMCPUSingleDataTransferTest() : memory(true), cpu(memory, interrupts), arm_cpu(cpu) {}
 
     void SetUp() override {
         // RAM is available from 0x00000000 to 0x00001FFF (8KB) by default in test mode

@@ -17,13 +17,13 @@ extern "C" {
 
 class ArmCoreTest : public ::testing::Test {
 protected:
-    Memory memory;
+    Memory memory; 
     InterruptController interrupts;
     CPU cpu;
     ARMCPU arm_cpu;
     ThumbCPU thumb_cpu;
 
-    ArmCoreTest() : cpu(memory, interrupts), arm_cpu(cpu), thumb_cpu(cpu) {}
+    ArmCoreTest() : memory(true), cpu(memory, interrupts), arm_cpu(cpu), thumb_cpu(cpu) {}
 
     void SetUp() override {
         for (int i = 0; i < 16; i++) {

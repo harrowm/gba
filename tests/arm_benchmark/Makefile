@@ -3,7 +3,7 @@
 
 CXX = g++
 CC = gcc
-CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -I$(BENCHMARK_INCLUDE) -g -O3 -flto -DDEBUG_BUILD
+CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -I$(BENCHMARK_INCLUDE) -I/opt/homebrew/include -g -O3 -flto -DDEBUG_BUILD
 BENCHMARK_INCLUDE = /opt/homebrew/include
 BENCHMARK_LIB = /opt/homebrew/lib
 BENCHMARK_FLAGS = -I$(BENCHMARK_INCLUDE) -L$(BENCHMARK_LIB) -lbenchmark -lpthread
@@ -54,7 +54,7 @@ $(BUILD_DIR)/arm_benchmark.o: arm_benchmark.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 arm_benchmark: $(CPP_OBJS) $(C_OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(BENCHMARK_FLAGS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(BENCHMARK_FLAGS) -L/opt/homebrew/lib -lcapstone
 
 .PHONY: clean
 clean:

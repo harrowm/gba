@@ -1,16 +1,20 @@
 #ifndef THUMB_CPU_H
 #define THUMB_CPU_H
 
+
 #include <cstdint>
+#include <capstone/capstone.h>
 #include "cpu.h"
 #include "timing.h"
 #include "thumb_timing.h"
 
 class CPU; // Forward declaration
 
+
 class ThumbCPU {
 private:
     CPU& parentCPU; // Reference to the parent CPU
+    csh capstone_handle = 0; // Capstone handle for Thumb disassembly
 
     // Instruction handlers
     void thumb_lsl(uint16_t instruction);
