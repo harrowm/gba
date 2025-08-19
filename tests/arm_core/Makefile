@@ -2,7 +2,7 @@
 
 CXX = g++
 CC = gcc
-CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -g -O2 -DDEBUG_BUILD $(GTEST_INCLUDE_FLAGS)
+CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -I/opt/homebrew/include -g -O2 -DDEBUG_BUILD $(GTEST_INCLUDE_FLAGS)
 CFLAGS = -std=c23 -Wall -Wextra -I../../include -g -O2 -DDEBUG_BUILD
 BUILD_DIR = build
 
@@ -55,7 +55,7 @@ all: $(TARGETS)
 
 
 run_all: $(RUN_ALL_OBJS) include/inst_table.inc
-	$(CXX) $(CXXFLAGS) -o $@ $(RUN_ALL_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0
+	$(CXX) $(CXXFLAGS) -o $@ $(RUN_ALL_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 -L/opt/homebrew/lib -lcapstone
 
 # Ensure build directory exists before compiling object files
 

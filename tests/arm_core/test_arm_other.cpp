@@ -12,7 +12,7 @@ protected:
     CPU cpu;
     ARMCPU arm_cpu;
 
-    ARMOtherTest() : cpu(memory, interrupts), arm_cpu(cpu) {}
+    ARMOtherTest() : memory(true), cpu(memory, interrupts), arm_cpu(cpu) {}
 
     void SetUp() override {
         for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;

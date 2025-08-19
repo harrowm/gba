@@ -1,5 +1,7 @@
+
 #include <cstdint>
 #include <cassert>
+#include <capstone/capstone.h>
 #include "arm_cpu.h"
 #include "debug.h"
 #include "timing.h"
@@ -8,12 +10,20 @@
 
 // Secondary decode function for ambiguous region (data processing/MUL/MLA overlap)
 // Phase 1: New entry point for ambiguous region
-ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu) {
+
+ARMCPU::ARMCPU(CPU& cpu) : parentCPU(cpu), capstone_handle(0) {
     DEBUG_INFO("Initializing ARMCPU with parent CPU");
+    if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &capstone_handle) != CS_ERR_OK) {
+        DEBUG_ERROR("Failed to initialize Capstone for ARM mode");
+    } else {
+        cs_option(capstone_handle, CS_OPT_DETAIL, CS_OPT_ON);
+    }
 }
 
 ARMCPU::~ARMCPU() {
-    // Cleanup logic if necessary
+    if (capstone_handle) {
+        cs_close(&capstone_handle);
+    }
 }
 
 // HACK - exception taken looks like a bodge ..
@@ -120,27 +130,39 @@ const ARMCPU::CondFunc ARMCPU::condTable[16] = {
 void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     UNUSED(pc); // maybe useful for debugging
 
+    // Print CPSR flags before disassembly
+    uint32_t cpsr = parentCPU.CPSR();
+    printf("[ARMCPU] CPSR flags before disasm: N:%d Z:%d C:%d V:%d (CPSR=0x%08X)\n",
+        (cpsr >> 31) & 1, (cpsr >> 30) & 1, (cpsr >> 29) & 1, (cpsr >> 28) & 1, cpsr);
+
     uint32_t index = (bits<27,20>(instruction) << 1) | ((instruction & 0x90) == 0x90); // bit 7 and 4 are set
     DEBUG_INFO("executeInstruction: PC=0x" + debug_to_hex_string(pc, 8) + 
                 " Instruction=0x" + debug_to_hex_string(instruction, 8) + " using fn table index: 0x" + debug_to_hex_string(index, 3));
-    
+
+    // Capstone disassembly hook
+    extern bool g_disassemble_enabled;
+    if (g_disassemble_enabled && capstone_handle) {
+        cs_insn* insn;
+        size_t count = cs_disasm(capstone_handle,
+                                 reinterpret_cast<const uint8_t*>(&instruction),
+                                 sizeof(instruction),
+                                 pc, 1, &insn);
+        if (count > 0) {
+            printf("[DISASM][ARM] 0x%08X: %s %s\n", (unsigned int)pc, insn[0].mnemonic, insn[0].op_str);
+            cs_free(insn, count);
+        } else {
+            printf("[DISASM][ARM] 0x%08X: <failed to disassemble>\n", (unsigned int)pc);
+        }
+    }
+
     // Check if condition is met before executing instruction
     uint8_t condition = bits<31, 28>(instruction);
-    if ((condition == 0xE) || (ARMCPU::condTable[condition](parentCPU.CPSR() >> 28))) { // Check 0xE for speed !
+    if ((condition == 0xE) || (ARMCPU::condTable[condition](parentCPU.CPSR() >> 28))) {
         (this->*arm_exec_table[index])(instruction);
     } else {
         DEBUG_INFO("Condition not met, skipping instruction, incrementing PC");
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
+        parentCPU.R()[15] += 4;
     }
-
-    // if(!ARMCPU::condTable[condition](parentCPU.CPSR() >> 28)) {
-    //     DEBUG_INFO("Condition not met, skipping instruction, incrementing PC");
-    //     parentCPU.R()[15] += 4; // Increment PC for next instruction
-    //     return ;
-    // }
-
-    // // .. and call the exec handler for the instruction
-    // (this->*arm_exec_table[index])(instruction);
 }
 
 void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq) {
@@ -150,7 +172,7 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
     
     assert((new_mode & 0x1F) >= 0x10 && (new_mode & 0x1F) <= 0x1F && "Invalid new_mode in handleException");
     // Save the current CPSR (SPSR not supported in this implementation)
-    uint32_t old_cpsr = parentCPU.CPSR();
+    uint32_t old_cpsr = parentCPU.CPSR(); UNUSED(old_cpsr);
 
     // Calculate the return address for LR
     // NOTE: ARM architectural requirement: LR for exception modes is always set to PC+4 (address of next instruction).

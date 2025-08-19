@@ -34,6 +34,8 @@ https://github.com/daniel5151/armv4t_emu/tree/master/tests
 The tests use Google Test, installed with:
 brew install googletest
 brew install gperftools
+brew install capstone
+brew install google-benchmark
 
 
 SETTING THE C FLAG:

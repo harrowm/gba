@@ -56,7 +56,7 @@ $(BUILD_DIR)/test_cpu.o: test_cpu.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 thumb_core_tests: $(CPP_OBJS) $(C_OBJS) $(INST_TABLE_INC)
-	$(CXX) $(CXXFLAGS) -o $@ $(CPP_OBJS) $(C_OBJS) $(GTEST_FLAGS)
+	$(CXX) $(CXXFLAGS) -o $@ $(CPP_OBJS) $(C_OBJS) $(GTEST_FLAGS) -L/opt/homebrew/lib -lcapstone
 
 .PHONY: clean
 clean:
