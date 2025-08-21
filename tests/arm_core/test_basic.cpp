@@ -7,17 +7,13 @@
 extern "C" {
 #include "timing.h"
 #include "arm_timing.h"
+#include <keystone/keystone.h>
 }
 
 #include "memory.h"
 #include "interrupt.h"
 #include "cpu.h"
 #include "arm_cpu.h"
-
-
-extern "C" {
-#include <keystone/keystone.h>
-}
 
 class ArmCoreTest : public ::testing::Test {
 protected:
