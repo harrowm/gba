@@ -55,7 +55,7 @@ all: $(TARGETS)
 
 
 run_all: $(RUN_ALL_OBJS) include/inst_table.inc
-	$(CXX) $(CXXFLAGS) -o $@ $(RUN_ALL_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 -L/opt/homebrew/lib -lcapstone
+  $(CXX) $(CXXFLAGS) -o $@ $(RUN_ALL_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 -L/opt/homebrew/lib -lcapstone -lkeystone
 
 # Ensure build directory exists before compiling object files
 
