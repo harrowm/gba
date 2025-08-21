@@ -58,8 +58,7 @@ TEST_F(ARMMultiplyTest, MUL_Basic) {
     cpu.R()[0] = 3; // Rm
     cpu.R()[1] = 4; // Rs
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0000091; // MUL r0, r1, r0
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("mul r0, r1, r0", cpu.R()[15]); // MUL r0, r1, r0
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 12u);
     EXPECT_EQ(cpu.R()[15], 0x00000004u);
@@ -72,8 +71,7 @@ TEST_F(ARMMultiplyTest, MULS_ResultZeroSetsZ) {
     cpu.R()[0] = 0; // Rm
     cpu.R()[1] = 0; // Rs
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0100091; // MULS r0, r1, r0 (S=1)
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("muls r0, r1, r0", cpu.R()[15]); // MULS r0, r1, r0 (S=1)
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0u);
     EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z flag set
@@ -85,8 +83,7 @@ TEST_F(ARMMultiplyTest, MLAS_NegativeResultSetsN) {
     cpu.R()[1] = 2; // Rs
     cpu.R()[2] = 0; // Rn
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0302091; // MLAS r0, r1, r0, r2 (S=1)
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("mlas r0, r1, r0, r2", cpu.R()[15]); // MLAS r0, r1, r0, r2 (S=1)
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0xFFFFFFFEu);
     EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z flag clear
@@ -99,8 +96,7 @@ TEST_F(ARMMultiplyTest, UMULLS_ResultZeroSetsZ) {
     cpu.R()[4] = 0; // RdLo
     cpu.R()[5] = 0; // RdHi
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0954392; // UMULLS r4, r5, r2, r3 (S=1)
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("umulls r4, r5, r2, r3", cpu.R()[15]); // UMULLS r4, r5, r2, r3 (S=1)
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0u);
     EXPECT_EQ(cpu.R()[5], 0u);
@@ -111,8 +107,7 @@ TEST_F(ARMMultiplyTest, UMULLS_ResultZeroSetsZ) {
 TEST_F(ARMMultiplyTest, MUL_AllOperandsSame) {
     cpu.R()[0] = 7;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0000090; // MUL r0, r0, r0
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("mul r0, r0, r0", cpu.R()[15]); // MUL r0, r0, r0
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 49u);
 }
@@ -122,8 +117,7 @@ TEST_F(ARMMultiplyTest, MUL_RdEqualsRs) {
     cpu.R()[0] = 5; // Rm
     cpu.R()[1] = 3; // Rs (also Rd)
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xe0010091; // MUL r1, r1, r0
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("mul r1, r1, r0", cpu.R()[15]); // MUL r1, r1, r0
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[1], 15u);
 }
@@ -133,8 +127,7 @@ TEST_F(ARMMultiplyTest, MLA_RdEqualsRs) {
     cpu.R()[1] = 3; // Rs (also Rd)
     cpu.R()[2] = 4; // Rn
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xe0212091; // MLA r1, r1, r0, r2
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("mla r1, r1, r0, r2", cpu.R()[15]); // MLA r1, r1, r0, r2
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[1], 10u);
 }
@@ -144,8 +137,7 @@ TEST_F(ARMMultiplyTest, MUL_RdIsPC) {
     cpu.R()[0] = 2; // Rm
     cpu.R()[1] = 3; // Rs
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE000F091; // MUL r15, r1, r0
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("mul r15, r1, r0", cpu.R()[15]); // MUL r15, r1, r0
     // Should not crash, result is unpredictable, but PC should increment
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], 0x00000004u);
@@ -156,8 +148,7 @@ TEST_F(ARMMultiplyTest, MULS_ResultIs0x80000000) {
     cpu.R()[0] = 0x80000000; // Rm
     cpu.R()[1] = 1; // Rs
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0100091; // MULS r0, r1, r0 (S=1)
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("muls r0, r1, r0", cpu.R()[15]); // MULS r0, r1, r0 (S=1)
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0x80000000u);
     EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear
@@ -170,8 +161,7 @@ TEST_F(ARMMultiplyTest, MULS_CVFlagsUnaffected) {
     cpu.R()[1] = 2;
     cpu.R()[15] = 0x00000000;
     cpu.CPSR() = (1u << 29) | (1u << 28); // Set C and V
-    uint32_t instr = 0xe0100091 ; // MULS r0, r1, r0 (S=1)
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("muls r0, r1, r0", cpu.R()[15]); // MULS r0, r1, r0 (S=1)
     arm_cpu.execute(1);
     // C and V should remain set
     EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C
@@ -183,8 +173,7 @@ TEST_F(ARMMultiplyTest, MUL_RsZero) {
     cpu.R()[0] = 0xDEADBEEF; // Rm
     cpu.R()[1] = 0; // Rs
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE0000091; // MUL r0, r1, r0
-    memory.write32(cpu.R()[15], instr);
+    assemble_and_write("mul r0, r1, r0", cpu.R()[15]); // MUL r0, r1, r0
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0u);
 }
