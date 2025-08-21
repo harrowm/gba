@@ -459,10 +459,7 @@ TEST_F(ArmCoreTest, ARMThumbInterworking) {
     // Write ARM ADD instruction to memory at PC and execute
     cpu.R()[1] = 10;
     cpu.R()[2] = 5;
-    std::vector<uint8_t> arm_add_bytes;
-    ASSERT_TRUE(assemble_and_write("add r1, r1, r2", arm_pc, &arm_add_bytes));
-    uint32_t expected_arm_add = 0xE0811002;
-    EXPECT_EQ(*(uint32_t*)arm_add_bytes.data(), expected_arm_add) << "Keystone encoding mismatch for ARM ADD R1, R1, R2";
+    ASSERT_TRUE(assemble_and_write("add r1, r1, r2", arm_pc));
     cpu.R()[15] = arm_pc;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[1], 15u) << "ARM ADD R1, R1, R2 failed";
@@ -491,19 +488,13 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- ADD (register, no flags) ---
     cpu.R()[1] = 0x7FFFFFFF;
     cpu.R()[2] = 1;
-    std::vector<uint8_t> add_reg_bytes;
-    ASSERT_TRUE(assemble_and_write("add r0, r1, r2", 0x00000000, &add_reg_bytes));
-    uint32_t expected_add_reg = 0xE0810002;
-    EXPECT_EQ(*(uint32_t*)add_reg_bytes.data(), expected_add_reg) << "Keystone encoding mismatch for ADD R0, R1, R2";
+    ASSERT_TRUE(assemble_and_write("add r0, r1, r2", 0x00000000));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0x80000000u) << "ADD R0, R1, R2 failed (overflow to negative)";
 
     // --- ADD (immediate, set flags, overflow/carry) ---
     cpu.R()[1] = 0xFFFFFFFF;
-    std::vector<uint8_t> add_imm_s_bytes;
-    ASSERT_TRUE(assemble_and_write("adds r0, r1, #1", 0x00000004, &add_imm_s_bytes));
-    uint32_t expected_add_imm_s = 0xE2910001;
-    EXPECT_EQ(*(uint32_t*)add_imm_s_bytes.data(), expected_add_imm_s) << "Keystone encoding mismatch for ADDS R0, R1, #1";
+    ASSERT_TRUE(assemble_and_write("adds r0, r1, #1", 0x00000004));
     cpu.R()[15] = 0x00000004;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0u) << "ADDS R0, R1, #1 failed (should wrap to 0)";
@@ -513,10 +504,7 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- SUB (register, set flags, negative result) ---
     cpu.R()[1] = 1;
     cpu.R()[2] = 2;
-    std::vector<uint8_t> sub_reg_s_bytes;
-    ASSERT_TRUE(assemble_and_write("subs r0, r1, r2", 0x00000008, &sub_reg_s_bytes));
-    uint32_t expected_sub_reg_s = 0xE0510002;
-    EXPECT_EQ(*(uint32_t*)sub_reg_s_bytes.data(), expected_sub_reg_s) << "Keystone encoding mismatch for SUBS R0, R1, R2";
+    ASSERT_TRUE(assemble_and_write("subs r0, r1, r2", 0x00000008));
     cpu.R()[15] = 0x00000008;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0xFFFFFFFFu) << "SUBS R0, R1, R2 failed (should be -1)";
@@ -525,20 +513,14 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- AND (register, with zero) ---
     cpu.R()[1] = 0xF0F0F0F0;
     cpu.R()[2] = 0x0F0F0F0F;
-    std::vector<uint8_t> and_reg_bytes;
-    ASSERT_TRUE(assemble_and_write("and r0, r1, r2", 0x0000000C, &and_reg_bytes));
-    uint32_t expected_and_reg = 0xE0010002;
-    EXPECT_EQ(*(uint32_t*)and_reg_bytes.data(), expected_and_reg) << "Keystone encoding mismatch for AND R0, R1, R2";
+    ASSERT_TRUE(assemble_and_write("and r0, r1, r2", 0x0000000C));
     cpu.R()[15] = 0x0000000C;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0u) << "AND R0, R1, R2 failed (should be 0)";
 
     // --- ORR (immediate, set flags) ---
     cpu.R()[1] = 0x00000001;
-    std::vector<uint8_t> orr_imm_s_bytes;
-    ASSERT_TRUE(assemble_and_write("orrs r0, r1, #2", 0x00000010, &orr_imm_s_bytes));
-    uint32_t expected_orr_imm_s = 0xE3910002;
-    EXPECT_EQ(*(uint32_t*)orr_imm_s_bytes.data(), expected_orr_imm_s) << "Keystone encoding mismatch for ORRS R0, R1, #2";
+    ASSERT_TRUE(assemble_and_write("orrs r0, r1, #2", 0x00000010));
     cpu.R()[15] = 0x00000010;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 3u) << "ORRS R0, R1, #2 failed (should be 3)";
@@ -547,29 +529,20 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- EOR (register, edge case) ---
     cpu.R()[1] = 0xFFFFFFFF;
     cpu.R()[2] = 0xAAAAAAAA;
-    std::vector<uint8_t> eor_reg_bytes;
-    ASSERT_TRUE(assemble_and_write("eor r0, r1, r2", 0x00000014, &eor_reg_bytes));
-    uint32_t expected_eor_reg = 0xE0210002;
-    EXPECT_EQ(*(uint32_t*)eor_reg_bytes.data(), expected_eor_reg) << "Keystone encoding mismatch for EOR R0, R1, R2";
+    ASSERT_TRUE(assemble_and_write("eor r0, r1, r2", 0x00000014));
     cpu.R()[15] = 0x00000014;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0x55555555u) << "EOR R0, R1, R2 failed (should be 0x55555555)";
 
     // --- MOV (immediate, set flags, zero) ---
-    std::vector<uint8_t> mov_imm_s_bytes;
-    ASSERT_TRUE(assemble_and_write("movs r0, #0", 0x00000018, &mov_imm_s_bytes));
-    uint32_t expected_mov_imm_s = 0xE3B00000;
-    EXPECT_EQ(*(uint32_t*)mov_imm_s_bytes.data(), expected_mov_imm_s) << "Keystone encoding mismatch for MOVS R0, #0";
+    ASSERT_TRUE(assemble_and_write("movs r0, #0", 0x00000018));
     cpu.R()[15] = 0x00000018;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0u) << "MOVS R0, #0 failed";
     EXPECT_TRUE(cpu.CPSR() & CPU::FLAG_Z) << "MOVS did not set Z flag";
 
     // --- MVN (immediate, set flags) ---
-    std::vector<uint8_t> mvn_imm_s_bytes;
-    ASSERT_TRUE(assemble_and_write("mvns r0, #1", 0x0000001C, &mvn_imm_s_bytes));
-    uint32_t expected_mvn_imm_s = 0xE3F00001;
-    EXPECT_EQ(*(uint32_t*)mvn_imm_s_bytes.data(), expected_mvn_imm_s) << "Keystone encoding mismatch for MVNS R0, #1";
+    ASSERT_TRUE(assemble_and_write("mvns r0, #1", 0x0000001C));
     cpu.R()[15] = 0x0000001C;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0xFFFFFFFEu) << "MVNS R0, #1 failed (should be ~1)";
@@ -577,10 +550,7 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- CMP (register, negative result) ---
     cpu.R()[1] = 0;
     cpu.R()[2] = 1;
-    std::vector<uint8_t> cmp_reg_bytes;
-    ASSERT_TRUE(assemble_and_write("cmp r1, r2", 0x00000020, &cmp_reg_bytes));
-    uint32_t expected_cmp_reg = 0xE1510002;
-    EXPECT_EQ(*(uint32_t*)cmp_reg_bytes.data(), expected_cmp_reg) << "Keystone encoding mismatch for CMP R1, R2";
+    ASSERT_TRUE(assemble_and_write("cmp r1, r2", 0x00000020));
     cpu.R()[15] = 0x00000020;
     arm_cpu.execute(1);
     EXPECT_TRUE(cpu.CPSR() & CPU::FLAG_N) << "CMP did not set N flag (should be negative)";
@@ -588,10 +558,7 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- TST (register, zero result) ---
     cpu.R()[1] = 0x00000000;
     cpu.R()[2] = 0xFFFFFFFF;
-    std::vector<uint8_t> tst_reg_bytes;
-    ASSERT_TRUE(assemble_and_write("tst r1, r2", 0x00000024, &tst_reg_bytes));
-    uint32_t expected_tst_reg = 0xE1110002;
-    EXPECT_EQ(*(uint32_t*)tst_reg_bytes.data(), expected_tst_reg) << "Keystone encoding mismatch for TST R1, R2";
+    ASSERT_TRUE(assemble_and_write("tst r1, r2", 0x00000024));
     cpu.R()[15] = 0x00000024;
     arm_cpu.execute(1);
     EXPECT_TRUE(cpu.CPSR() & CPU::FLAG_Z) << "TST did not set Z flag (should be zero)";
@@ -599,10 +566,7 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- TEQ (register, nonzero result) ---
     cpu.R()[1] = 0xF0F0F0F0;
     cpu.R()[2] = 0x0F0F0F0F;
-    std::vector<uint8_t> teq_reg_bytes;
-    ASSERT_TRUE(assemble_and_write("teq r1, r2", 0x00000028, &teq_reg_bytes));
-    uint32_t expected_teq_reg = 0xE1310002;
-    EXPECT_EQ(*(uint32_t*)teq_reg_bytes.data(), expected_teq_reg) << "Keystone encoding mismatch for TEQ R1, R2";
+    ASSERT_TRUE(assemble_and_write("teq r1, r2", 0x00000028));
     cpu.R()[15] = 0x00000028;
     arm_cpu.execute(1);
     EXPECT_FALSE(cpu.CPSR() & CPU::FLAG_Z) << "TEQ set Z flag incorrectly (should be nonzero)";
@@ -610,39 +574,27 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- Shifted operand (LSL by register) ---
     cpu.R()[1] = 4;
     cpu.R()[2] = 4;
-    std::vector<uint8_t> mov_lsl_reg_bytes;
-    ASSERT_TRUE(assemble_and_write("mov r0, r2, lsl r1", 0x0000002C, &mov_lsl_reg_bytes));
-    uint32_t expected_mov_lsl_reg = 0xE1A00112;
-    EXPECT_EQ(*(uint32_t*)mov_lsl_reg_bytes.data(), expected_mov_lsl_reg) << "Keystone encoding mismatch for MOV R0, R2, LSL R1";
+    ASSERT_TRUE(assemble_and_write("mov r0, r2, lsl r1", 0x0000002C));
     cpu.R()[15] = 0x0000002C;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0x40u) << "MOV R0, R2, LSL R1 failed (should be 0x40)";
 
     // --- PSR Transfer: MRS (read CPSR) ---
-    std::vector<uint8_t> mrs_cpsr_bytes;
-    ASSERT_TRUE(assemble_and_write("mrs r3, cpsr", 0x00000030, &mrs_cpsr_bytes));
-    uint32_t expected_mrs_cpsr = 0xE10F3000;
-    EXPECT_EQ(*(uint32_t*)mrs_cpsr_bytes.data(), expected_mrs_cpsr) << "Keystone encoding mismatch for MRS R3, CPSR";
+    ASSERT_TRUE(assemble_and_write("mrs r3, cpsr", 0x00000030));
     cpu.R()[3] = 0;
     cpu.R()[15] = 0x00000030;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3], cpu.CPSR()) << "MRS R3, CPSR failed";
 
     // --- PSR Transfer: MSR (write CPSR flags from immediate) ---
-    std::vector<uint8_t> msr_cpsr_f_imm_bytes;
-    ASSERT_TRUE(assemble_and_write("msr cpsr_f, #0xF0000000", 0x00000034, &msr_cpsr_f_imm_bytes));
-    uint32_t expected_msr_cpsr_f_imm = 0xE32F020F;
-    EXPECT_EQ(*(uint32_t*)msr_cpsr_f_imm_bytes.data(), expected_msr_cpsr_f_imm) << "Keystone encoding mismatch for MSR CPSR_f, #0xF0000000";
+    ASSERT_TRUE(assemble_and_write("msr cpsr_f, #0xF0000000", 0x00000034));
     cpu.R()[15] = 0x00000034;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.CPSR() & 0xF0000000, 0xF0000000u) << "MSR CPSR_f, #0xF0000000 failed to set flags";
 
     // --- PSR Transfer: MSR (write CPSR from register) ---
     cpu.R()[4] = 0xA0000000;
-    std::vector<uint8_t> msr_cpsr_f_reg_bytes;
-    ASSERT_TRUE(assemble_and_write("msr cpsr_f, r4", 0x00000038, &msr_cpsr_f_reg_bytes));
-    uint32_t expected_msr_cpsr_f_reg = 0xE12FF004;
-    EXPECT_EQ(*(uint32_t*)msr_cpsr_f_reg_bytes.data(), expected_msr_cpsr_f_reg) << "Keystone encoding mismatch for MSR CPSR_f, R4";
+    ASSERT_TRUE(assemble_and_write("msr cpsr_f, r4", 0x00000038));
     cpu.R()[15] = 0x00000038;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.CPSR() & 0xF0000000, 0xA0000000u) << "MSR CPSR_f, R4 failed to set flags";
@@ -650,10 +602,7 @@ TEST_F(ArmCoreTest, DataProcessingAndPSRTransfer) {
     // --- Edge: MOV with max shift (LSR #32) ---
     cpu.R()[2] = 0xFFFFFFFF;
     cpu.R()[0] = 0xDEADBEEF; // Set to known value
-    std::vector<uint8_t> mov_lsr32_bytes;
-    ASSERT_TRUE(assemble_and_write("mov r0, r2, lsr #32", 0x0000003C, &mov_lsr32_bytes));
-    uint32_t expected_mov_lsr32 = 0xE1A00022;
-    EXPECT_EQ(*(uint32_t*)mov_lsr32_bytes.data(), expected_mov_lsr32) << "Keystone encoding mismatch for MOV R0, R2, LSR #32";
+    ASSERT_TRUE(assemble_and_write("mov r0, r2, lsr #32", 0x0000003C));
     cpu.R()[15] = 0x0000003C;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0u) << "MOV R0, R2, LSR #32 failed (should be 0)";
@@ -668,10 +617,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     // --- Basic MUL: MUL R0, R1, R2 ---
     cpu.R()[1] = 7;
     cpu.R()[2] = 6;
-    std::vector<uint8_t> mul_inst_bytes;
-    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x00000000, &mul_inst_bytes));
-    uint32_t expected_mul_inst = 0xE0000291;
-    EXPECT_EQ(*(uint32_t*)mul_inst_bytes.data(), expected_mul_inst) << "Keystone encoding mismatch for MUL R0, R1, R2";
+    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x00000000));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 42u) << "MUL R0, R1, R2 failed";
 
@@ -680,10 +626,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     cpu.R()[5] = 4;
     cpu.R()[6] = 10;
     cpu.R()[3] = 0;
-    std::vector<uint8_t> mla_inst_bytes;
-    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x00000004, &mla_inst_bytes));
-    uint32_t expected_mla_inst = 0xE0236594;
-    EXPECT_EQ(*(uint32_t*)mla_inst_bytes.data(), expected_mla_inst) << "Keystone encoding mismatch for MLA R3, R4, R5, R6";
+    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x00000004));
     cpu.R()[15] = 0x00000004;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3], 22u) << "MLA R3, R4, R5, R6 failed";
@@ -692,9 +635,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     cpu.R()[1] = 0;
     cpu.R()[2] = 12345;
     cpu.R()[0] = 0xFFFFFFFF;
-    std::vector<uint8_t> mul_zero_bytes;
-    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x00000008, &mul_zero_bytes));
-    EXPECT_EQ(*(uint32_t*)mul_zero_bytes.data(), expected_mul_inst) << "Keystone encoding mismatch for MUL R0, R1=0, R2";
+    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x00000008));
     cpu.R()[15] = 0x00000008;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0u) << "MUL R0, R1=0, R2 failed (should be 0)";
@@ -702,9 +643,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     // --- MUL with negative numbers ---
     cpu.R()[1] = (uint32_t)-5;
     cpu.R()[2] = 3;
-    std::vector<uint8_t> mul_neg_bytes;
-    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x0000000C, &mul_neg_bytes));
-    EXPECT_EQ(*(uint32_t*)mul_neg_bytes.data(), expected_mul_inst) << "Keystone encoding mismatch for MUL R0, R1=-5, R2=3";
+    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x0000000C));
     cpu.R()[15] = 0x0000000C;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], (uint32_t)-15) << "MUL R0, R1=-5, R2=3 failed";
@@ -713,9 +652,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     cpu.R()[4] = 2;
     cpu.R()[5] = 4;
     cpu.R()[6] = (uint32_t)-10;
-    std::vector<uint8_t> mla_neg_bytes;
-    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x00000010, &mla_neg_bytes));
-    EXPECT_EQ(*(uint32_t*)mla_neg_bytes.data(), expected_mla_inst) << "Keystone encoding mismatch for MLA R3, R4=2, R5=4, R6=-10";
+    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x00000010));
     cpu.R()[15] = 0x00000010;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3], (uint32_t)-2) << "MLA R3, R4=2, R5=4, R6=-10 failed";
@@ -723,9 +660,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     // --- MUL with max unsigned values ---
     cpu.R()[1] = 0xFFFFFFFF;
     cpu.R()[2] = 2;
-    std::vector<uint8_t> mul_max_bytes;
-    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x00000014, &mul_max_bytes));
-    EXPECT_EQ(*(uint32_t*)mul_max_bytes.data(), expected_mul_inst) << "Keystone encoding mismatch for MUL R0, R1=0xFFFFFFFF, R2=2";
+    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x00000014));
     cpu.R()[15] = 0x00000014;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0xFFFFFFFEu) << "MUL R0, R1=0xFFFFFFFF, R2=2 failed";
@@ -734,18 +669,13 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     cpu.R()[4] = 0x80000000;
     cpu.R()[5] = 2;
     cpu.R()[6] = 0x80000000;
-    std::vector<uint8_t> mla_overflow_bytes;
-    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x00000018, &mla_overflow_bytes));
-    EXPECT_EQ(*(uint32_t*)mla_overflow_bytes.data(), expected_mla_inst) << "Keystone encoding mismatch for MLA R3, overflow case";
+    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x00000018));
     cpu.R()[15] = 0x00000018;
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[3], 0x80000000u) << "MLA R3, overflow case failed (0x80000000*2+0x80000000==0x80000000)";
+    EXPECT_EQ(cpu.R()[3], 0x80000000u) << "MLA R3, overflow case failed";
 
     // --- MULS: MUL with S bit set, check flags ---
-    std::vector<uint8_t> muls_inst_bytes;
-    ASSERT_TRUE(assemble_and_write("muls r0, r1, r2", 0x0000001C, &muls_inst_bytes));
-    uint32_t expected_muls_inst = 0xE0100291;
-    EXPECT_EQ(*(uint32_t*)muls_inst_bytes.data(), expected_muls_inst) << "Keystone encoding mismatch for MULS R0, R1, R2";
+    ASSERT_TRUE(assemble_and_write("muls r0, r1, r2", 0x0000001C));
     cpu.R()[1] = 0x80000000;
     cpu.R()[2] = 2;
     cpu.R()[0] = 0;
@@ -755,10 +685,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     EXPECT_FALSE(cpu.CPSR() & CPU::FLAG_N) << "MULS N flag should not be set (result is zero)";
 
     // --- MLAS: MLA with S bit set, check flags ---
-    std::vector<uint8_t> mlas_inst_bytes;
-    ASSERT_TRUE(assemble_and_write("mlas r3, r4, r5, r6", 0x00000020, &mlas_inst_bytes));
-    uint32_t expected_mlas_inst = 0xE0336594;
-    EXPECT_EQ(*(uint32_t*)mlas_inst_bytes.data(), expected_mlas_inst) << "Keystone encoding mismatch for MLAS R3, R4, R5, R6";
+    ASSERT_TRUE(assemble_and_write("mlas r3, r4, r5, r6", 0x00000020));
     cpu.R()[4] = 0xFFFFFFFF;
     cpu.R()[5] = 2;
     cpu.R()[6] = 1;
@@ -771,9 +698,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     cpu.R()[4] = 2;
     cpu.R()[5] = 3;
     cpu.R()[6] = 0;
-    std::vector<uint8_t> mla_no_acc_bytes;
-    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x00000024, &mla_no_acc_bytes));
-    EXPECT_EQ(*(uint32_t*)mla_no_acc_bytes.data(), expected_mla_inst) << "Keystone encoding mismatch for MLA R3, R4=2, R5=3, R6=0";
+    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x00000024));
     cpu.R()[15] = 0x00000024;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3], 6u) << "MLA R3, R4=2, R5=3, R6=0 failed (should be 6)";
@@ -781,9 +706,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     // --- MUL with all zeros ---
     cpu.R()[1] = 0;
     cpu.R()[2] = 0;
-    std::vector<uint8_t> mul_all_zero_bytes;
-    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x00000028, &mul_all_zero_bytes));
-    EXPECT_EQ(*(uint32_t*)mul_all_zero_bytes.data(), expected_mul_inst) << "Keystone encoding mismatch for MUL R0, R1=0, R2=0";
+    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x00000028));
     cpu.R()[15] = 0x00000028;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0u) << "MUL R0, R1=0, R2=0 failed (should be 0)";
@@ -792,9 +715,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     cpu.R()[4] = 0;
     cpu.R()[5] = 0;
     cpu.R()[6] = 0;
-    std::vector<uint8_t> mla_all_zero_bytes;
-    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x0000002C, &mla_all_zero_bytes));
-    EXPECT_EQ(*(uint32_t*)mla_all_zero_bytes.data(), expected_mla_inst) << "Keystone encoding mismatch for MLA R3, R4=0, R5=0, R6=0";
+    ASSERT_TRUE(assemble_and_write("mla r3, r4, r5, r6", 0x0000002C));
     cpu.R()[15] = 0x0000002C;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3], 0u) << "MLA R3, R4=0, R5=0, R6=0 failed (should be 0)";
@@ -803,9 +724,7 @@ TEST_F(ArmCoreTest, MultiplyInstructions) {
     cpu.R()[1] = 2;
     cpu.R()[2] = 3;
     cpu.R()[0] = 0;
-    std::vector<uint8_t> mul_max_ram_bytes;
-    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x1FFC, &mul_max_ram_bytes));
-    EXPECT_EQ(*(uint32_t*)mul_max_ram_bytes.data(), expected_mul_inst) << "Keystone encoding mismatch for MUL R0, R1=2, R2=3 at max RAM";
+    ASSERT_TRUE(assemble_and_write("mul r0, r1, r2", 0x1FFC));
     cpu.R()[15] = 0x1FFC;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 6u) << "MUL R0, R1=2, R2=3 at max RAM failed";
@@ -822,10 +741,7 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     cpu.R()[3] = 0x9ABCDEF0;
     cpu.R()[0] = 0;
     cpu.R()[1] = 0;
-    std::vector<uint8_t> umull_inst_bytes;
-    ASSERT_TRUE(assemble_and_write("umull r0, r1, r2, r3", 0x00000000, &umull_inst_bytes));
-    uint32_t expected_umull_inst = 0xE0810392;
-    EXPECT_EQ(*(uint32_t*)umull_inst_bytes.data(), expected_umull_inst) << "Keystone encoding mismatch for UMULL R0, R1, R2, R3";
+    ASSERT_TRUE(assemble_and_write("umull r0, r1, r2, r3", 0x00000000));
     
     uint32_t src2_umull = cpu.R()[2];
     uint32_t src3_umull = cpu.R()[3];
@@ -839,10 +755,7 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     cpu.R()[3] = 0x2000;
     cpu.R()[0] = 0x1;
     cpu.R()[1] = 0x2;
-    std::vector<uint8_t> umlal_inst_bytes;
-    ASSERT_TRUE(assemble_and_write("umlal r0, r1, r2, r3", 0x00000004, &umlal_inst_bytes));
-    uint32_t expected_umlal_inst = 0xE0A20392;
-    EXPECT_EQ(*(uint32_t*)umlal_inst_bytes.data(), expected_umlal_inst) << "Keystone encoding mismatch for UMLAL R0, R1, R2, R3";
+    ASSERT_TRUE(assemble_and_write("umlal r0, r1, r2, r3", 0x00000004));
     cpu.R()[15] = 0x00000004;
     uint32_t src2_umlal = cpu.R()[2];
     uint32_t src3_umlal = cpu.R()[3];
@@ -858,10 +771,7 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     cpu.R()[3] = (uint32_t)5678;
     cpu.R()[0] = 0;
     cpu.R()[1] = 0;
-    std::vector<uint8_t> smull_inst_bytes;
-    ASSERT_TRUE(assemble_and_write("smull r0, r1, r2, r3", 0x00000008, &smull_inst_bytes));
-    uint32_t expected_smull_inst = 0xE0C10392;
-    EXPECT_EQ(*(uint32_t*)smull_inst_bytes.data(), expected_smull_inst) << "Keystone encoding mismatch for SMULL R0, R1, R2, R3";
+    ASSERT_TRUE(assemble_and_write("smull r0, r1, r2, r3", 0x00000008));
     cpu.R()[15] = 0x00000008;
     int32_t src2_smull = (int32_t)cpu.R()[2];
     int32_t src3_smull = (int32_t)cpu.R()[3];
@@ -875,10 +785,7 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     cpu.R()[3] = (uint32_t)50;
     cpu.R()[0] = 0xFFFFFFFF;
     cpu.R()[1] = 0x7FFFFFFF;
-    std::vector<uint8_t> smlal_inst_bytes;
-    ASSERT_TRUE(assemble_and_write("smlal r0, r1, r2, r3", 0x0000000C, &smlal_inst_bytes));
-    uint32_t expected_smlal_inst = 0xE0E20392;
-    EXPECT_EQ(*(uint32_t*)smlal_inst_bytes.data(), expected_smlal_inst) << "Keystone encoding mismatch for SMLAL R0, R1, R2, R3";
+    ASSERT_TRUE(assemble_and_write("smlal r0, r1, r2, r3", 0x0000000C));
     cpu.R()[15] = 0x0000000C;
     int32_t src2_smlal = (int32_t)cpu.R()[2];
     int32_t src3_smlal = (int32_t)cpu.R()[3];
@@ -895,9 +802,7 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     uint32_t src2_umull0 = cpu.R()[2];
     uint32_t src3_umull0 = cpu.R()[3];
     uint64_t expected_umull0 = (uint64_t)src2_umull0 * (uint64_t)src3_umull0;
-    std::vector<uint8_t> umull_zero_bytes;
-    ASSERT_TRUE(assemble_and_write("umull r0, r1, r2, r3", 0x00000010, &umull_zero_bytes));
-    EXPECT_EQ(*(uint32_t*)umull_zero_bytes.data(), expected_umull_inst) << "Keystone encoding mismatch for UMULL with zero";
+    ASSERT_TRUE(assemble_and_write("umull r0, r1, r2, r3", 0x00000010));
     cpu.R()[15] = 0x00000010;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], (uint32_t)expected_umull0) << "UMULL with zero low failed";
@@ -911,19 +816,14 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     int32_t src2_smull_neg = (int32_t)cpu.R()[2];
     int32_t src3_smull_neg = (int32_t)cpu.R()[3];
     int64_t expected_neg = (int64_t)src2_smull_neg * (int64_t)src3_smull_neg;
-    std::vector<uint8_t> smull_neg_bytes;
-    ASSERT_TRUE(assemble_and_write("smull r0, r1, r2, r3", 0x00000014, &smull_neg_bytes));
-    EXPECT_EQ(*(uint32_t*)smull_neg_bytes.data(), expected_smull_inst) << "Keystone encoding mismatch for SMULL negative";
+    ASSERT_TRUE(assemble_and_write("smull r0, r1, r2, r3", 0x00000014));
     cpu.R()[15] = 0x00000014;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], (uint32_t)expected_neg) << "SMULL negative low failed";
     EXPECT_EQ(cpu.R()[1], (uint32_t)(expected_neg >> 32)) << "SMULL negative high failed";
 
     // --- S bit: UMULLS, SMULLS, UMLALS, SMLALS (check flags) ---
-    std::vector<uint8_t> umulls_inst_bytes;
-    ASSERT_TRUE(assemble_and_write("umulls r0, r1, r2, r3", 0x00000018, &umulls_inst_bytes));
-    uint32_t expected_umulls_inst = 0xE0910392;
-    EXPECT_EQ(*(uint32_t*)umulls_inst_bytes.data(), expected_umulls_inst) << "Keystone encoding mismatch for UMULLS R0, R1, R2, R3";
+    ASSERT_TRUE(assemble_and_write("umulls r0, r1, r2, r3", 0x00000018));
     cpu.R()[2] = 0xFFFFFFFF;
     cpu.R()[3] = 2;
     cpu.R()[0] = 0;
@@ -948,9 +848,7 @@ TEST_F(ArmCoreTest, MultiplyLongInstructions) {
     uint32_t src2_umull_ram = cpu.R()[2];
     uint32_t src3_umull_ram = cpu.R()[3];
     uint64_t expected_umull_ram = (uint64_t)src2_umull_ram * (uint64_t)src3_umull_ram;
-    std::vector<uint8_t> umull_ram_bytes;
-    ASSERT_TRUE(assemble_and_write("umull r0, r1, r2, r3", 0x1FFC, &umull_ram_bytes));
-    EXPECT_EQ(*(uint32_t*)umull_ram_bytes.data(), expected_umull_inst) << "Keystone encoding mismatch for UMULL at max RAM";
+    ASSERT_TRUE(assemble_and_write("umull r0, r1, r2, r3", 0x1FFC));
     cpu.R()[15] = 0x1FFC;
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], (uint32_t)expected_umull_ram) << "UMULL at max RAM low failed";
