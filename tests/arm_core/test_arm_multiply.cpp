@@ -5,18 +5,51 @@
 #include "cpu.h"
 #include "arm_cpu.h"
 
+extern "C" {
+#include <keystone/keystone.h>
+}
+
 class ARMMultiplyTest : public ::testing::Test {
 protected:
     Memory memory;
     InterruptController interrupts;
     CPU cpu;
     ARMCPU arm_cpu;
+    ks_engine* ks; // Keystone handle
 
     ARMMultiplyTest() : memory(true), cpu(memory, interrupts), arm_cpu(cpu) {}
 
     void SetUp() override {
         for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
         cpu.CPSR() = 0x10; // User mode, no flags set
+        
+        if (ks) ks_close(ks);
+        if (ks_open(KS_ARCH_ARM, KS_MODE_ARM, &ks) != KS_ERR_OK) {
+            FAIL() << "Failed to initialize Keystone for ARM mode";
+        }
+    }
+
+    void TearDown() override {
+        if (ks) {
+            ks_close(ks);
+            ks = nullptr;
+        }
+    }
+
+    // Helper: assemble ARM instruction and write to memory
+    bool assemble_and_write(const std::string& asm_code, uint32_t addr, std::vector<uint8_t>* out_bytes = nullptr) {
+        unsigned char* encode = nullptr;
+        size_t size, count;
+        int err = ks_asm(ks, asm_code.c_str(), addr, &encode, &size, &count);
+        if ((ks_err)err != KS_ERR_OK) {
+            fprintf(stderr, "Keystone error: %s\n", ks_strerror((ks_err)err));
+            return false;
+        }
+        for (size_t i = 0; i < size; ++i)
+            memory.write8(addr + i, encode[i]);
+        if (out_bytes) out_bytes->assign(encode, encode + size);
+        ks_free(encode);
+        return true;
     }
 };
 
