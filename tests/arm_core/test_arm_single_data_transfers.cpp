@@ -1,14 +1,12 @@
-
-// test_arm_single_data_transfers.cpp
-// Google Test suite for ARM Single Data Transfers
-// Covers all handlers in arm_exec_single_data_transfers.cpp
-
-
 #include <gtest/gtest.h>
 #include "memory.h"
 #include "interrupt.h"
 #include "cpu.h"
 #include "arm_cpu.h"
+
+extern "C" {
+#include <keystone/keystone.h>
+}
 
 class ARMCPUSingleDataTransferTest : public ::testing::Test {
 protected:
@@ -16,13 +14,41 @@ protected:
     InterruptController interrupts;
     CPU cpu;
     ARMCPU arm_cpu;
+    ks_engine* ks; // Keystone handle
 
     ARMCPUSingleDataTransferTest() : memory(true), cpu(memory, interrupts), arm_cpu(cpu) {}
 
     void SetUp() override {
-        // RAM is available from 0x00000000 to 0x00001FFF (8KB) by default in test mode
         for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
         cpu.CPSR() = 0x10; // User mode, no flags set
+        
+        if (ks) ks_close(ks);
+        if (ks_open(KS_ARCH_ARM, KS_MODE_ARM, &ks) != KS_ERR_OK) {
+            FAIL() << "Failed to initialize Keystone for ARM mode";
+        }
+    }
+
+    void TearDown() override {
+        if (ks) {
+            ks_close(ks);
+            ks = nullptr;
+        }
+    }
+
+    // Helper: assemble ARM instruction and write to memory
+    bool assemble_and_write(const std::string& asm_code, uint32_t addr, std::vector<uint8_t>* out_bytes = nullptr) {
+        unsigned char* encode = nullptr;
+        size_t size, count;
+        int err = ks_asm(ks, asm_code.c_str(), addr, &encode, &size, &count);
+        if ((ks_err)err != KS_ERR_OK) {
+            fprintf(stderr, "Keystone error: %s\n", ks_strerror((ks_err)err));
+            return false;
+        }
+        for (size_t i = 0; i < size; ++i)
+            memory.write8(addr + i, encode[i]);
+        if (out_bytes) out_bytes->assign(encode, encode + size);
+        ks_free(encode);
+        return true;
     }
 };
 
@@ -31,8 +57,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Pre_WB) {
     cpu.R()[1] = 0x1000; // base
     cpu.R()[15] = 0x00000000; // Set PC to start of RAM
     memory.write32(0x1004, 0xDEADBEEF);
-    uint32_t instr = 0xE5B12004; // LDR r2, [r1, #4]!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, #4]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xDEADBEEF);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004); // writeback
@@ -45,8 +70,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Pre_NoWB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1004, 0xCAFEBABE);
-    uint32_t instr = 0xE5912004; // LDR r2, [r1, #4]
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, #4]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xCAFEBABE);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000); // no writeback
@@ -58,9 +82,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Post_WB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1000, 0x12345678);
-    uint32_t instr = 0xE4912004; // LDR r2, [r1], #4
-
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1], #4", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0x12345678);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004); // writeback
@@ -72,8 +94,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Post_NoWB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1000, 0xAABBCCDD);
-    uint32_t instr = 0xE4912004; // LDR r2, [r1], #4 
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1], #4", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xAABBCCDD);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004); // writeback alwats occurs in post-indexed
@@ -85,8 +106,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Pre_WB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0xDEADBEEF;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE5A12004; // STR r2, [r1, #4]!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1, #4]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1004), (uint32_t)0xDEADBEEF);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -98,8 +118,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Pre_NoWB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0xCAFEBABE;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE5812004; // STR r2, [r1, #4]
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1, #4]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1004), (uint32_t)0xCAFEBABE);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);
@@ -111,8 +130,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Post_WB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0x12345678;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE4812004; // STR r2, [r1], #4!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1], #4", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1000), (uint32_t)0x12345678);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -124,9 +142,8 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Post_NoWB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0xAABBCCDD;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE4812004; // STR r2, [r1], #4
+    ASSERT_TRUE(assemble_and_write("str r2, [r1], #4", cpu.R()[15]));
 
-    memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1000), (uint32_t)0xAABBCCDD);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -138,8 +155,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRB_Imm_Pre_WB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1004, 0xAB);
-    uint32_t instr = 0xE5F12004; // LDRB r2, [r1, #4]!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldrb r2, [r1, #4]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2] & 0xFF, (uint8_t)0xAB);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -151,8 +167,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRB_Imm_Pre_NoWB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1004, 0xCD);
-    uint32_t instr = 0xE5D12004; // LDRB r2, [r1, #4]
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldrb r2, [r1, #4]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2] & 0xFF, (uint8_t)0xCD);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);
@@ -164,8 +179,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRB_Imm_Post_WB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1000, 0xEF);
-    uint32_t instr = 0xE4D12004; // LDRB r2, [r1], #4!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldrb r2, [r1], #4", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2] & 0xFF, (uint8_t)0xEF);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -177,8 +191,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRB_Imm_Post_NoWB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1000, 0x12);
-    uint32_t instr = 0xE4D12004; // LDRB r2, [r1], #4
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldrb r2, [r1], #4", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2] & 0xFF, (uint8_t)0x12);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -190,8 +203,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRB_Imm_Pre_WB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0xAB;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE5E12004; // STRB r2, [r1, #4]!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("strb r2, [r1, #4]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read8(0x1004), (uint8_t)0xAB);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -203,8 +215,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRB_Imm_Pre_NoWB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0xCD;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE5C12004; // STRB r2, [r1, #4]
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("strb r2, [r1, #4]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read8(0x1004), (uint8_t)0xCD);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);
@@ -216,8 +227,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRB_Imm_Post_WB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0xEF;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE4C12004; // STRB r2, [r1], #4!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("strb r2, [r1], #4", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read8(0x1000), (uint8_t)0xEF);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -229,8 +239,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRB_Imm_Post_NoWB) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0x12;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE4C12004; // STRB r2, [r1], #4
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("strb r2, [r1], #4", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read8(0x1000), (uint8_t)0x12);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -244,8 +253,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_Pre_WB) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1010, 0xBEEFCAFE);
-    uint32_t instr = 0xE7B12003; // LDR r2, [r1, r3]!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, r3]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xBEEFCAFE);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1010);
@@ -258,8 +266,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_Pre_NoWB) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1010, 0xCAFEBABE);
-    uint32_t instr = 0xE7912003; // LDR r2, [r1, r3]
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, r3]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xCAFEBABE);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);
@@ -272,8 +279,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_Post_WB) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1000, 0x12345678);
-    uint32_t instr = 0xE6912003; // LDR r2, [r1], r3!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1], r3", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0x12345678);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1010);
@@ -286,8 +292,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_Post_NoWB) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1000, 0xAABBCCDD);
-    uint32_t instr = 0xE6912003; // LDR r2, [r1], r3
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1], r3", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xAABBCCDD);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1010);
@@ -300,8 +305,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Reg_Pre_WB) {
     cpu.R()[2] = 0xDEADBEEF;
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE7A12003; // STR r2, [r1, r3]!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1, r3]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1010), (uint32_t)0xDEADBEEF);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1010);
@@ -314,8 +318,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Reg_Pre_NoWB) {
     cpu.R()[2] = 0xCAFEBABE;
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE7812003; // STR r2, [r1, r3]
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1, r3]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1010), (uint32_t)0xCAFEBABE);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);
@@ -328,8 +331,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Reg_Post_WB) {
     cpu.R()[2] = 0x12345678;
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE6812003; // STR r2, [r1], r3!
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1], r3", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1000), (uint32_t)0x12345678);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1010);
@@ -342,8 +344,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Reg_Post_NoWB) {
     cpu.R()[2] = 0xAABBCCDD;
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE6812003; // STR r2, [r1], r3
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1], r3", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1000), (uint32_t)0xAABBCCDD);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1010);
@@ -358,7 +359,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRH_Reg) {
     cpu.R()[3] = 0x2;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1002, 0xBEEF);
-    memory.write32(cpu.R()[15], 0xe19130b3);
+    ASSERT_TRUE(assemble_and_write("ldrh r3, [r1, r3]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3] & 0xFFFF, (uint16_t)0xBEEF);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
@@ -372,7 +373,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRH_Reg) {
     cpu.R()[2] = 0xABCD;
     cpu.R()[3] = 0x2;
     cpu.R()[15] = 0x00000000;
-    memory.write32(cpu.R()[15], 0xE18120B3);
+    ASSERT_TRUE(assemble_and_write("strh r2, [r1, r3]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read16(0x1002), (uint16_t)0xABCD);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
@@ -386,7 +387,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRSB_Reg) {
     cpu.R()[3] = 0x2;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1002, 0x80); // -128
-    memory.write32(cpu.R()[15], 0xe19130d3);
+    ASSERT_TRUE(assemble_and_write("ldrsb r3, [r1, r3]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ((int32_t)cpu.R()[3], -128);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
@@ -400,7 +401,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRSH_Reg) {
     cpu.R()[3] = 0x2;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1002, 0x8000); // -32768
-    memory.write32(cpu.R()[15], 0xe19130f3);
+    ASSERT_TRUE(assemble_and_write("ldrsh r3, [r1, r3]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ((int32_t)cpu.R()[3], -32768);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
@@ -412,9 +413,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Pre_WB_Down) {
     cpu.R()[1] = 0x1008; // base
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1004, 0xDEAD1234);
-    uint32_t instr = 0xE5B12004; // LDR r2, [r1, #4]!
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, #-4]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xDEAD1234);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -426,9 +425,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Pre_WB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[2] = 0xBEEF5678;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE5A12004; // STR r2, [r1, #4]!
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1, #-4]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1004), (uint32_t)0xBEEF5678);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -440,9 +437,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRB_Imm_Pre_WB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1004, 0xAB);
-    uint32_t instr = 0xE5F12004; // LDRB r2, [r1, #4]!
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldrb r2, [r1, #-4]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2] & 0xFF, (uint8_t)0xAB);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -454,9 +449,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRB_Imm_Pre_WB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[2] = 0xCD;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE5E12004; // STRB r2, [r1, #4]!
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("strb r2, [r1, #-4]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read8(0x1004), (uint8_t)0xCD);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -497,9 +490,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Pre_NoWB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1004, 0xCAFED00D);
-    uint32_t instr = 0xE5912004; // LDR r2, [r1, #4]
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, #-4]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xCAFED00D);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1008); // no writeback
@@ -511,9 +502,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Pre_NoWB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[2] = 0xBEEFCAFE;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE5812004; // STR r2, [r1, #4]
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1, #-4]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1004), (uint32_t)0xBEEFCAFE);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1008);
@@ -525,9 +514,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRB_Imm_Pre_NoWB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[15] = 0x00000000;
     memory.write8(0x1004, 0xEF);
-    uint32_t instr = 0xE5D12004; // LDRB r2, [r1, #4]
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldrb r2, [r1, #-4]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2] & 0xFF, (uint8_t)0xEF);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1008);
@@ -539,9 +526,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STRB_Imm_Pre_NoWB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[2] = 0x12;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE5C12004; // STRB r2, [r1, #4]
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("strb r2, [r1, #-4]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read8(0x1004), (uint8_t)0x12);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1008);
@@ -553,9 +538,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDRH_Imm_Pre_NoWB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[15] = 0x00000000;
     memory.write16(0x1004, 0x1234);
-    uint32_t instr = 0xE1D130B4; // LDRH r3, [r1, #4]
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldrh r3, [r1, #-4]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3] & 0xFFFF, (uint16_t)0x1234);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1008);
@@ -582,9 +565,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Post_WB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1008, 0xFACEB00C);
-    uint32_t instr = 0xE4912004; // LDR r2, [r1], #4
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1], #-4", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xFACEB00C);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -596,9 +577,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Post_WB_Down) {
     cpu.R()[1] = 0x1008;
     cpu.R()[2] = 0xDEAD5678;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE4812004; // STR r2, [r1], #4
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [r1], #-4", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1008), (uint32_t)0xDEAD5678);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1004);
@@ -753,9 +732,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_Pre_WB_Down) {
     cpu.R()[3] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1000, 0xDEADCAFE);
-    uint32_t instr = 0xE7B12003; // LDR r2, [r1, r3]!
-    instr &= ~(1 << 23); // Clear U bit (down)
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, -r3]!", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xDEADCAFE);
     EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);
@@ -828,8 +805,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_Post_WB_Down) {
 TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_BaseIsPC) {
     cpu.R()[15] = 0x00000000;
     memory.write32(0x00000008, 0xDEADBEEF);
-    uint32_t instr = 0xE59F2008; // LDR r2, [PC, #8]
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [pc, #8]", cpu.R()[15]));
     arm_cpu.execute(1);
     // PC is 8 ahead due to pipeline
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xDEADBEEF);
@@ -840,8 +816,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_BaseIsPC) {
 TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_BaseIsPC) {
     cpu.R()[2] = 0xCAFEBABE;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE58F2008; // STR r2, [PC, #8]
-    memory.write32(cpu.R()[15], instr);
+    ASSERT_TRUE(assemble_and_write("str r2, [pc, #8]", cpu.R()[15]));
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x00000008), (uint32_t)0xCAFEBABE);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
@@ -852,8 +827,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_OffsetIsPC) {
     cpu.R()[1] = 0x1000;
     cpu.R()[15] = 0x10;
     memory.write32(0x1010, 0xBEEFCAFE);
-    uint32_t instr = 0xE791200F; // LDR r2, [r1, PC]
-    memory.write32(0x10, instr);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, pc]", 0x10));
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xBEEFCAFE);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000014);
