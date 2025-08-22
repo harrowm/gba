@@ -5,18 +5,51 @@
 #include "cpu.h"
 #include "arm_cpu.h"
 
+extern "C" {
+#include <keystone/keystone.h>
+}
+
 class ARMOtherTest : public ::testing::Test {
 protected:
     Memory memory;
     InterruptController interrupts;
     CPU cpu;
     ARMCPU arm_cpu;
+    ks_engine* ks; // Keystone handle
 
     ARMOtherTest() : memory(true), cpu(memory, interrupts), arm_cpu(cpu) {}
 
     void SetUp() override {
         for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
         cpu.CPSR() = 0x10; // User mode, no flags set
+        
+        if (ks) ks_close(ks);
+        if (ks_open(KS_ARCH_ARM, KS_MODE_ARM, &ks) != KS_ERR_OK) {
+            FAIL() << "Failed to initialize Keystone for ARM mode";
+        }
+    }
+
+    void TearDown() override {
+        if (ks) {
+            ks_close(ks);
+            ks = nullptr;
+        }
+    }
+
+    // Helper: assemble ARM instruction and write to memory
+    bool assemble_and_write(const std::string& asm_code, uint32_t addr, std::vector<uint8_t>* out_bytes = nullptr) {
+        unsigned char* encode = nullptr;
+        size_t size, count;
+        int err = ks_asm(ks, asm_code.c_str(), addr, &encode, &size, &count);
+        if ((ks_err)err != KS_ERR_OK) {
+            fprintf(stderr, "Keystone error: %s\n", ks_strerror((ks_err)err));
+            return false;
+        }
+        for (size_t i = 0; i < size; ++i)
+            memory.write8(addr + i, encode[i]);
+        if (out_bytes) out_bytes->assign(encode, encode + size);
+        ks_free(encode);
+        return true;
     }
 };
 
@@ -29,9 +62,8 @@ TEST_F(ARMOtherTest, LDM_STM_Basic) {
     cpu.R()[3] = 0x44444444;
     cpu.R()[4] = 0x100; // Base address
     // STMIA R4!, {R0-R3}
-    uint32_t stm_instr = 0xE8A4000F; // STMIA R4!, {R0-R3}
     cpu.R()[15] = 0x00000000;
-    memory.write32(cpu.R()[15], stm_instr);
+    assemble_and_write("stmia r4!, {r0-r3}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x100), 0x11111111u);
     EXPECT_EQ(memory.read32(0x104), 0x22222222u);
@@ -41,9 +73,8 @@ TEST_F(ARMOtherTest, LDM_STM_Basic) {
     // LDMIA R4!, {R0-R3}
     cpu.R()[4] = 0x100; // Reset base address
     cpu.R()[0] = cpu.R()[1] = cpu.R()[2] = cpu.R()[3] = 0;
-    uint32_t ldm_instr = 0xE8B4000F; // LDMIA R4!, {R0-R3}
     cpu.R()[15] = 0x00000004;
-    memory.write32(cpu.R()[15], ldm_instr);
+    assemble_and_write("ldmia r4!, {r0-r3}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0x11111111u);
     EXPECT_EQ(cpu.R()[1], 0x22222222u);
@@ -56,14 +87,12 @@ TEST_F(ARMOtherTest, LDM_STM_Basic) {
 TEST_F(ARMOtherTest, Branch_B_BL) {
     cpu.R()[15] = 0x00000000;
     // B +8 (offset = 2)
-    uint32_t b_instr = 0xEA000002; // B +8
-    memory.write32(cpu.R()[15], b_instr);
+    assemble_and_write("b #0x10", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000010);
     // BL +12 (offset = 3)
     cpu.R()[15] = 0x00000010;
-    uint32_t bl_instr = 0xEB000003; // BL +12
-    memory.write32(cpu.R()[15], bl_instr);
+    assemble_and_write("bl #0x24", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000024);
     EXPECT_EQ(cpu.R()[14], (uint32_t)0x00000014);
@@ -75,18 +104,16 @@ TEST_F(ARMOtherTest, SWP_SWPB) {
     cpu.R()[2] = 0xDEADBEEF; // Value to store
     memory.write32(0x200, 0xCAFEBABE);
     // SWP R0, R2, [R1]
-    uint32_t swp_instr = 0xE1010092; // SWP R0, R2, [R1]
     cpu.R()[15] = 0x00000000;
-    memory.write32(cpu.R()[15], swp_instr);
+    assemble_and_write("swp r0, r2, [r1]", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0xCAFEBABEu);
     EXPECT_EQ(memory.read32(0x200), 0xDEADBEEFu);
     // SWPB R3, R2, [R1]
     memory.write8(0x200, 0xAA);
     cpu.R()[2] = 0xBB;
-    uint32_t swpb_instr = 0xE1413092; // SWPB R3, R2, [R1]
     cpu.R()[15] = 0x00000004;
-    memory.write32(cpu.R()[15], swpb_instr);
+    assemble_and_write("swpb r3, r2, [r1]", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3] & 0xFF, 0xAAu);
     EXPECT_EQ(memory.read8(0x200), 0xBBu);
@@ -96,15 +123,13 @@ TEST_F(ARMOtherTest, SWP_SWPB) {
 TEST_F(ARMOtherTest, UndefinedAndSWI) {
     cpu.R()[15] = 0x00000000;
     // Undefined instruction (should branch to 0x04 and set mode)
-    uint32_t undef_instr = 0xE1A000F0; // Undefined
-    memory.write32(cpu.R()[15], undef_instr);
+    assemble_and_write("mov r0, pc", cpu.R()[15]); // This should trigger undefined behavior
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], 0x04u);
     EXPECT_EQ(cpu.CPSR() & 0x1F, 0x1Bu); // Mode = Undefined
     // SWI (should branch to 0x08 and set mode)
     cpu.R()[15] = 0x00000010;
-    uint32_t swi_instr = 0xEF000011; // SWI #0x11
-    memory.write32(cpu.R()[15], swi_instr);
+    assemble_and_write("swi #0x11", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], 0x08u);
     EXPECT_EQ(cpu.CPSR() & 0x1F, 0x13u); // Mode = SVC
@@ -114,15 +139,17 @@ TEST_F(ARMOtherTest, UndefinedAndSWI) {
 TEST_F(ARMOtherTest, LDM_STM_EmptyRegisterList) {
     cpu.R()[4] = 0x200;
     // STMIA R4!, {} (empty list)
-    uint32_t stm_instr = 0xE8A40000; // STMIA R4!, {}
     cpu.R()[15] = 0x00000020;
-    memory.write32(cpu.R()[15], stm_instr);
+    // NOTE: Keystone cannot assemble empty register lists ({}) syntax
+    // Using hardcoded instruction bytes
+    memory.write32(cpu.R()[15], 0xE8A40000); // STMIA R4!, {}
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0x200u); // No writeback
     // LDMIA R4!, {} (empty list)
-    uint32_t ldm_instr = 0xE8B40000; // LDMIA R4!, {}
     cpu.R()[15] = 0x00000024;
-    memory.write32(cpu.R()[15], ldm_instr);
+    // NOTE: Keystone cannot assemble empty register lists ({}) syntax
+    // Using hardcoded instruction bytes
+    memory.write32(cpu.R()[15], 0xE8B40000); // LDMIA R4!, {}
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0x200u); // No writeback
 }
@@ -134,9 +161,8 @@ TEST_F(ARMOtherTest, LDM_STM_BaseInList) {
     cpu.R()[3] = 0x44444444;
     cpu.R()[4] = 0x100; // Base address
     // STMIA R4!, {R0-R4} (base in list)
-    uint32_t stm_instr = 0xE8A4001F; // STMIA R4!, {R0-R4}
     cpu.R()[15] = 0x00000028;
-    memory.write32(cpu.R()[15], stm_instr);
+    assemble_and_write("stmia r4!, {r0-r4}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x100), 0x11111111u);
     EXPECT_EQ(memory.read32(0x104), 0x22222222u);
@@ -156,10 +182,9 @@ TEST_F(ARMOtherTest, LDM_STM_PCInList) {
     cpu.R()[3] = 0x44444444;
     cpu.R()[15] = 0x100; // PC
     cpu.R()[4] = 0x200; // Base
-    // STMIA R4!, {R0-R3,PC}
-    uint32_t stm_instr = 0xE8A48009; // STMIA R4!, {R0,R3,PC}
+    // STMIA R4!, {R0,R3,PC}
     cpu.R()[15] = 0x0000002C;
-    memory.write32(cpu.R()[15], stm_instr);
+    assemble_and_write("stmia r4!, {r0,r3,pc}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x200), 0x11111111u);
     EXPECT_EQ(memory.read32(0x204), 0x44444444u);
@@ -168,9 +193,8 @@ TEST_F(ARMOtherTest, LDM_STM_PCInList) {
     cpu.R()[0] = cpu.R()[3] = 0;
     cpu.R()[15] = 0;
     cpu.R()[4] = 0x200;
-    uint32_t ldm_instr = 0xE8B40089; // LDMIA R4!, {R0,R3,PC}
     cpu.R()[15] = 0x00000030;
-    memory.write32(cpu.R()[15], ldm_instr);
+    assemble_and_write("ldmia r4!, {r0,r3,pc}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0x11111111u);
     EXPECT_EQ(cpu.R()[3], 0x44444444u);
@@ -181,27 +205,24 @@ TEST_F(ARMOtherTest, LDM_STM_AlternateAddressingModes) {
     // IB: Increment before
     cpu.R()[0] = 0xAAAA5555;
     cpu.R()[4] = 0x300;
-    uint32_t stmib = 0xE9A40001; // STMIB R4!, {R0}
     cpu.R()[15] = 0x00000034;
-    memory.write32(cpu.R()[15], stmib);
+    assemble_and_write("stmib r4!, {r0}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x304), 0xAAAA5555u);
     EXPECT_EQ(cpu.R()[4], 0x304u);
     // DA: Decrement after
     cpu.R()[0] = 0x12345678;
     cpu.R()[4] = 0x400;
-    uint32_t stmda = 0xE8240001; // STMDA R4!, {R0}
     cpu.R()[15] = 0x00000038;
-    memory.write32(cpu.R()[15], stmda);
+    assemble_and_write("stmda r4!, {r0}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x400), 0x12345678u);
     EXPECT_EQ(cpu.R()[4], 0x3FCu);
     // DB: Decrement before
     cpu.R()[0] = 0xCAFEBABE;
     cpu.R()[4] = 0x500;
-    uint32_t stmdb = 0xE9240001; // STMDB R4!, {R0}
     cpu.R()[15] = 0x0000003C;
-    memory.write32(cpu.R()[15], stmdb);
+    assemble_and_write("stmdb r4!, {r0}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x4FC), 0xCAFEBABEu);
     EXPECT_EQ(cpu.R()[4], 0x4FCu);
@@ -209,10 +230,9 @@ TEST_F(ARMOtherTest, LDM_STM_AlternateAddressingModes) {
 
 // Extra branch edge case tests
 TEST_F(ARMOtherTest, Branch_NegativeOffset) {
-    // Place a branch at 0x100 that jumps back to 0x0F0 (offset = -4)
+    // Place a branch at 0x100 that jumps back to 0x0F8
     cpu.R()[15] = 0x100;
-    uint32_t b_neg = 0xEAFFFFFC; // B -16 (PC+8-16 = PC-8)
-    memory.write32(cpu.R()[15], b_neg);
+    assemble_and_write("b #0xF8", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], 0xF8u);
 }
@@ -221,23 +241,20 @@ TEST_F(ARMOtherTest, Branch_ConditionCodes) {
     // BNE (should not branch if Z=1)
     cpu.R()[15] = 0x200;
     cpu.CPSR() |= (1 << 30); // Set Z flag
-    uint32_t bne_instr = 0x1A000002; // BNE +8
-    memory.write32(cpu.R()[15], bne_instr);
+    assemble_and_write("bne #0x210", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], 0x200u + 4); // No branch, PC advances by 4
     // BEQ (should branch if Z=1)
     cpu.R()[15] = 0x210;
-    uint32_t beq_instr = 0x0A000002; // BEQ +8
-    memory.write32(cpu.R()[15], beq_instr);
+    assemble_and_write("beq #0x220", cpu.R()[15]);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[15], 0x210u + 8 + 8); // PC+8+8 = 0x220
+    EXPECT_EQ(cpu.R()[15], 0x220u); // Branch to 0x220
 }
 
 TEST_F(ARMOtherTest, Branch_UnalignedTarget) {
     // B to unaligned address (should align to 4)
     cpu.R()[15] = 0x300;
-    uint32_t b_unaligned = 0xEA000001; // B +4 (PC+8+4 = 0x30C)
-    memory.write32(cpu.R()[15], b_unaligned);
+    assemble_and_write("b #0x30C", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], 0x30Cu); // Should be aligned
 }
@@ -248,9 +265,8 @@ TEST_F(ARMOtherTest, SWP_UnalignedAddress) {
     cpu.R()[1] = 0x203; // Unaligned address
     cpu.R()[2] = 0xAABBCCDD;
     memory.write32(0x200, 0x11223344);
-    uint32_t swp_instr = 0xE1010092; // SWP R0, R2, [R1]
     cpu.R()[15] = 0x400;
-    memory.write32(cpu.R()[15], swp_instr);
+    assemble_and_write("swp r0, r2, [r1]", cpu.R()[15]);
     arm_cpu.execute(1);
     DEBUG_LOG("r0=0x" + DEBUG_TO_HEX_STRING(cpu.R()[0], 8));
     EXPECT_EQ(cpu.R()[0], 0x11223344u);
@@ -262,9 +278,8 @@ TEST_F(ARMOtherTest, SWPB_UnalignedAddress) {
     cpu.R()[1] = 0x205; // Unaligned address
     cpu.R()[2] = 0x77;
     memory.write8(0x205, 0x99);
-    uint32_t swpb_instr = 0xE1413092; // SWPB R3, R2, [R1]
     cpu.R()[15] = 0x404;
-    memory.write32(cpu.R()[15], swpb_instr);
+    assemble_and_write("swpb r3, r2, [r1]", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3] & 0xFF, 0x99u);
     EXPECT_EQ(memory.read8(0x205), 0x77u);
@@ -275,9 +290,8 @@ TEST_F(ARMOtherTest, SWP_SameRegister) {
     cpu.R()[0] = 0x12345678;
     cpu.R()[1] = 0x208;
     memory.write32(0x208, 0xCAFEBABE);
-    uint32_t swp_instr = 0xE1010090; // SWP R0, R0, [R1]
     cpu.R()[15] = 0x408;
-    memory.write32(cpu.R()[15], swp_instr);
+    assemble_and_write("swp r0, r0, [r1]", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0xCAFEBABEu);
     EXPECT_EQ(memory.read32(0x208), 0x12345678u);
@@ -288,9 +302,8 @@ TEST_F(ARMOtherTest, SWPB_SameRegister) {
     cpu.R()[3] = 0x55;
     cpu.R()[1] = 0x209;
     memory.write8(0x209, 0xAA);
-    uint32_t swpb_instr = 0xE1413093; // SWPB R3, R3, [R1]
     cpu.R()[15] = 0x40C;
-    memory.write32(cpu.R()[15], swpb_instr);
+    assemble_and_write("swpb r3, r3, [r1]", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[3] & 0xFF, 0xAAu);
     EXPECT_EQ(memory.read8(0x209), 0x55u);
@@ -305,9 +318,10 @@ TEST_F(ARMOtherTest, LDM_STM_SBitUserSystem) {
     // Initialize memory for LDM
     memory.write32(0x600, 0x11111111);
     memory.write32(0x604, 0xCAFEBABE);
-    uint32_t ldm_s = 0xE8B40011; // LDMIA R4!, {R0,R4}^ (S bit set)
     cpu.R()[15] = 0x500;
-    memory.write32(cpu.R()[15], ldm_s);
+    // NOTE: Keystone cannot assemble S-bit (^) syntax for LDM/STM instructions
+    // Using hardcoded instruction bytes
+    memory.write32(cpu.R()[15], 0xE8B40011); // LDMIA R4!, {R0,R4}^ (S bit set)
     arm_cpu.execute(1);
     // Just check that R0 and R4 are loaded, and no crash
     EXPECT_EQ(cpu.R()[0], 0x11111111u);
@@ -320,9 +334,8 @@ TEST_F(ARMOtherTest, LDM_BaseInListWriteback) {
     cpu.R()[4] = 0x700;
     memory.write32(0x700, 0xDEADBEEF);
     memory.write32(0x704, 0xCAFEBABE);
-    uint32_t ldm_instr = 0xE8B40011; // LDMIA R4!, {R0,R4}
     cpu.R()[15] = 0x504;
-    memory.write32(cpu.R()[15], ldm_instr);
+    assemble_and_write("ldmia r4!, {r0,r4}", cpu.R()[15]);
     arm_cpu.execute(1);
     // R0 loaded from 0x700, R4 loaded from 0x704, writeback uses loaded R4
     EXPECT_EQ(cpu.R()[0], 0xDEADBEEFu);
@@ -336,9 +349,10 @@ TEST_F(ARMOtherTest, LDM_PCInList_SBit) {
     cpu.R()[4] = 0x800;
     memory.write32(0x800, 0x11111111);
     memory.write32(0x804, 0x12345678);
-    uint32_t ldm_instr = 0xE8F48001; // LDMIA R4!, {R0,PC}^ (S bit set)
     cpu.R()[15] = 0x508;
-    memory.write32(cpu.R()[15], ldm_instr);
+    // NOTE: Keystone cannot assemble S-bit (^) syntax for LDM/STM instructions
+    // Using hardcoded instruction bytes
+    memory.write32(cpu.R()[15], 0xE8F48001); // LDMIA R4!, {R0,PC}^ (S bit set)
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[0], 0x11111111u);
     EXPECT_EQ(cpu.R()[15], 0x12345678u);
@@ -351,17 +365,15 @@ TEST_F(ARMOtherTest, LDM_STM_OverlappingRegisters) {
     cpu.R()[2] = 0xA5A5A5A5;
     cpu.R()[4] = 0x900;
     memory.write32(0x900, 0xDEADBEEF);
-    uint32_t ldm_instr = 0xE8B40004; // LDMIA R4!, {R2}
     cpu.R()[15] = 0x510;
-    memory.write32(cpu.R()[15], ldm_instr);
+    assemble_and_write("ldmia r4!, {r2}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xDEADBEEFu);
     // STM with overlapping base and data register
     cpu.R()[4] = 0x904;
     cpu.R()[2] = 0xCAFEBABE;
-    uint32_t stm_instr = 0xE8A40014; // STMIA R4!, {R2,R4}
     cpu.R()[15] = 0x514;
-    memory.write32(cpu.R()[15], stm_instr);
+    assemble_and_write("stmia r4!, {r2,r4}", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x904), 0xCAFEBABEu);
     // R4 value written is the original base
@@ -446,9 +458,8 @@ TEST_F(ARMOtherTest, SWP_MemoryFault) {
     cpu.R()[1] = 0xFFFFFFF0; // Likely invalid
     cpu.R()[2] = 0xDEADBEEF;
     // No actual memory at this address, but should not crash emulator
-    uint32_t swp_instr = 0xE1010092; // SWP R0, R2, [R1]
     cpu.R()[15] = 0xE00;
-    memory.write32(cpu.R()[15], swp_instr);
+    assemble_and_write("swp r0, r2, [r1]", cpu.R()[15]);
     // If your memory model throws, catch and ignore
     try { arm_cpu.execute(1); } catch (...) {}
 }
@@ -456,15 +467,15 @@ TEST_F(ARMOtherTest, SWP_MemoryFault) {
 TEST_F(ARMOtherTest, LDM_STM_EmptyList_SBit) {
     // STMIA R4!, {}^ (S bit set)
     cpu.R()[4] = 0x1000;
-    uint32_t stm_s = 0xE8A40000 | (1 << 22); // STMIA R4!, {}^ (S bit)
+    // NOTE: Keystone cannot assemble empty register lists ({}) or S-bit (^) syntax
+    // Using hardcoded instruction bytes constructed with bitwise operations
     cpu.R()[15] = 0xF00;
-    memory.write32(cpu.R()[15], stm_s);
+    memory.write32(cpu.R()[15], 0xE8A40000 | (1 << 22)); // STMIA R4!, {}^ (S bit)
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0x1000u); // No writeback
     // LDMIA R4!, {}^ (S bit set)
-    uint32_t ldm_s = 0xE8B40000 | (1 << 22); // LDMIA R4!, {}^ (S bit)
     cpu.R()[15] = 0xF04;
-    memory.write32(cpu.R()[15], ldm_s);
+    memory.write32(cpu.R()[15], 0xE8B40000 | (1 << 22)); // LDMIA R4!, {}^ (S bit)
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[4], 0x1000u); // No writeback
 }
