@@ -10,6 +10,10 @@ KEYSTONE_FLAGS = -lkeystone
 
 CPP_SRCS = test_cpu.cpp \
 	test_thumb01.cpp \
+	test_thumb02.cpp \
+	test_thumb03.cpp \
+	test_thumb04.cpp \
+	test_thumb05.cpp \
 	../../src/arm_cpu.cpp \
 	../../src/debug.cpp \
 	../../src/arm_exec_other.cpp \
@@ -58,6 +62,18 @@ $(BUILD_DIR)/test_cpu.o: test_cpu.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/test_thumb01.o: test_thumb01.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/test_thumb02.o: test_thumb02.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/test_thumb03.o: test_thumb03.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/test_thumb04.o: test_thumb04.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/test_thumb05.o: test_thumb05.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 thumb_core_tests: $(CPP_OBJS) $(C_OBJS) $(INST_TABLE_INC)
