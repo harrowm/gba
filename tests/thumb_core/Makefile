@@ -5,9 +5,11 @@ CC = gcc
 CXXFLAGS = -std=c++20 -Wall -Wextra -I../../include -I/opt/homebrew/include -g -O3 -flto -DDEBUG_BUILD
 GTEST_LIB = /opt/homebrew/lib
 GTEST_FLAGS = -L$(GTEST_LIB) -lgtest -lgtest_main -lpthread
+KEYSTONE_FLAGS = -lkeystone
 
 
 CPP_SRCS = test_cpu.cpp \
+	test_thumb01.cpp \
 	../../src/arm_cpu.cpp \
 	../../src/debug.cpp \
 	../../src/arm_exec_other.cpp \
@@ -55,8 +57,11 @@ $(BUILD_DIR)/%.o: ../../src/%.c $(INST_TABLE_INC)
 $(BUILD_DIR)/test_cpu.o: test_cpu.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/test_thumb01.o: test_thumb01.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 thumb_core_tests: $(CPP_OBJS) $(C_OBJS) $(INST_TABLE_INC)
-	$(CXX) $(CXXFLAGS) -o $@ $(CPP_OBJS) $(C_OBJS) $(GTEST_FLAGS) -L/opt/homebrew/lib -lcapstone
+	$(CXX) $(CXXFLAGS) -o $@ $(CPP_OBJS) $(C_OBJS) $(GTEST_FLAGS) $(KEYSTONE_FLAGS) -L/opt/homebrew/lib -lcapstone
 
 .PHONY: clean
 clean:
