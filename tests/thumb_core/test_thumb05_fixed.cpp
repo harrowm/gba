@@ -6,18 +6,7 @@
 #include "arm_cpu.h"
 #include "thumb_cpu.h"
 
-// Test fixture for Thumb Format 5 Hi register operations/braTEST_F(ThumbCPUTest5, MOV_LowToHigh) {
-    // Test case: MOV R8, R0 (low to high register)
-    setup_registers({{0, 0x12345678}, {8, 0x00000000}});
-    cpu.R()[15] = 0x00000000;
-    
-    ASSERT_TRUE(assemble_and_write_thumb("mov r8, r0", cpu.R()[15]));
-    thumb_cpu.execute(1);
-    
-    EXPECT_EQ(cpu.R()[8], 0x12345678u); // R8 gets R0's value
-    EXPECT_EQ(cpu.R()[0], 0x12345678u); // R0 unchanged
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
-}
+// Test fixture for Thumb Format 5 Hi register operations/branch exchange
 class ThumbCPUTest5 : public ::testing::Test {
 protected:
     GBA gba{true}; // Test mode
@@ -227,10 +216,10 @@ TEST_F(ThumbCPUTest5, CMP_WithPC) {
 // MOV Hi Register Tests
 TEST_F(ThumbCPUTest5, MOV_LowToHigh) {
     // Test case: MOV R8, R0 (low to high register)
-    setup_registers({{0, 0x12345678}, {8, 0xDEADBEEF}});
+    setup_registers({{0, 0x12345678}, {8, 0x00000000}});
     cpu.R()[15] = 0x00000000;
     
-    write_thumb16(cpu.R()[15], 0x4680); // MOV R8, R0
+    ASSERT_TRUE(assemble_and_write_thumb("mov r8, r0", cpu.R()[15]));
     thumb_cpu.execute(1);
     
     EXPECT_EQ(cpu.R()[8], 0x12345678u); // R8 gets R0's value
