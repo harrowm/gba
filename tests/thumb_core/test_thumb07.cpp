@@ -1,86 +1,53 @@
 
-#include <gtest/gtest.h>
-#include "memory.h"
-#include "interrupt.h"
-#include "cpu.h"
-#include "thumb_cpu.h"
-#include <initializer_list>
+/**
+ * test_thumb07.cpp - Format 7: Load/store with register offset instruction tests
+ * 
+ * This file tests Thumb Format 7 instructions which provide load/store operations
+ * using register-based addressing with a register offset. Format 7 enables accessing
+ * memory locations calculated by adding two registers together.
+ *
+ * Instruction Format:
+ * |15|14|13|12|11|10|09|08|07|06|05|04|03|02|01|00|
+ * | 0| 1| 0| 1| L| B| 0|     Ro    |     Rb    | Rd |
+ *
+ * Format 7 Encoding Details:
+ * - Bits [15:12] = 0101 (Format 7 identifier)
+ * - Bit [11]     = L (Load/Store: 0=Store, 1=Load)
+ * - Bit [10]     = B (Byte/Word: 0=Word, 1=Byte)
+ * - Bit [9]      = 0 (reserved)
+ * - Bits [8:6]   = Ro (offset register, R0-R7)
+ * - Bits [5:3]   = Rb (base register, R0-R7)
+ * - Bits [2:0]   = Rd (destination/source register, R0-R7)
+ *
+ * Supported Operations:
+ * - STR Rd, [Rb, Ro]: Store word from Rd to memory[Rb + Ro]
+ * - LDR Rd, [Rb, Ro]: Load word from memory[Rb + Ro] to Rd  
+ * - STRB Rd, [Rb, Ro]: Store byte from Rd to memory[Rb + Ro]
+ * - LDRB Rd, [Rb, Ro]: Load byte from memory[Rb + Ro] to Rd
+ *
+ * Effective Address Calculation:
+ * - Address = Rb + Ro (both registers treated as unsigned values)
+ * - No bounds checking performed by instruction
+ * - Word operations must be word-aligned for proper behavior
+ * - Byte operations work with any address alignment
+ *
+ * Test Infrastructure:
+ * - Uses ThumbCPUTestBase for modern register access via R() method
+ * - Uses assembleAndWriteThumb() for Keystone-based instruction assembly
+ * - Uses execute() method for cycle-accurate instruction execution
+ * - Comprehensive memory access pattern testing
+ *
+ * Coverage:
+ * - All operation types (STR, LDR, STRB, LDRB)
+ * - Various register combinations for base, offset, and data registers
+ * - Memory boundary testing and alignment requirements
+ * - Zero offset cases and maximum offset scenarios
+ * - Data integrity verification for word and byte operations
+ */
 
-extern "C" {
-#include <keystone/keystone.h>
-}
+#include "thumb_test_base.h"
 
-class ThumbCPUTest7 : public ::testing::Test {
-protected:
-    Memory memory;
-    InterruptController interrupts;
-    CPU cpu;
-    ThumbCPU thumb_cpu;
-    ks_engine* ks; // Keystone handle
-
-    ThumbCPUTest7() : memory(true), cpu(memory, interrupts), thumb_cpu(cpu), ks(nullptr) {}
-
-    void SetUp() override {
-        // Initialize all registers to 0
-        for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
-        
-        // Set Thumb mode (T flag) and User mode
-        cpu.CPSR() = CPU::FLAG_T | 0x10;
-        
-        // Initialize Keystone for Thumb mode
-        if (ks) ks_close(ks);
-        // Use KS_MODE_THUMB + KS_MODE_V8 to ensure we get 16-bit Thumb instructions
-        if (ks_open(KS_ARCH_ARM, KS_MODE_THUMB, &ks) != KS_ERR_OK) {
-            FAIL() << "Failed to initialize Keystone for Thumb mode";
-        }
-        
-        // Try to set syntax to prefer 16-bit Thumb instructions
-        if (ks_option(ks, KS_OPT_SYNTAX, KS_OPT_SYNTAX_INTEL) != KS_ERR_OK) {
-            // This might not be necessary, but let's try
-        }
-    }
-
-    void TearDown() override {
-        if (ks) {
-            ks_close(ks);
-            ks = nullptr;
-        }
-    }
-
-    // Helper: assemble Thumb instruction and write to memory
-    bool assemble_and_write_thumb(const std::string& asm_code, uint32_t addr, std::vector<uint8_t>* out_bytes = nullptr) {
-        unsigned char* encode = nullptr;
-        size_t size, count;
-        int err = ks_asm(ks, asm_code.c_str(), addr, &encode, &size, &count);
-        if ((ks_err)err != KS_ERR_OK) {
-            fprintf(stderr, "Keystone Thumb error: %s\n", ks_strerror((ks_err)err));
-            return false;
-        }
-                
-        for (size_t i = 0; i < size; ++i)
-            memory.write8(addr + i, encode[i]);
-        
-        if (out_bytes) out_bytes->assign(encode, encode + size);
-        ks_free(encode);
-        return true;
-    }
-
-    // Helper: set up specific register values
-    void setup_registers(std::initializer_list<std::pair<int, uint32_t>> reg_values) {
-        for (const auto& pair : reg_values) {
-            cpu.R()[pair.first] = pair.second;
-        }
-    }
-
-    // Helper: write Thumb-7 instruction directly to memory (16-bit)
-    void write_thumb16(uint32_t addr, uint16_t instruction) {
-        memory.write16(addr, instruction);
-    }
-
-    // Helper: check flag state
-    bool getFlag(uint32_t flag) const {
-        return cpu.CPSR() & flag;
-    }
+class ThumbCPUTest7 : public ThumbCPUTestBase {
 };
 
 // ARM Thumb Format 7: Load/store with register offset
@@ -95,8 +62,8 @@ TEST_F(ThumbCPUTest7, StrWordBasic) {
     setup_registers({{1, 0x00000100}, {2, 0x00000008}, {0, 0x12345678}});
     cpu.R()[15] = 0x00000000;
     
-    ASSERT_TRUE(assemble_and_write_thumb("str r0, [r1, r2]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("str r0, [r1, r2]", cpu.R()[15]));
+    execute(1);
     
     // Verify the value was stored at base + offset
     uint32_t stored_value = memory.read32(0x00000108); // 0x100 + 0x8
@@ -109,8 +76,8 @@ TEST_F(ThumbCPUTest7, StrWordDifferentRegisters) {
     setup_registers({{4, 0x00000200}, {5, 0x00000010}, {3, 0x87654321}});
     cpu.R()[15] = 0x00000000;
     
-    ASSERT_TRUE(assemble_and_write_thumb("str r3, [r4, r5]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("str r3, [r4, r5]", cpu.R()[15]));
+    execute(1);
     
     // Verify the value was stored at base + offset
     uint32_t stored_value = memory.read32(0x00000210); // 0x200 + 0x10
@@ -123,8 +90,8 @@ TEST_F(ThumbCPUTest7, StrWordZeroOffset) {
     setup_registers({{6, 0x00000300}, {7, 0x00000000}, {1, 0xAABBCCDD}});
     cpu.R()[15] = 0x00000000;
     
-    ASSERT_TRUE(assemble_and_write_thumb("str r1, [r6, r7]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("str r1, [r6, r7]", cpu.R()[15]));
+    execute(1);
     
     // Verify the value was stored at base address (no offset)
     uint32_t stored_value = memory.read32(0x00000300);
@@ -141,8 +108,8 @@ TEST_F(ThumbCPUTest7, StrWordAllRegisterCombinations) {
         cpu.R()[15] = rd * 4; // Set PC for each test
         
         std::string asm_str = "str r" + std::to_string(rd) + ", [r3, r4]";
-        ASSERT_TRUE(assemble_and_write_thumb(asm_str, cpu.R()[15]));
-        thumb_cpu.execute(1);
+        ASSERT_TRUE(assembleAndWriteThumb(asm_str, cpu.R()[15]));
+        execute(1);
         
         // Verify each value was stored correctly
         uint32_t stored_value = memory.read32(0x00000410); // R3 + R4
@@ -161,8 +128,8 @@ TEST_F(ThumbCPUTest7, StrWordDifferentOffsets) {
         cpu.R()[2] = offsets[i]; // Offset register
         cpu.R()[15] = i * 4; // Reset PC
         
-        ASSERT_TRUE(assemble_and_write_thumb("str r0, [r1, r2]", cpu.R()[15]));
-        thumb_cpu.execute(1);
+        ASSERT_TRUE(assembleAndWriteThumb("str r0, [r1, r2]", cpu.R()[15]));
+        execute(1);
         
         // Verify value stored at correct address
         uint32_t expected_address = 0x00000500 + offsets[i];
@@ -180,8 +147,8 @@ TEST_F(ThumbCPUTest7, LdrWordBasic) {
     // Pre-store test data
     memory.write32(0x00000608, 0x12345678); // Store at base + offset
     
-    ASSERT_TRUE(assemble_and_write_thumb("ldr r0, [r1, r2]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("ldr r0, [r1, r2]", cpu.R()[15]));
+    execute(1);
     
     EXPECT_EQ(cpu.R()[0], 0x12345678u);
     EXPECT_EQ(cpu.R()[15], 0x00000002u);
@@ -195,8 +162,8 @@ TEST_F(ThumbCPUTest7, LdrWordDifferentRegisters) {
     // Pre-store test data
     memory.write32(0x00000710, 0x87654321); // Store at base + offset
     
-    ASSERT_TRUE(assemble_and_write_thumb("ldr r3, [r4, r5]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("ldr r3, [r4, r5]", cpu.R()[15]));
+    execute(1);
     
     EXPECT_EQ(cpu.R()[3], 0x87654321u);
     EXPECT_EQ(cpu.R()[15], 0x00000002u);
@@ -210,8 +177,8 @@ TEST_F(ThumbCPUTest7, LdrWordZeroOffset) {
     // Pre-store test data
     memory.write32(0x00000800, 0xAABBCCDD); // Store at base address
     
-    ASSERT_TRUE(assemble_and_write_thumb("ldr r1, [r6, r7]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("ldr r1, [r6, r7]", cpu.R()[15]));
+    execute(1);
     
     EXPECT_EQ(cpu.R()[1], 0xAABBCCDDu);
     EXPECT_EQ(cpu.R()[15], 0x00000002u);
@@ -228,8 +195,8 @@ TEST_F(ThumbCPUTest7, LdrWordAllRegisterCombinations) {
         cpu.R()[15] = rd * 4; // Set PC for each test
         
         std::string asm_str = "ldr r" + std::to_string(rd) + ", [r3, r4]";
-        ASSERT_TRUE(assemble_and_write_thumb(asm_str, cpu.R()[15]));
-        thumb_cpu.execute(1);
+        ASSERT_TRUE(assembleAndWriteThumb(asm_str, cpu.R()[15]));
+        execute(1);
         
         EXPECT_EQ(cpu.R()[rd], test_value) << "Register R" << rd;
         EXPECT_EQ(cpu.R()[15], static_cast<uint32_t>(rd * 4 + 2));
@@ -250,8 +217,8 @@ TEST_F(ThumbCPUTest7, LdrWordDifferentOffsets) {
         uint32_t target_address = 0x00000A00 + offsets[i];
         memory.write32(target_address, test_value);
         
-        ASSERT_TRUE(assemble_and_write_thumb("ldr r0, [r1, r2]", cpu.R()[15]));
-        thumb_cpu.execute(1);
+        ASSERT_TRUE(assembleAndWriteThumb("ldr r0, [r1, r2]", cpu.R()[15]));
+        execute(1);
         
         EXPECT_EQ(cpu.R()[0], test_value) << "Offset " << offsets[i];
         EXPECT_EQ(cpu.R()[15], static_cast<uint32_t>(i * 4 + 2));
@@ -263,8 +230,8 @@ TEST_F(ThumbCPUTest7, StrbByteBasic) {
     setup_registers({{1, 0x00000B00}, {2, 0x00000008}, {0, 0x12345678}});
     cpu.R()[15] = 0x00000000;
     
-    ASSERT_TRUE(assemble_and_write_thumb("strb r0, [r1, r2]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("strb r0, [r1, r2]", cpu.R()[15]));
+    execute(1);
     
     // Verify only the low byte was stored
     uint8_t stored_byte = memory.read8(0x00000B08); // 0xB00 + 0x8
@@ -277,8 +244,8 @@ TEST_F(ThumbCPUTest7, StrbByteDifferentRegisters) {
     setup_registers({{4, 0x00000C00}, {5, 0x00000010}, {3, 0x87654321}});
     cpu.R()[15] = 0x00000000;
     
-    ASSERT_TRUE(assemble_and_write_thumb("strb r3, [r4, r5]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("strb r3, [r4, r5]", cpu.R()[15]));
+    execute(1);
     
     // Verify only the low byte was stored
     uint8_t stored_byte = memory.read8(0x00000C10); // 0xC00 + 0x10
@@ -291,8 +258,8 @@ TEST_F(ThumbCPUTest7, StrbByteZeroOffset) {
     setup_registers({{6, 0x00000D00}, {7, 0x00000000}, {1, 0xAABBCCDD}});
     cpu.R()[15] = 0x00000000;
     
-    ASSERT_TRUE(assemble_and_write_thumb("strb r1, [r6, r7]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("strb r1, [r6, r7]", cpu.R()[15]));
+    execute(1);
     
     // Verify only the low byte was stored
     uint8_t stored_byte = memory.read8(0x00000D00);
@@ -308,8 +275,8 @@ TEST_F(ThumbCPUTest7, StrbByteAllValues) {
         cpu.R()[0] = 0xFFFFFF00 | byte_val; // Set low byte
         cpu.R()[15] = (byte_val / 17) * 4; // Set PC for each test
         
-        ASSERT_TRUE(assemble_and_write_thumb("strb r0, [r1, r2]", cpu.R()[15]));
-        thumb_cpu.execute(1);
+        ASSERT_TRUE(assembleAndWriteThumb("strb r0, [r1, r2]", cpu.R()[15]));
+        execute(1);
         
         uint8_t stored_byte = memory.read8(0x00000E00);
         EXPECT_EQ(stored_byte, static_cast<uint8_t>(byte_val)) << "Byte value " << byte_val;
@@ -325,8 +292,8 @@ TEST_F(ThumbCPUTest7, LdrbByteBasic) {
     // Pre-store test data (byte)
     memory.write8(0x00000F08, 0x78); // Store at base + offset
     
-    ASSERT_TRUE(assemble_and_write_thumb("ldrb r0, [r1, r2]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("ldrb r0, [r1, r2]", cpu.R()[15]));
+    execute(1);
     
     EXPECT_EQ(cpu.R()[0], 0x78u); // Should be zero-extended
     EXPECT_EQ(cpu.R()[15], 0x00000002u);
@@ -340,8 +307,8 @@ TEST_F(ThumbCPUTest7, LdrbByteDifferentRegisters) {
     // Pre-store test data (byte)
     memory.write8(0x00001010, 0x87); // Store at base + offset
     
-    ASSERT_TRUE(assemble_and_write_thumb("ldrb r3, [r4, r5]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("ldrb r3, [r4, r5]", cpu.R()[15]));
+    execute(1);
     
     EXPECT_EQ(cpu.R()[3], 0x87u); // Should be zero-extended
     EXPECT_EQ(cpu.R()[15], 0x00000002u);
@@ -355,8 +322,8 @@ TEST_F(ThumbCPUTest7, LdrbByteZeroOffset) {
     // Pre-store test data (byte)
     memory.write8(0x00001100, 0xAA); // Store at base address
     
-    ASSERT_TRUE(assemble_and_write_thumb("ldrb r1, [r6, r7]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("ldrb r1, [r6, r7]", cpu.R()[15]));
+    execute(1);
     
     EXPECT_EQ(cpu.R()[1], 0xAAu); // Should be zero-extended
     EXPECT_EQ(cpu.R()[15], 0x00000002u);
@@ -370,8 +337,8 @@ TEST_F(ThumbCPUTest7, LdrbByteZeroExtension) {
     // Pre-store byte with high bit set
     memory.write8(0x00001200, 0xFF);
     
-    ASSERT_TRUE(assemble_and_write_thumb("ldrb r0, [r1, r2]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("ldrb r0, [r1, r2]", cpu.R()[15]));
+    execute(1);
     
     // Should be zero-extended, not sign-extended
     EXPECT_EQ(cpu.R()[0], 0xFFu); // Not 0xFFFFFFFF
@@ -389,13 +356,13 @@ TEST_F(ThumbCPUTest7, StrLdrRoundtrip) {
         cpu.R()[15] = i * 8; // Reset PC with space for two instructions
         
         // Store the value
-        ASSERT_TRUE(assemble_and_write_thumb("str r0, [r1, r2]", cpu.R()[15]));
-        thumb_cpu.execute(1);
+        ASSERT_TRUE(assembleAndWriteThumb("str r0, [r1, r2]", cpu.R()[15]));
+        execute(1);
         
         // Load back into different register
         cpu.R()[3] = 0xDEADBEEF; // Initialize with different value
-        ASSERT_TRUE(assemble_and_write_thumb("ldr r3, [r1, r2]", cpu.R()[15]));
-        thumb_cpu.execute(1);
+        ASSERT_TRUE(assembleAndWriteThumb("ldr r3, [r1, r2]", cpu.R()[15]));
+        execute(1);
         
         EXPECT_EQ(cpu.R()[3], test_values[i]) << "Value 0x" << std::hex << test_values[i];
         EXPECT_EQ(cpu.R()[15], static_cast<uint32_t>(i * 8 + 4)); // Should advance by 4 total (2 instructions)
@@ -413,13 +380,13 @@ TEST_F(ThumbCPUTest7, StrbLdrbRoundtrip) {
         cpu.R()[15] = i * 8; // Reset PC with space for two instructions
         
         // Store the byte
-        ASSERT_TRUE(assemble_and_write_thumb("strb r0, [r1, r2]", cpu.R()[15]));
-        thumb_cpu.execute(1);
+        ASSERT_TRUE(assembleAndWriteThumb("strb r0, [r1, r2]", cpu.R()[15]));
+        execute(1);
         
         // Load back into different register
         cpu.R()[3] = 0xDEADBEEF; // Initialize with different value
-        ASSERT_TRUE(assemble_and_write_thumb("ldrb r3, [r1, r2]", cpu.R()[15]));
-        thumb_cpu.execute(1);
+        ASSERT_TRUE(assembleAndWriteThumb("ldrb r3, [r1, r2]", cpu.R()[15]));
+        execute(1);
         
         EXPECT_EQ(cpu.R()[3], static_cast<uint32_t>(test_bytes[i])) << "Byte value 0x" << std::hex << static_cast<int>(test_bytes[i]);
         EXPECT_EQ(cpu.R()[15], static_cast<uint32_t>(i * 8 + 4)); // Should advance by 4 total
@@ -434,8 +401,8 @@ TEST_F(ThumbCPUTest7, EdgeCasesAndBoundaryConditions) {
     cpu.R()[15] = 0x00000000;
     
     cpu.R()[0] = 0x12345678;
-    ASSERT_TRUE(assemble_and_write_thumb("str r0, [r1, r2]", cpu.R()[15])); // Store at 0x1FFC
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("str r0, [r1, r2]", cpu.R()[15])); // Store at 0x1FFC
+    execute(1);
     
     uint32_t stored_value = memory.read32(0x00001FFC);
     EXPECT_EQ(stored_value, 0x12345678u);
@@ -446,8 +413,8 @@ TEST_F(ThumbCPUTest7, EdgeCasesAndBoundaryConditions) {
     setup_registers({{1, 0x00001500}, {2, 0x00000001}}); // Unaligned address (0x1501)
     cpu.R()[0] = 0x87654321;
     
-    ASSERT_TRUE(assemble_and_write_thumb("str r0, [r1, r2]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("str r0, [r1, r2]", cpu.R()[15]));
+    execute(1);
     
     // ARM handles unaligned access by rotating
     // The exact behavior depends on implementation, but instruction should complete
@@ -458,8 +425,8 @@ TEST_F(ThumbCPUTest7, EdgeCasesAndBoundaryConditions) {
     setup_registers({{1, 0x00001000}, {2, 0x000007FF}}); // Large offset
     cpu.R()[0] = 0xDEADBEEF;
     
-    ASSERT_TRUE(assemble_and_write_thumb("str r0, [r1, r2]", cpu.R()[15]));
-    thumb_cpu.execute(1);
+    ASSERT_TRUE(assembleAndWriteThumb("str r0, [r1, r2]", cpu.R()[15]));
+    execute(1);
     
     uint32_t large_offset_value = memory.read32(0x000017FF);
     EXPECT_EQ(large_offset_value, 0xDEADBEEFu);

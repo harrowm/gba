@@ -318,7 +318,8 @@ TEST_F(ThumbCPUTest11, WordAlignmentVerification) {
         uint32_t expected_address = 0x00001001 + (word8 * 4);
         
         // Use simple offset patterns that work
-        std::string instruction = "str r0, [sp, #" + std::to_string(word8 * 4) + "]";
+        char instruction[64];
+        snprintf(instruction, sizeof(instruction), "str r0, [sp, #0x%X]", word8 * 4);
         ASSERT_TRUE(assemble_and_write_thumb(instruction, cpu.R()[15]));
         thumb_cpu.execute(1);
         
@@ -342,7 +343,8 @@ TEST_F(ThumbCPUTest11, MemoryConsistencyAcrossRegisters) {
         cpu.R()[15] = 0x00000000;  // Reset PC
         
         // Use fixed offset 8 which works reliably for all registers
-        std::string instruction = "str r" + std::to_string(rd) + ", [sp, #8]";
+        char instruction[64];
+        snprintf(instruction, sizeof(instruction), "str r%d, [sp, #0x8]", rd);
         ASSERT_TRUE(assemble_and_write_thumb(instruction, cpu.R()[15]));
         thumb_cpu.execute(1);
         

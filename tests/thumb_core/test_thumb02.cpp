@@ -275,10 +275,10 @@ TEST_F(ThumbCPUTest4, SUB_REG_SameRegister) {
 
 // ADD/SUB Immediate Tests
 TEST_F(ThumbCPUTest4, ADD_IMM) {
-    // Test case: ADD immediate (ADD R0, R1, #2)
+    // Test case: ADD immediate (ADD R0, R1, #0x2)
     setup_registers({{1, 5}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("adds r0, r1, #2", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("adds r0, r1, #0x2", R(15)));
     execute(1);
     
     EXPECT_EQ(R(0), 7u);               // 5 + 2 = 7
@@ -290,10 +290,10 @@ TEST_F(ThumbCPUTest4, ADD_IMM) {
 }
 
 TEST_F(ThumbCPUTest4, SUB_IMM) {
-    // Test case: SUB immediate (SUB R0, R1, #2)
+    // Test case: SUB immediate (SUB R0, R1, #0x2)
     setup_registers({{1, 8}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("subs r0, r1, #2", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("subs r0, r1, #0x2", R(15)));
     execute(1);
     
     EXPECT_EQ(R(0), 6u);               // 8 - 2 = 6
