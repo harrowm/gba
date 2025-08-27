@@ -29,10 +29,10 @@ class ThumbCPUTest : public ThumbCPUTestBase {
 // Instructions: LSL, LSR, ASR
 
 TEST_F(ThumbCPUTest, LSL_Basic) {
-    // Test case: LSL R0, R0, #2 (shift 0b1 left by 2 positions)
+    // Test case: LSL R0, R0, #0x2 (shift 0b1 left by 2 positions)
     setup_registers({{0, 0b1}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("lsls r0, r0, #2", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("lsls r0, r0, #0x2", R(15)));
     execute(1);
     
     EXPECT_EQ(R(0), static_cast<unsigned int>(0b100));
@@ -46,7 +46,7 @@ TEST_F(ThumbCPUTest, LSL_CarryOut) {
     // Test case: LSL with carry out (shift 0xC0000000 left by 1)
     setup_registers({{1, 0xC0000000}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("lsls r1, r1, #1", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("lsls r1, r1, #0x1", R(15)));
     execute(1);
     
     EXPECT_EQ(R(1), 0x80000000u);
@@ -60,7 +60,7 @@ TEST_F(ThumbCPUTest, LSL_ZeroResult) {
     // Test case: LSL resulting in zero
     setup_registers({{2, 0x80000000}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("lsls r2, r2, #1", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("lsls r2, r2, #0x1", R(15)));
     execute(1);
     
     EXPECT_EQ(R(2), 0u);
@@ -101,10 +101,10 @@ TEST_F(ThumbCPUTest, LSL_MaxShift) {
 }
 
 TEST_F(ThumbCPUTest, LSR_Basic) {
-    // Test case: LSR R0, R0, #2 (logical shift right)
+    // Test case: LSR R0, R0, #0x2 (logical shift right)
     setup_registers({{0, 0b1100}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("lsrs r0, r0, #2", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("lsrs r0, r0, #0x2", R(15)));
     execute(1);
     
     EXPECT_EQ(R(0), static_cast<unsigned int>(0b11));
@@ -118,7 +118,7 @@ TEST_F(ThumbCPUTest, LSR_CarryOut) {
     // Test case: LSR with carry out
     setup_registers({{1, 0b101}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("lsrs r1, r1, #1", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("lsrs r1, r1, #0x1", R(15)));
     execute(1);
     
     EXPECT_EQ(R(1), static_cast<unsigned int>(0b10));
@@ -132,7 +132,7 @@ TEST_F(ThumbCPUTest, LSR_ZeroResult) {
     // Test case: LSR resulting in zero
     setup_registers({{2, 0x1}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("lsrs r2, r2, #1", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("lsrs r2, r2, #0x1", R(15)));
     execute(1);
     
     EXPECT_EQ(R(2), 0u);
@@ -177,7 +177,7 @@ TEST_F(ThumbCPUTest, ASR_Basic) {
     // Test case: ASR (arithmetic shift right) - positive number
     setup_registers({{0, 0x80}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("asrs r0, r0, #2", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("asrs r0, r0, #0x2", R(15)));
     execute(1);
     
     EXPECT_EQ(R(0), 0x20u);        // 0x80 >> 2 = 0x20
@@ -191,7 +191,7 @@ TEST_F(ThumbCPUTest, ASR_NegativeNumber) {
     // Test case: ASR with negative number (sign extension)
     setup_registers({{1, 0x80000000}, {15, 0x00000000}});  // Most negative 32-bit number
     
-    ASSERT_TRUE(assembleAndWriteThumb("asrs r1, r1, #1", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("asrs r1, r1, #0x1", R(15)));
     execute(1);
     
     EXPECT_EQ(R(1), 0xC0000000u);  // Sign bit extended
@@ -205,7 +205,7 @@ TEST_F(ThumbCPUTest, ASR_CarryOut) {
     // Test case: ASR with carry out from negative number
     setup_registers({{2, 0x80000001}, {15, 0x00000000}});  // Negative number with LSB set
     
-    ASSERT_TRUE(assembleAndWriteThumb("asrs r2, r2, #1", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("asrs r2, r2, #0x1", R(15)));
     execute(1);
     
     EXPECT_EQ(R(2), 0xC0000000u);  // Sign extended with carry
@@ -219,7 +219,7 @@ TEST_F(ThumbCPUTest, ASR_ZeroResult) {
     // Test case: ASR resulting in zero
     setup_registers({{2, 0x1}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("asrs r2, r2, #1", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("asrs r2, r2, #0x1", R(15)));
     execute(1);
     
     EXPECT_EQ(R(2), 0u);
@@ -265,7 +265,7 @@ TEST_F(ThumbCPUTest, LSL_DifferentRegisters) {
     // Test case: LSL with different source and destination (Rd != Rs)
     setup_registers({{3, 0x5}, {4, 0}, {15, 0x00000000}});
     
-    ASSERT_TRUE(assembleAndWriteThumb("lsls r4, r3, #1", R(15)));
+    ASSERT_TRUE(assembleAndWriteThumb("lsls r4, r3, #0x1", R(15)));
     execute(1);
     
     EXPECT_EQ(R(3), 0x5u);         // Source unchanged
