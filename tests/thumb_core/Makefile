@@ -25,6 +25,9 @@ CPP_SRCS = test_cpu.cpp \
 	test_thumb14.cpp \
 	test_thumb15.cpp \
 	test_thumb16.cpp \
+	test_thumb17.cpp \
+	test_thumb18.cpp \
+	test_thumb19.cpp \
 	../../src/arm_cpu.cpp \
 	../../src/debug.cpp \
 	../../src/arm_exec_other.cpp \
@@ -118,6 +121,15 @@ $(BUILD_DIR)/test_thumb15.o: test_thumb15.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/test_thumb16.o: test_thumb16.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/test_thumb17.o: test_thumb17.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/test_thumb18.o: test_thumb18.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/test_thumb19.o: test_thumb19.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 thumb_core_tests: $(CPP_OBJS) $(C_OBJS) $(INST_TABLE_INC)

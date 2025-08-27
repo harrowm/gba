@@ -31,24 +31,3 @@ void validateUnchangedRegisters(const CPU& cpu, const std::string& beforeState, 
         }
     }
 }
-
-// Include all format-specific test files
-// #include "format01_shift_immediate.cpp"
-// #include "format02_add_sub.cpp"
-// #include "format03_immediate.cpp"
-// #include "format04_alu.cpp"
-// #include "format05_hi_register_ops_bx.cpp"
-// #include "format06_pc_relative_load.cpp"
-// #include "format07_load_store_reg.cpp"
-// format08 now uses modern test_thumb08.cpp with ThumbCPUTest8 fixture
-// format09 now uses modern test_thumb09.cpp with ThumbCPUTest9 fixture
-// #include "format10_load_store_half.cpp"
-// #include "format11_sp_relative.cpp"
-// #include "format12_load_address.cpp"
-// #include "format13_stack_operations.cpp"
-// #include "format14_load_store_multiple.cpp"
-// #include "format15_multiple_load_store.cpp"
-// #include "format16_conditional_branch.cpp"
-#include "format17_software_interrupt.cpp"
-#include "format18_unconditional_branch.cpp"
-#include "format19_long_branch.cpp"
