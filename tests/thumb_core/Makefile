@@ -8,8 +8,7 @@ GTEST_FLAGS = -L$(GTEST_LIB) -lgtest -lgtest_main -lpthread
 KEYSTONE_FLAGS = -lkeystone
 
 
-CPP_SRCS = test_cpu.cpp \
-	test_thumb01.cpp \
+CPP_SRCS = test_thumb01.cpp \
 	test_thumb02.cpp \
 	test_thumb03.cpp \
 	test_thumb04.cpp \
@@ -71,9 +70,6 @@ $(BUILD_DIR)/%.o: ../../src/%.cpp $(INST_TABLE_INC)
 
 $(BUILD_DIR)/%.o: ../../src/%.c $(INST_TABLE_INC)
 	$(CC) -std=c99 -Wall -Wextra -I../../include -g -O3 -flto -c $< -o $@
-
-$(BUILD_DIR)/test_cpu.o: test_cpu.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/test_thumb01.o: test_thumb01.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@

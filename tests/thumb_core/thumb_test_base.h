@@ -87,9 +87,8 @@ protected:
         size_t machine_size;
         size_t statement_count;
         
-        // Prepare assembly with proper directives to force Thumb-1 (16-bit) instructions
-        // Use multiple directives to ensure we get ARMv4T-compatible 16-bit Thumb instructions
-        std::string full_assembly = ".syntax unified\n.arch armv4t\n.code 16\n.thumb\n" + assembly;
+        // Prepare assembly with simple thumb directive
+        std::string full_assembly = ".thumb\n" + assembly;
         
         if (ks_asm(ks, full_assembly.c_str(), address, &machine_code, &machine_size, &statement_count) != KS_ERR_OK) {
             return false;
