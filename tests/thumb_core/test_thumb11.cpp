@@ -33,9 +33,7 @@
  * - Stack pointer relative addressing validation
  */
 
-#include <gtest/gtest.h>
-#include <iostream>
-#include <iomanip>
+
 #include "thumb_test_base.h"
 
 class ThumbCPUTest11 : public ThumbCPUTestBase {
@@ -239,26 +237,42 @@ TEST_F(ThumbCPUTest11, WordAlignmentVerification) {
     // (ARM allows unaligned base addresses, offset is always word-aligned)
     setup_registers({{13, 0x00001001}});  // Unaligned SP
     
-    // Test only small offsets that work with Keystone
-    uint8_t test_word8_values[] = {0, 1, 2};  // Reduced to known working values
+    // Test broader range of offsets using hex notation for Keystone compatibility
+    // This verifies address calculation works correctly: effective_address = SP + (offset)
+    struct OffsetTest {
+        uint32_t offset_bytes;
+        uint32_t expected_addr;
+    } test_cases[] = {
+        {0x0,   0x00001001 + 0x0},    // Minimum offset
+        {0x4,   0x00001001 + 0x4},    // Basic word offset  
+        {0x8,   0x00001001 + 0x8},    // Double word offset
+        {0x10,  0x00001001 + 0x10},   // 16-byte offset
+        {0x20,  0x00001001 + 0x20},   // 32-byte offset
+        {0x40,  0x00001001 + 0x40},   // 64-byte offset
+        {0x80,  0x00001001 + 0x80},   // 128-byte offset
+        {0x100, 0x00001001 + 0x100},  // 256-byte offset
+        {0x200, 0x00001001 + 0x200},  // 512-byte offset
+        {0x3FC, 0x00001001 + 0x3FC}   // Maximum Format 11 offset (1020 bytes)
+    };
     
-    for (auto word8 : test_word8_values) {
-        uint32_t test_value = 0x40000000 + word8;
+    for (const auto& test : test_cases) {
+        uint32_t test_value = 0x40000000 + (test.offset_bytes >> 2); // Unique value per offset
         R(0) = test_value;
         R(15) = 0x00000000;  // Reset PC
         
-        // Calculate expected address: SP + (word8 * 4)
-        uint32_t expected_address = 0x00001001 + (word8 * 4);
-        
-        // Use simple offset patterns that work
+        // Use hex offset notation for Keystone compatibility
         char instruction[64];
-        snprintf(instruction, sizeof(instruction), "str r0, [sp, #0x%X]", word8 * 4);
-        ASSERT_TRUE(assembleAndWriteThumb(instruction, R(15)));
+        snprintf(instruction, sizeof(instruction), "str r0, [sp, #0x%X]", test.offset_bytes);
+        ASSERT_TRUE(assembleAndWriteThumb(instruction, R(15))) 
+            << "Failed to assemble with offset 0x" << std::hex << test.offset_bytes;
         execute(1);
         
-        // Verify address calculation is exactly SP + offset
-        uint32_t stored = memory.read32(expected_address);
-        EXPECT_EQ(stored, test_value) << "word8=" << (int)word8 << ", offset=" << (word8 * 4);
+        // Verify address calculation is exactly SP + offset (unaligned SP + word-aligned offset)
+        uint32_t stored = memory.read32(test.expected_addr);
+        EXPECT_EQ(stored, test_value) 
+            << "Unaligned SP addressing failed: offset=0x" << std::hex << test.offset_bytes
+            << " expected_addr=0x" << test.expected_addr 
+            << " SP=0x1001 + offset=0x" << test.offset_bytes;
     }
 }
 
@@ -326,83 +340,59 @@ TEST_F(ThumbCPUTest11, LdrSpRelativeWithOffset) {
 }
 
 TEST_F(ThumbCPUTest11, LdrSpRelativeDifferentOffsets) {
-    // Use smaller SP value to keep addresses within RAM bounds (0x0000-0x1FFF)
-    uint32_t base_sp = 0x00000100;  // Small SP value
+    // Test LDR SP-relative with comprehensive range of offsets
+    // This verifies Format 11 load addressing across the full offset spectrum
+    uint32_t base_sp = 0x00000100;  // Base SP value
     
-    // Test 1: R0 with offset 0 (roundtrip approach)
-    {
-        setup_registers({{13, base_sp}, {0, 0xAAAA1111}});
-        
-        // Store first
-        ASSERT_TRUE(assembleAndWriteThumb("str r0, [sp, #0x0]", R(15)));
-        execute(1);
-        
-        // Load back  
-        R(2) = 0xDEADBEEF;
-        R(15) = 0x00000002;
-        
-        ASSERT_TRUE(assembleAndWriteThumb("ldr r2, [sp, #0x0]", R(15)));
-        execute(1);
-        
-        EXPECT_EQ(R(2), 0xAAAA1111u) << "Offset 0";
-        EXPECT_EQ(R(15), 0x00000004u);
+    // Test comprehensive offset range using hex notation for Keystone compatibility
+    struct OffsetTest {
+        uint32_t offset;
+        uint32_t test_value;
+        int target_reg;
+    } test_cases[] = {
+        {0x0,   0xAAAA0000, 0},  // Minimum offset
+        {0x4,   0xBBBB0001, 1},  // Basic word offset  
+        {0x8,   0xCCCC0002, 2},  // Double word offset
+        {0xC,   0xDDDD0003, 3},  // 12-byte offset (was avoided before)
+        {0x10,  0xEEEE0004, 4},  // 16-byte offset
+        {0x20,  0xFFFF0005, 5},  // 32-byte offset
+        {0x40,  0x11110006, 6},  // 64-byte offset
+        {0x80,  0x22220007, 7},  // 128-byte offset
+        {0x100, 0x33330008, 0},  // 256-byte offset (wrap to R0)
+        {0x200, 0x44440009, 1},  // 512-byte offset (wrap to R1)
+        {0x3FC, 0x5555000A, 2}   // Maximum Format 11 offset (1020 bytes)
+    };
+    
+    setup_registers({{13, base_sp}});
+    
+    // Pre-store all test values at their target addresses
+    for (const auto& test : test_cases) {
+        uint32_t target_address = base_sp + test.offset;
+        memory.write32(target_address, test.test_value);
     }
     
-    // Test 2: R1 with offset 4 (roundtrip approach)
-    {
-        setup_registers({{13, base_sp}, {1, 0xBBBB2222}});
+    // Test each LDR operation directly (no roundtrip needed)
+    for (const auto& test : test_cases) {
+        // Clear target register to ensure load works
+        R(test.target_reg) = 0xDEADBEEF;
+        R(15) = 0x00000000;  // Reset PC
         
-        // Store first
-        ASSERT_TRUE(assembleAndWriteThumb("str r1, [sp, #0x4]", R(15)));
+        // Generate LDR instruction with hex offset
+        char instruction[64];
+        snprintf(instruction, sizeof(instruction), "ldr r%d, [sp, #0x%X]", test.target_reg, test.offset);
+        
+        ASSERT_TRUE(assembleAndWriteThumb(instruction, R(15))) 
+            << "Failed to assemble LDR with offset 0x" << std::hex << test.offset;
         execute(1);
         
-        // Load back  
-        R(0) = 0xDEADBEEF;
-        R(15) = 0x00000002;
+        // Verify correct value was loaded
+        EXPECT_EQ(R(test.target_reg), test.test_value) 
+            << "LDR failed: offset=0x" << std::hex << test.offset 
+            << " target_reg=R" << test.target_reg
+            << " expected=0x" << test.test_value
+            << " got=0x" << R(test.target_reg);
         
-        ASSERT_TRUE(assembleAndWriteThumb("ldr r0, [sp, #0x4]", R(15)));
-        execute(1);
-        
-        EXPECT_EQ(R(0), 0xBBBB2222u) << "Offset 4";
-        EXPECT_EQ(R(15), 0x00000004u);
-    }
-    
-    // Test 3: R2 with offset 8 (roundtrip approach)
-    {
-        setup_registers({{13, base_sp}, {2, 0xCCCC3333}});
-        
-        // Store first
-        ASSERT_TRUE(assembleAndWriteThumb("str r2, [sp, #0x8]", R(15)));
-        execute(1);
-        
-        // Load back  
-        R(1) = 0xDEADBEEF;
-        R(15) = 0x00000002;
-        
-        ASSERT_TRUE(assembleAndWriteThumb("ldr r1, [sp, #0x8]", R(15)));
-        execute(1);
-        
-        EXPECT_EQ(R(1), 0xCCCC3333u) << "Offset 8";
-        EXPECT_EQ(R(15), 0x00000004u);
-    }
-    
-    // Test 4: Use offset 12 with R0 (R0 works with any offset, using smaller offset to avoid Thumb-2)
-    {
-        setup_registers({{13, base_sp}, {0, 0xDDDD4444}});
-        
-        // Store first - use offset 8 since 12 triggers Thumb-2
-        ASSERT_TRUE(assembleAndWriteThumb("str r0, [sp, #0x8]", R(15)));
-        execute(1);
-        
-        // Load back  
-        R(3) = 0xDEADBEEF;
-        R(15) = 0x00000002;
-        
-        ASSERT_TRUE(assembleAndWriteThumb("ldr r3, [sp, #0x8]", R(15)));
-        execute(1);
-        
-        EXPECT_EQ(R(3), 0xDDDD4444u) << "Offset 8 (avoiding Keystone Thumb-2)";
-        EXPECT_EQ(R(15), 0x00000004u);
+        EXPECT_EQ(R(15), 0x00000002u) << "PC not incremented correctly for offset 0x" << std::hex << test.offset;
     }
 }
 
