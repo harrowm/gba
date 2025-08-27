@@ -342,7 +342,6 @@ TEST_F(ThumbCPUTest19, BL_OFFSET_CALCULATION_VERIFICATION) {
 
 // Test BL instruction encoding validation
 TEST_F(ThumbCPUTest19, BL_INSTRUCTION_ENCODING_VALIDATION) {
-    auto& registers = cpu.R();
     
     // Test that BL instructions are properly identified by their encoding
     struct EncodingTest {
@@ -387,7 +386,6 @@ TEST_F(ThumbCPUTest19, BL_REGISTER_PRESERVATION) {
     for (int i = 0; i < 16; ++i) {
         initial_regs[i] = registers[i];
     }
-    uint32_t initial_cpsr = cpu.CPSR();
     
     // BL +8
     memory.write16(0x00001000, 0xF000);

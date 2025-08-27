@@ -284,7 +284,7 @@ TEST_F(ThumbCPUTest15, LDMIA_MULTIPLE_REGISTERS) {
     thumb_cpu.execute(1);
     
     for (int i = 0; i < 8; i++) {
-        EXPECT_EQ(cpu.R()[i], 0x20000000 + i);
+        EXPECT_EQ(cpu.R()[i], 0x20000000u + static_cast<uint32_t>(i));
     }
     EXPECT_EQ(cpu.R()[15], 0x00000006u);
 }
