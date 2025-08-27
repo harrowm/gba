@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include <initializer_list>
 
 extern "C" {
 #include <keystone/keystone.h>
@@ -122,6 +123,25 @@ protected:
     std::array<uint32_t, 16>& registers() {
         return cpu.R();
     }
+    
+    // Helper to set up specific register values
+    void setup_registers(std::initializer_list<std::pair<int, uint32_t>> reg_values) {
+        for (const auto& pair : reg_values) {
+            registers()[pair.first] = pair.second;
+        }
+    }
+    
+    // Register accessors for better abstraction
+    uint32_t& PC() { return cpu.R()[15]; }  // Program Counter
+    
+    uint32_t& SP() { return cpu.R()[13]; }  // Stack Pointer  
+    uint32_t getSP() const { return cpu.R()[13]; }
+    
+    uint32_t& LR() { return cpu.R()[14]; }  // Link Register
+    uint32_t getLR() const { return cpu.R()[14]; }
+    
+    uint32_t& R(int reg) { return cpu.R()[reg]; }
+    uint32_t R(int reg) const { return cpu.R()[reg]; }
     
     // Helper to execute CPU cycles
     void execute(int cycles = 1) {
