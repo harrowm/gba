@@ -976,7 +976,9 @@ void ThumbCPU::thumb_str_sp_rel(uint16_t instruction) {
     // Perform the store operation using memory_write_32
     parentCPU.getMemory().write32(address, parentCPU.R()[rd]);
 
-    DEBUG_INFO("Executing Thumb STR (SP-relative): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
+    std::ostringstream exec_stream;
+    exec_stream << "Executing Thumb STR (SP-relative): [0x" << std::hex << std::uppercase << address << "] = R" << std::dec << rd;
+    DEBUG_INFO(exec_stream.str());
 }
 
 void ThumbCPU::thumb_ldr_sp_rel(uint16_t instruction) {
@@ -989,7 +991,9 @@ void ThumbCPU::thumb_ldr_sp_rel(uint16_t instruction) {
     // Perform the load operation using memory_read_32
     parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
 
-    DEBUG_INFO("Executing Thumb LDR (SP-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    std::ostringstream ldr_stream;
+    ldr_stream << "Executing Thumb LDR (SP-relative): R" << std::dec << rd << " = [0x" << std::hex << std::uppercase << address << "]";
+    DEBUG_INFO(ldr_stream.str());
 }
 
 void ThumbCPU::thumb_ldr_address_pc(uint16_t instruction) {
