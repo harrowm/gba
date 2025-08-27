@@ -1,4 +1,4 @@
-// test_thumb07.cpp - Modern Thumb CPU test fixture for Format 7: Load/store with register offset
+
 #include <gtest/gtest.h>
 #include "memory.h"
 #include "interrupt.h"

@@ -1,4 +1,27 @@
-// test_thumb02.cpp - Modern Thumb CPU test fixture for Format 2: Add/subtract
+/*
+ * test_thumb02.cpp - Modern Thumb CPU test fixture for Format 2: Add/subtract
+ * 
+ * This file contains comprehensive tests for ARM Thumb Format 2 instructions:
+ * - ADD register: Add two registers and store result in destination
+ * - SUB register: Subtract source register from base register  
+ * - ADD immediate: Add 3-bit immediate value to register
+ * - SUB immediate: Subtract 3-bit immediate value from register
+ * 
+ * Format 2 Encoding: 00011[I][Op][Rn/Offset3][Rs][Rd]
+ * - I: 0=register operation, 1=immediate operation
+ * - Op: 0=ADD, 1=SUB
+ * - Rn/Offset3: Register (I=0) or 3-bit immediate (I=1)
+ * - Rs: 3-bit source register (R0-R7)
+ * - Rd: 3-bit destination register (R0-R7)
+ * 
+ * These tests use the modern ThumbCPUTestBase infrastructure with:
+ * - Keystone assembler for runtime instruction generation
+ * - Modern R() register access API  
+ * - Comprehensive flag testing (N, Z, C, V)
+ * - Edge case validation including overflow detection
+ * 
+ * Coverage: 45 tests across all add/subtract operations with flag verification
+ */
 #include "thumb_test_base.h"
 
 class ThumbCPUTest4 : public ThumbCPUTestBase {

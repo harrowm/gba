@@ -1,5 +1,5 @@
-//
-// ARM Thumb Instruction Set Test Suite - Format 6: PC-relative load operations
+
+// test_thumb06.cpp - Legacy Thumb CPU test fixture for Format 6: PC-relative load operations
 //
 // This file tests the ARM Thumb instruction format for PC-relative load operations.
 // Format 6 covers: LDR Rd, [PC, #imm]
