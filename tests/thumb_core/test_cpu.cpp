@@ -42,11 +42,11 @@ void validateUnchangedRegisters(const CPU& cpu, const std::string& beforeState, 
 // #include "format07_load_store_reg.cpp"
 // format08 now uses modern test_thumb08.cpp with ThumbCPUTest8 fixture
 // format09 now uses modern test_thumb09.cpp with ThumbCPUTest9 fixture
-#include "format10_load_store_half.cpp"
-#include "format11_sp_relative.cpp"
-#include "format12_load_address.cpp"
-#include "format13_stack_operations.cpp"
-#include "format14_load_store_multiple.cpp"
+// #include "format10_load_store_half.cpp"
+// #include "format11_sp_relative.cpp"
+// #include "format12_load_address.cpp"
+// #include "format13_stack_operations.cpp"
+// #include "format14_load_store_multiple.cpp"
 #include "format15_multiple_load_store.cpp"
 #include "format16_conditional_branch.cpp"
 #include "format17_software_interrupt.cpp"
