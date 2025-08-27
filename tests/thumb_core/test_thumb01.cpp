@@ -69,8 +69,8 @@ TEST_F(ThumbCPUTest, LSL_MaxShift) {
     // Test case: Maximum shift amount (31)
     setup_registers({{4, 0b11}, {15, 0x00000000}});
     
-    // Use hardcoded instruction for LSL #31 since Keystone may not support it
-    writeInstruction(R(15), 0x07E4); // LSL R4, #31 (based on format01 original)
+    // NOTE: Keystone supports LSL #31 using hex format (#0x1f) and generates 0x07E4 (verified) - not sure why its not accepting decimals 
+    ASSERT_TRUE(assembleAndWriteThumb("lsls r4, r4, #0x1f", R(15)));
     execute(1);
     
     EXPECT_EQ(R(4), 0x80000000u);  // 0b11 << 31, bit 1 -> bit 32 (carry), bit 0 -> bit 31
@@ -127,8 +127,8 @@ TEST_F(ThumbCPUTest, LSR_ShiftByZero) {
     setup_registers({{3, 0x80000000}, {15, 0x00000000}});
     cpu.CPSR() &= ~CPU::FLAG_C; // Pre-clear carry flag
     
-    // Use hardcoded instruction for LSR #0 (treated as LSR #32)
-    writeInstruction(R(15), 0x081B); // LSR R3, #0 -> LSR R3, #32 (from format01 original)
+    // LSR #0 is treated as LSR #32, so use hex format for 32
+    ASSERT_TRUE(assembleAndWriteThumb("lsrs r3, r3, #0x20", R(15)));
     execute(1);
     
     EXPECT_EQ(R(3), 0u);           // LSR #32 results in 0
@@ -142,8 +142,8 @@ TEST_F(ThumbCPUTest, LSR_MaxShift) {
     // Test case: Maximum explicit shift amount (31)
     setup_registers({{4, 0xFFFFFFFF}, {15, 0x00000000}});
     
-    // Use hardcoded instruction for LSR #31
-    writeInstruction(R(15), 0x0FE4); // LSR R4, #31 (from format01 original)
+    // LSR #31 using hex format (31 = 0x1f)
+    ASSERT_TRUE(assembleAndWriteThumb("lsrs r4, r4, #0x1f", R(15)));
     execute(1);
     
     EXPECT_EQ(R(4), 1u);           // 0xFFFFFFFF >> 31 = 1
@@ -214,8 +214,8 @@ TEST_F(ThumbCPUTest, ASR_ShiftByZero) {
     setup_registers({{3, 0x80000000}, {15, 0x00000000}});
     cpu.CPSR() &= ~CPU::FLAG_C; // Pre-clear carry flag
     
-    // Use hardcoded instruction for ASR #0 (treated as ASR #32)
-    writeInstruction(R(15), 0x101B); // ASR R3, #0 -> ASR R3, #32 (from format01 original)
+    // ASR #0 is treated as ASR #32, so use hex format for 32
+    ASSERT_TRUE(assembleAndWriteThumb("asrs r3, r3, #0x20", R(15)));
     execute(1);
     
     EXPECT_EQ(R(3), 0xFFFFFFFFu); // ASR #32 of negative = all 1s (sign extended)
@@ -229,8 +229,8 @@ TEST_F(ThumbCPUTest, ASR_MaxShift) {
     // Test case: Maximum shift amount (31)
     setup_registers({{4, 0xFFFFFFFF}, {15, 0x00000000}});
     
-    // Use hardcoded instruction for ASR #31
-    writeInstruction(R(15), 0x17E4); // ASR R4, #31 (from format01 original)
+    // ASR #31 using hex format to avoid Keystone decimal limitations
+    ASSERT_TRUE(assembleAndWriteThumb("asrs r4, r4, #0x1f", R(15)));
     execute(1);
     
     EXPECT_EQ(R(4), 0xFFFFFFFFu); // Sign-extended (all 1s remain)
