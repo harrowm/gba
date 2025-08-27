@@ -1,4 +1,24 @@
-// test_thumb01.cpp - Modern Thumb CPU test fixture for Format 1: Move shifted register
+/*
+ * test_thumb01.cpp - Modern Thumb CPU test fixture for Format 1: Move shifted register
+ * 
+ * This file contains comprehensive tests for ARM Thumb Format 1 instructions:
+ * - LSL (Logical Shift Left) - shifts register left by immediate value
+ * - LSR (Logical Shift Right) - shifts register right by immediate value  
+ * - ASR (Arithmetic Shift Right) - arithmetic right shift by immediate value
+ * 
+ * Format 1 Encoding: 000[op][offset5][Rs][Rd]
+ * - op[1:0]: 00=LSL, 01=LSR, 10=ASR
+ * - offset5: 5-bit immediate shift amount (0-31)
+ * - Rs: 3-bit source register (R0-R7)
+ * - Rd: 3-bit destination register (R0-R7)
+ * 
+ * These tests use the modern ThumbCPUTestBase infrastructure with:
+ * - Keystone assembler for runtime instruction generation
+ * - Modern R() register access API
+ * - Automated flag verification and register state management
+ * 
+ * Coverage: 59 tests across all shift operations with various operands and edge cases
+ */
 #include "thumb_test_base.h"
 
 class ThumbCPUTest : public ThumbCPUTestBase {

@@ -1,4 +1,25 @@
-// test_thumb03.cpp - Modern Thumb CPU test fixture for Format 3: Move/compare/add/subtract immediate
+/*
+ * test_thumb03.cpp - Modern Thumb CPU test fixture for Format 3: Move/compare/add/subtract immediate
+ * 
+ * This file contains comprehensive tests for ARM Thumb Format 3 instructions:
+ * - MOV immediate: Load 8-bit immediate value into register
+ * - CMP immediate: Compare register with 8-bit immediate value
+ * - ADD immediate: Add 8-bit immediate value to register
+ * - SUB immediate: Subtract 8-bit immediate value from register
+ * 
+ * Format 3 Encoding: 001[Op][Rd][Offset8]
+ * - Op[1:0]: 00=MOV, 01=CMP, 10=ADD, 11=SUB
+ * - Rd: 3-bit destination register (R0-R7)
+ * - Offset8: 8-bit immediate value (0-255)
+ * 
+ * These tests use the modern ThumbCPUTestBase infrastructure with:
+ * - Keystone assembler for runtime instruction generation
+ * - Modern R() register access API
+ * - Comprehensive flag testing including comparison operations
+ * - Full range testing of 8-bit immediate values
+ * 
+ * Coverage: 36 tests across all immediate operations with edge case validation
+ */
 #include "thumb_test_base.h"
 
 class ThumbCPUTest5 : public ThumbCPUTestBase {
