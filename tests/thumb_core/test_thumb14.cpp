@@ -90,7 +90,7 @@ TEST_F(ThumbCPUTest14, PUSH_SINGLE_REGISTER) {
     
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1000 - 4); // SP decremented by 4
+    EXPECT_EQ(cpu.R()[13], 0x1000u - 4u); // SP decremented by 4
     EXPECT_EQ(memory.read32(0x1000 - 4), 0x12345678u); // R0 pushed to stack
     EXPECT_EQ(cpu.R()[15], 0x00000002u); // PC incremented
     
@@ -104,7 +104,7 @@ TEST_F(ThumbCPUTest14, PUSH_SINGLE_REGISTER) {
     cpu.R()[15] = 0x00000002;
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1800 - 4);
+    EXPECT_EQ(cpu.R()[13], 0x1800u - 4u);
     EXPECT_EQ(memory.read32(0x1800 - 4), 0xDEADBEEFu);
     EXPECT_EQ(cpu.R()[15], 0x00000004u);
     
@@ -118,7 +118,7 @@ TEST_F(ThumbCPUTest14, PUSH_SINGLE_REGISTER) {
     cpu.R()[15] = 0x00000004;
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1C00 - 4);
+    EXPECT_EQ(cpu.R()[13], 0x1C00u - 4u);
     EXPECT_EQ(memory.read32(0x1C00 - 4), 0xCAFEBABEu);
     EXPECT_EQ(cpu.R()[15], 0x00000006u);
 }
@@ -133,7 +133,7 @@ TEST_F(ThumbCPUTest14, PUSH_MULTIPLE_REGISTERS) {
     
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1000 - 8); // SP decremented by 8
+    EXPECT_EQ(cpu.R()[13], 0x1000u - 8u); // SP decremented by 8
     EXPECT_EQ(memory.read32(0x1000 - 8), 0x11111111u); // R0 (lower address)
     EXPECT_EQ(memory.read32(0x1000 - 4), 0x22222222u); // R1 (higher address)
     EXPECT_EQ(cpu.R()[15], 0x00000002u);
@@ -148,7 +148,7 @@ TEST_F(ThumbCPUTest14, PUSH_MULTIPLE_REGISTERS) {
     cpu.R()[15] = 0x00000002;
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1800 - 16); // SP decremented by 16
+    EXPECT_EQ(cpu.R()[13], 0x1800u - 16u); // SP decremented by 16
     EXPECT_EQ(memory.read32(0x1800 - 16), 0x44444444u); // R4
     EXPECT_EQ(memory.read32(0x1800 - 12), 0x55555555u); // R5
     EXPECT_EQ(memory.read32(0x1800 - 8), 0x66666666u);  // R6
@@ -168,9 +168,9 @@ TEST_F(ThumbCPUTest14, PUSH_MULTIPLE_REGISTERS) {
     cpu.R()[15] = 0x00000004;
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1C00 - 32); // SP decremented by 32 (8*4)
+    EXPECT_EQ(cpu.R()[13], 0x1C00u - 32u); // SP decremented by 32 (8*4)
     for (int i = 0; i < 8; i++) {
-        EXPECT_EQ(memory.read32(0x1C00 - 32 + (i * 4)), 0x10000000 + i);
+        EXPECT_EQ(memory.read32(0x1C00 - 32 + (i * 4)), 0x10000000u + i);
     }
     EXPECT_EQ(cpu.R()[15], 0x00000006u);
 }
@@ -185,7 +185,7 @@ TEST_F(ThumbCPUTest14, PUSH_WITH_LR) {
     
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1400 - 8); // SP decremented by 8
+    EXPECT_EQ(cpu.R()[13], 0x1400u - 8u); // SP decremented by 8
     EXPECT_EQ(memory.read32(0x1400 - 8), 0xAAAAAAAAu); // R0
     EXPECT_EQ(memory.read32(0x1400 - 4), 0xBBBBBBBBu); // LR
     EXPECT_EQ(cpu.R()[15], 0x00000002u);
@@ -200,7 +200,7 @@ TEST_F(ThumbCPUTest14, PUSH_WITH_LR) {
     cpu.R()[15] = 0x00000002;
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1600 - 4); // SP decremented by 4
+    EXPECT_EQ(cpu.R()[13], 0x1600u - 4u); // SP decremented by 4
     EXPECT_EQ(memory.read32(0x1600 - 4), 0x12345678u); // LR
     EXPECT_EQ(cpu.R()[15], 0x00000004u);
     
@@ -217,9 +217,9 @@ TEST_F(ThumbCPUTest14, PUSH_WITH_LR) {
     cpu.R()[15] = 0x00000004;
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1F00 - 36); // SP decremented by 36 (9*4)
+    EXPECT_EQ(cpu.R()[13], 0x1F00u - 36u); // SP decremented by 36 (9*4)
     for (int i = 0; i < 8; i++) {
-        EXPECT_EQ(memory.read32(0x1F00 - 36 + (i * 4)), 0x20000000 + i);
+        EXPECT_EQ(memory.read32(0x1F00 - 36 + (i * 4)), 0x20000000u + i);
     }
     EXPECT_EQ(memory.read32(0x1F00 - 4), 0xFEDCBA98u); // LR at the end
     EXPECT_EQ(cpu.R()[15], 0x00000006u);
@@ -312,7 +312,7 @@ TEST_F(ThumbCPUTest14, POP_MULTIPLE_REGISTERS) {
     // Test case 3: POP {R0-R7} (all low registers)
     setup_registers({{13, 0x1800 - 32}});
     for (int i = 0; i < 8; i++) {
-        memory.write32(0x1800 - 32 + (i * 4), 0x30000000 + i);
+        memory.write32(0x1800 - 32 + (i * 4), 0x30000000u + i);
     }
     
     if (!assemble_and_write_thumb("pop {r0, r1, r2, r3, r4, r5, r6, r7}", 0x00000004)) {
@@ -323,7 +323,7 @@ TEST_F(ThumbCPUTest14, POP_MULTIPLE_REGISTERS) {
     thumb_cpu.execute(1);
     
     for (int i = 0; i < 8; i++) {
-        EXPECT_EQ(cpu.R()[i], 0x30000000 + i);
+        EXPECT_EQ(cpu.R()[i], 0x30000000u + i);
     }
     EXPECT_EQ(cpu.R()[13], 0x1800u);
     EXPECT_EQ(cpu.R()[15], 0x00000006u);
@@ -362,7 +362,7 @@ TEST_F(ThumbCPUTest14, POP_WITH_PC) {
     // Test case 3: POP {R0-R7, PC}
     setup_registers({{13, 0x1800 - 36}}); // 8 registers + PC
     for (int i = 0; i < 8; i++) {
-        memory.write32(0x1800 - 36 + (i * 4), 0x40000000 + i);
+        memory.write32(0x1800 - 36 + (i * 4), 0x40000000u + i);
     }
     memory.write32(0x1800 - 4, 0x00000300); // PC data
     
@@ -374,7 +374,7 @@ TEST_F(ThumbCPUTest14, POP_WITH_PC) {
     thumb_cpu.execute(1);
     
     for (int i = 0; i < 8; i++) {
-        EXPECT_EQ(cpu.R()[i], 0x40000000 + i);
+        EXPECT_EQ(cpu.R()[i], 0x40000000u + i);
     }
     EXPECT_EQ(cpu.R()[15], 0x00000300u); // PC loaded
     EXPECT_EQ(cpu.R()[13], 0x1800u); // SP incremented by 36
@@ -392,7 +392,7 @@ TEST_F(ThumbCPUTest14, PUSH_POP_ROUNDTRIP) {
     thumb_cpu.execute(1);
     
     // Verify stack state
-    EXPECT_EQ(cpu.R()[13], 0x1500 - 12); // SP decremented
+    EXPECT_EQ(cpu.R()[13], 0x1500u - 12u); // SP decremented
     EXPECT_EQ(memory.read32(0x1500 - 12), 0x11111111u); // R0
     EXPECT_EQ(memory.read32(0x1500 - 8), 0x22222222u);  // R1
     EXPECT_EQ(memory.read32(0x1500 - 4), 0x33333333u);  // R2
@@ -427,7 +427,7 @@ TEST_F(ThumbCPUTest14, PUSH_POP_ROUNDTRIP) {
     cpu.R()[15] = 0x00000004;
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1600 - 8);
+    EXPECT_EQ(cpu.R()[13], 0x1600u - 8u);
     
     // Clear registers
     cpu.R()[0] = 0;
@@ -478,7 +478,7 @@ TEST_F(ThumbCPUTest14, EDGE_CASES) {
     cpu.R()[15] = 0x00000004;
     thumb_cpu.execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x1FFC - 4);
+    EXPECT_EQ(cpu.R()[13], 0x1FFCu - 4u);
     EXPECT_EQ(memory.read32(0x1FFC - 4), 0x12345678u);
     
     // POP it back
