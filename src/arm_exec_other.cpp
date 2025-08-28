@@ -267,8 +267,8 @@ void ARMCPU::exec_arm_bx_possible(uint32_t instruction) {
         return;
     }
     
-    // MSR (register): bits 27-20 == 0x12, bits 19-16 == 0xF, bits 15-12 == 0x0, bit 25 == 0
-    if ((instruction & 0x0FBFF000) == 0x012FF000) {
+    // MSR (register): bits 27-21 == 0001001 (0x12), bit 20 == 0, bits 15-12 == 1111, bits 11-4 == 00000000
+    if ((instruction & 0x0FF0FFF0) == 0x0120F000) {
         exec_arm_msr_reg(instruction);
         return;
     }

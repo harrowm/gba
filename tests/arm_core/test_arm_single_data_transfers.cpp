@@ -16,7 +16,7 @@ protected:
     ARMCPU arm_cpu;
     ks_engine* ks; // Keystone handle
 
-    ARMCPUSingleDataTransferTest() : memory(true), cpu(memory, interrupts), arm_cpu(cpu) {}
+    ARMCPUSingleDataTransferTest() : memory(true), cpu(memory, interrupts), arm_cpu(cpu), ks(nullptr) {}
 
     void SetUp() override {
         for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
