@@ -1,267 +1,201 @@
-// test_thumb16.cpp - Modern Thumb CPU test fixture for Format 16: Conditional branch operations
-#include <gtest/gtest.h>
-#include "memory.h"
-#include "interrupt.h"
-#include "cpu.h"
-#include "thumb_cpu.h"
-#include <initializer_list>
+/**
+ * Thumb Format 16: Conditional branch operations
+ * Instruction encoding: 1101 Cond[3:0] SOffset8[7:0]
+ * 
+ * Conditional branch (Bcc):
+ * - Encoding: 1101 Cond SOffset8 (0xD000-0xDEFF, 0xDF00-0xDFFF reserved for SWI)
+ * - Branches if condition Cond is true
+ * - Target address = PC + 4 + (sign_extend(SOffset8) << 1)
+ * - SOffset8 is an 8-bit signed offset in halfwords (-256 to +254 bytes)
+ * - PC points to instruction after branch (current PC + 2)
+ *
+ * Condition codes (same as ARM):
+ * - 0000 (EQ): Equal (Z=1)
+ * - 0001 (NE): Not Equal (Z=0) 
+ * - 0010 (CS/HS): Carry Set (C=1)
+ * - 0011 (CC/LO): Carry Clear (C=0)
+ * - 0100 (MI): Negative (N=1)
+ * - 0101 (PL): Positive (N=0)
+ * - 0110 (VS): Overflow Set (V=1)
+ * - 0111 (VC): Overflow Clear (V=0)
+ * - 1000 (HI): Higher (C=1 AND Z=0)
+ * - 1001 (LS): Lower or Same (C=0 OR Z=1)
+ * - 1010 (GE): Greater or Equal (N=V)
+ * - 1011 (LT): Less Than (N≠V)
+ * - 1100 (GT): Greater Than (Z=0 AND N=V)
+ * - 1101 (LE): Less or Equal (Z=1 OR N≠V)
+ * - 1110: Always (AL) - Reserved, use Format 18 (B) instead
+ * - 1111: Never (NV) - Reserved for SWI
+ *
+ * Branch range: PC - 256 to PC + 254 bytes (±127 halfwords)
+ */
+#include "thumb_test_base.h"
 
-extern "C" {
-#include <keystone/keystone.h>
-}
-
-// ThumbCPUTest16 fixture for Format 16: Conditional branch operations
-// ARM Thumb Format 16: Conditional branch
-// Encoding: 1101[Cond][SOffset8]
-// Instructions: Bcc (conditional branch)
-class ThumbCPUTest16 : public ::testing::Test {
-protected:
-    Memory memory;
-    InterruptController interrupts;
-    CPU cpu;
-    ThumbCPU thumb_cpu;
-    ks_engine* ks; // Keystone handle
-
-    ThumbCPUTest16() : memory(true), cpu(memory, interrupts), thumb_cpu(cpu), ks(nullptr) {}
-
-    void SetUp() override {
-        // Initialize all registers to 0
-        for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
-        
-        // Set Thumb mode (T flag) and User mode
-        cpu.CPSR() = CPU::FLAG_T | 0x10;
-        
-        // Initialize Keystone for Thumb mode
-        if (ks_open(KS_ARCH_ARM, KS_MODE_THUMB, &ks) != KS_ERR_OK) {
-            ks = nullptr;
-        }
-    }
-    
-    void TearDown() override {
-        if (ks) {
-            ks_close(ks);
-        }
-    }
-    
-    // Helper to set up multiple registers at once
-    void setup_registers(std::initializer_list<std::pair<int, uint32_t>> reg_values) {
-        cpu.R().fill(0);
-        for (const auto& pair : reg_values) {
-            cpu.R()[pair.first] = pair.second;
-        }
-    }
-    
-    // Helper to set CPU flags
-    void set_flags(uint32_t flags) {
-        cpu.CPSR() = CPU::FLAG_T | 0x10 | flags;
-    }
-    
-    // Helper to assemble Thumb instruction using Keystone
-    bool assemble_and_write_thumb(const std::string& assembly, uint32_t address) {
-        return false; // Force fallback to hex encodings
-        if (!ks) return false;
-        
-        std::string full_assembly = ".syntax unified\n.thumb\n" + assembly;
-        unsigned char *machine_code;
-        size_t count;
-        size_t size;
-        
-        if (ks_asm(ks, full_assembly.c_str(), address, &machine_code, &size, &count) == KS_ERR_OK) {
-            if (size >= 2) {
-                uint16_t instruction = machine_code[0] | (machine_code[1] << 8);
-                memory.write16(address, instruction);
-                ks_free(machine_code);
-                return true;
-            }
-            ks_free(machine_code);
-        }
-        return false;
-    }
+class ThumbCPUTest16 : public ThumbCPUTestBase {
 };
 
 TEST_F(ThumbCPUTest16, BEQ_CONDITIONAL_BRANCH) {
     // Test case 1: BEQ taken (Z flag set)
-    set_flags(CPU::FLAG_Z); // Set Z flag
-    cpu.R()[15] = 0x00000000;
+    setFlags(CPU::FLAG_Z); // Set Z flag
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xD001); // BEQ +2
-    }
+    assembleAndWriteThumb("beq #0x6", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch taken: PC = 0x02 + (1*2) = 0x04
-    EXPECT_EQ(cpu.R()[15], 0x00000004u);
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_Z)); // Flags preserved
+    EXPECT_EQ(R(15), 0x00000004u);
+    EXPECT_TRUE(getFlag(CPU::FLAG_Z)); // Flags preserved
     
     // Test case 2: BEQ not taken (Z flag clear)
-    set_flags(0); // Z flag clear
-    cpu.R()[15] = 0x00000000;
+    setFlags(0); // Z flag clear
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xD001); // BEQ +2
-    }
+    assembleAndWriteThumb("beq #0x6", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch not taken: PC = 0x02
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest16, BNE_CONDITIONAL_BRANCH) {
     // Test case 1: BNE taken (Z flag clear)
-    set_flags(0); // Z flag clear
-    cpu.R()[15] = 0x00000000;
+    setFlags(0); // Z flag clear
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xD102); // BNE +4
-    }
+    assembleAndWriteThumb("bne #0x8", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch taken: PC = 0x02 + (2*2) = 0x06
-    EXPECT_EQ(cpu.R()[15], 0x00000006u);
+    EXPECT_EQ(R(15), 0x00000006u);
     
     // Test case 2: BNE not taken (Z flag set)
-    set_flags(CPU::FLAG_Z); // Set Z flag
-    cpu.R()[15] = 0x00000000;
+    setFlags(CPU::FLAG_Z); // Set Z flag
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xD102); // BNE +4
-    }
+    assembleAndWriteThumb("bne #0x8", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch not taken: PC = 0x02
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest16, BMI_BPL_CONDITIONAL_BRANCH) {
     // Test case 1: BMI taken (N flag set) - backward branch
-    set_flags(CPU::FLAG_N); // Set N flag
-    cpu.R()[15] = 0x00000010;
+    setFlags(CPU::FLAG_N); // Set N flag
+    R(15) = 0x00000010;
     
-    if (!false) {
-        memory.write16(0x00000010, 0xD4FF); // BMI -2
-    }
+    // Backward branch: D4FF means offset -1. For backwards, need negative offset
+    // Current PC 0x10, want to branch to 0x10 (same location creates loop)
+    // This is a special case - keep manual encoding for backwards branch
+    memory.write16(0x00000010, 0xD4FF); // BMI -2 (manual)
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch taken: PC = 0x12 + (-1*2) = 0x10
-    EXPECT_EQ(cpu.R()[15], 0x00000010u);
+    EXPECT_EQ(R(15), 0x00000010u);
     
     // Test case 2: BPL taken (N flag clear)
-    set_flags(0); // N flag clear
-    cpu.R()[15] = 0x00000000;
+    setFlags(0); // N flag clear
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xD503); // BPL +6
-    }
+    assembleAndWriteThumb("bpl #0xA", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch taken: PC = 0x02 + (3*2) = 0x08
-    EXPECT_EQ(cpu.R()[15], 0x00000008u);
+    EXPECT_EQ(R(15), 0x00000008u);
 }
 
 TEST_F(ThumbCPUTest16, BCS_BCC_CONDITIONAL_BRANCH) {
     // Test case 1: BCS taken (C flag set)
-    set_flags(CPU::FLAG_C); // Set C flag
-    cpu.R()[15] = 0x00000000;
+    setFlags(CPU::FLAG_C); // Set C flag
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xD204); // BCS +8
-    }
+    assembleAndWriteThumb("bcs #0xC", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch taken: PC = 0x02 + (4*2) = 0x0A
-    EXPECT_EQ(cpu.R()[15], 0x0000000Au);
+    EXPECT_EQ(R(15), 0x0000000Au);
     
     // Test case 2: BCC taken (C flag clear)
-    set_flags(0); // C flag clear
-    cpu.R()[15] = 0x00000000;
+    setFlags(0); // C flag clear
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xD305); // BCC +10
-    }
+    assembleAndWriteThumb("bcc #0xE", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch taken: PC = 0x02 + (5*2) = 0x0C
-    EXPECT_EQ(cpu.R()[15], 0x0000000Cu);
+    EXPECT_EQ(R(15), 0x0000000Cu);
 }
 
 TEST_F(ThumbCPUTest16, BVS_CONDITIONAL_BRANCH) {
     // Test case: BVS taken (V flag set)
-    set_flags(CPU::FLAG_V); // Set V flag
-    cpu.R()[15] = 0x00000000;
+    setFlags(CPU::FLAG_V); // Set V flag
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xD603); // BVS +6
-    }
+    assembleAndWriteThumb("bvs #0xA", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch taken: PC = 0x02 + (3*2) = 0x08
-    EXPECT_EQ(cpu.R()[15], 0x00000008u);
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_V)); // Flags preserved
+    EXPECT_EQ(R(15), 0x00000008u);
+    EXPECT_TRUE(getFlag(CPU::FLAG_V)); // Flags preserved
 }
 
 TEST_F(ThumbCPUTest16, BGE_CONDITIONAL_BRANCH) {
     // Test case 1: BGE taken (N == V, both set)
-    set_flags(CPU::FLAG_N | CPU::FLAG_V); // N=1, V=1 (N==V)
-    cpu.R()[15] = 0x00000000;
+    setFlags(CPU::FLAG_N | CPU::FLAG_V); // N=1, V=1 (N==V)
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xDA02); // BGE +4
-    }
+    assembleAndWriteThumb("bge #0x8", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch taken: PC = 0x02 + (2*2) = 0x06
-    EXPECT_EQ(cpu.R()[15], 0x00000006u);
+    EXPECT_EQ(R(15), 0x00000006u);
     
     // Test case 2: BGE not taken (N != V)
-    set_flags(CPU::FLAG_N); // N=1, V=0 (N!=V)
-    cpu.R()[15] = 0x00000000;
+    setFlags(CPU::FLAG_N); // N=1, V=0 (N!=V)
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xDA02); // BGE +4
-    }
+    assembleAndWriteThumb("bge #0x8", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch not taken: PC = 0x02
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(15), 0x00000002u);
     
     // Test case 3: BGE taken (N == V, both clear)
-    set_flags(0); // N=0, V=0 (N==V)
-    cpu.R()[15] = 0x00000000;
+    setFlags(0); // N=0, V=0 (N==V)
+    R(15) = 0x00000000;
     
-    if (!false) {
-        memory.write16(0x00000000, 0xDA02); // BGE +4
-    }
+    assembleAndWriteThumb("bge #0x8", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // Branch taken: PC = 0x02 + (2*2) = 0x06
-    EXPECT_EQ(cpu.R()[15], 0x00000006u);
+    EXPECT_EQ(R(15), 0x00000006u);
 }
 
 TEST_F(ThumbCPUTest16, BACKWARD_BRANCH_MAXIMUM) {
     // Test case: Large backward conditional branch (maximum range)
-    set_flags(CPU::FLAG_Z); // Set condition for BEQ
-    cpu.R()[15] = 0x00000200;
+    setFlags(CPU::FLAG_Z); // Set condition for BEQ
+    R(15) = 0x00000200;
     
     // BEQ with maximum backward offset (-128*2 = -256)
     memory.write16(0x00000200, 0xD080); // BEQ -256 (max backward)
     
-    cpu.execute(1);
+    execute(1);
     
     // PC = 0x202 + (-128*2) = 0x102
-    EXPECT_EQ(cpu.R()[15], 0x00000102u);
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_Z)); // Flags preserved
+    EXPECT_EQ(R(15), 0x00000102u);
+    EXPECT_TRUE(getFlag(CPU::FLAG_Z)); // Flags preserved
 }
 
 TEST_F(ThumbCPUTest16, INSTRUCTION_ENCODING_VALIDATION) {
@@ -303,35 +237,40 @@ TEST_F(ThumbCPUTest16, INSTRUCTION_ENCODING_VALIDATION) {
 
 TEST_F(ThumbCPUTest16, EDGE_CASES_AND_BOUNDARIES) {
     // Test case 1: Zero offset branch (branch to next instruction)
-    set_flags(CPU::FLAG_Z);
-    cpu.R()[15] = 0x00000000;
+    setFlags(CPU::FLAG_Z);
+    R(15) = 0x00000000;
     
-    memory.write16(0x00000000, 0xD000); // BEQ +0
-    cpu.execute(1);
+    // D000 = offset 0 - Keystone works for this
+    assembleAndWriteThumb("beq #0x4", 0x00000000);
+    execute(1);
     
     // Branch to same location: PC = 0x02 + (0*2) = 0x02
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(15), 0x00000002u);
     
     // Test case 2: Maximum forward branch
-    set_flags(CPU::FLAG_Z);
-    cpu.R()[15] = 0x00000000;
+    setFlags(CPU::FLAG_Z);
+    R(15) = 0x00000000;
     
+    // D07F = offset 127, target = 4 + 127*2 = 258 = 0x102
+    // Keystone fails for large offsets (switches to BL instruction at ~0x80+)
+    // Keep manual encoding for maximum range edge cases
     memory.write16(0x00000000, 0xD07F); // BEQ +254 (max forward)
-    cpu.execute(1);
+    execute(1);
     
     // PC = 0x02 + (127*2) = 0x100
-    EXPECT_EQ(cpu.R()[15], 0x00000100u);
+    EXPECT_EQ(R(15), 0x00000100u);
     
     // Test case 3: Branch condition evaluation with multiple flags
-    set_flags(CPU::FLAG_Z | CPU::FLAG_C | CPU::FLAG_N); // Multiple flags set
-    cpu.R()[15] = 0x00000000;
+    setFlags(CPU::FLAG_Z | CPU::FLAG_C | CPU::FLAG_N); // Multiple flags set
+    R(15) = 0x00000000;
     
-    memory.write16(0x00000000, 0xD001); // BEQ +2 (should take since Z is set)
-    cpu.execute(1);
+    // D001 = offset 1 - Keystone works fine for this
+    assembleAndWriteThumb("beq #0x6", 0x00000000);
+    execute(1);
     
-    EXPECT_EQ(cpu.R()[15], 0x00000004u); // Branch taken
+    EXPECT_EQ(R(15), 0x00000004u); // Branch taken
     // Verify all flags preserved
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_Z));
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_C));
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_N));
+    EXPECT_TRUE(getFlag(CPU::FLAG_Z));
+    EXPECT_TRUE(getFlag(CPU::FLAG_C));
+    EXPECT_TRUE(getFlag(CPU::FLAG_N));
 }
