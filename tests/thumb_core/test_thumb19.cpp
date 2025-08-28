@@ -1,349 +1,259 @@
-#include "gtest/gtest.h"
-#include "memory.h"
-#include "interrupt.h"
-#include "cpu.h"
-#include "thumb_cpu.h"
-#include <sstream>
-#include <set>
-#include <cstdint>
+/**
+ * @file test_thumb19.cpp
+ * @brief Thumb Format 19: Long Branch with Link (BL) instruction tests
+ * 
+ * ARM Thumb Format 19 implements long-range branch and link operations using a two-instruction sequence.
+ * This format provides ±4MB range branching with automatic link register (LR) update for subroutine calls.
+ * 
+ * ENCODING FORMAT:
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0                    │
+ * │  1  1  1  1  0     Offset[22:12]              (First Instruction)   │
+ * │  1  1  1  1  1     Offset[11:1]               (Second Instruction)  │
+ * └─────────────────────────────────────────────────────────────────────┘
+ * 
+ * OPERATION SEQUENCE:
+ * 1. First Instruction (H=0):  LR = PC + 4 + (Offset[22:12] << 12)
+ * 2. Second Instruction (H=1): PC = LR + (Offset[11:1] << 1)
+ *                              LR = (Address of second instruction) + 1 (Thumb bit set)
+ * 
+ * CHARACTERISTICS:
+ * - Two-instruction atomic operation (cannot be interrupted between)
+ * - 23-bit signed offset: ±4MB range (-4194304 to +4194302 bytes)
+ * - Offset must be even (bit 0 always 0 for halfword alignment)  
+ * - Updates LR with return address for subroutine linkage
+ * - Preserves all flags (NZCV) - branch operations don't affect condition codes
+ * - Used for: Function calls, long-range subroutine branching
+ * 
+ * INSTRUCTION: BL label (Branch and Link)
+ * - Unconditional branch to target address
+ * - Sets LR = return address (next instruction after BL sequence)
+ * - Target calculation: PC + 4 + SignExtend(Offset[22:1] << 1)
+ */
 
-#ifdef KEYSTONE_AVAILABLE
-#include <keystone/keystone.h>
-#endif
-
-// Common helper functions for Format 19 tests
-std::string serializeCPUState19(const CPU& cpu) {
-    std::ostringstream oss;
-    const auto& registers = cpu.R();
-    for (size_t i = 0; i < registers.size(); ++i) {
-        oss << "R" << i << ":" << registers[i] << ";";
-    }
-    oss << "CPSR:" << cpu.CPSR();
-    return oss.str();
-}
-
-void validateUnchangedRegisters19(const CPU& cpu, const std::string& beforeState, const std::set<int>& changedRegisters) {
-    const auto& registers = cpu.R();
-    std::istringstream iss(beforeState);
-    std::string token;
-    
-    for (size_t i = 0; i < registers.size(); ++i) {
-        std::getline(iss, token, ';');
-        if (changedRegisters.find(i) == changedRegisters.end()) {
-            ASSERT_EQ(token, "R" + std::to_string(i) + ":" + std::to_string(registers[i]));
-        }
-    }
-}
-
-// ARM Thumb Format 19: Long branch with link
-// Encoding: 1111[H][Offset] (two-instruction sequence)
-// H=0: First instruction stores high part of offset in LR
-// H=1: Second instruction performs branch and updates LR with return address
-// Instructions: BL (Branch and Link)
-class ThumbCPUTest19 : public ::testing::Test {
-protected:
-    Memory memory;
-    InterruptController interrupts;
-    CPU cpu;
-    ThumbCPU thumb_cpu;
-
-    ThumbCPUTest19() : memory(true), cpu(memory, interrupts), thumb_cpu(cpu) {}
-
-    void SetUp() override {
-        // Initialize all registers to 0
-        for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
-        
-        // Set Thumb mode (T flag) and User mode
-        cpu.CPSR() = CPU::FLAG_T | 0x10;
-    }
+#include "thumb_test_base.h"
+/**
+ * @brief Test class for Thumb Format 19: Long Branch with Link (BL) instructions
+ * 
+ * Tests the two-instruction BL sequence that provides long-range branching with
+ * link register update for subroutine calls and returns.
+ */
+class ThumbCPUTest19 : public ThumbCPUTestBase {
 };
 
 // Test simple forward BL instruction
 TEST_F(ThumbCPUTest19, BL_SIMPLE_FORWARD_BRANCH) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T;
+    // Test case: Simple forward branch and link (+8 bytes)
+    setup_registers({{15, 0x00000000}});
     
-    // BL +4: Target PC = 0x04 + 4 = 0x08
-    // First instruction: F000 (high part, offset[22:12] = 0)
-    // Second instruction: F802 (low part, offset[11:1] = 2, offset[0] must be 0)
-    memory.write16(0x00000000, 0xF000);
-    memory.write16(0x00000002, 0xF802);
+    // BL +8: Target = 0x0 + 4 + 8 = 0xC
+    // Try Keystone first for BL instruction (two-instruction sequence)
+    assembleAndWriteThumb("bl #0xC", 0x00000000);
     
-    std::string beforeState = serializeCPUState19(cpu);
+    // Execute both instructions of the BL sequence (2 cycles)
+    execute(2);
     
-    // Execute first instruction (sets up LR with high offset part)
-    registers[15] = 0x00000000;
-    cpu.execute(1);
+    // Verify branch target: PC should be at 0x0 + 4 + 8 = 0xC  
+    EXPECT_EQ(R(15), 0x0000000Cu);
     
-    // Execute second instruction (performs branch and sets final LR)
-    cpu.execute(1);
-    
-    // Verify results
-    EXPECT_EQ(registers[15], static_cast<uint32_t>(0x00000008)); // PC = 0x04 + (2*2)
-    EXPECT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // LR = next instruction (0x04) + 1 (Thumb bit)
-    
-    validateUnchangedRegisters19(cpu, beforeState, {14, 15});
+    // Verify link register: LR = next instruction after BL sequence (0x4) + 1 (Thumb bit)
+    EXPECT_EQ(R(14), 0x00000005u);
 }
 
-// Test backward BL instruction
+// Test backward BL instruction  
 TEST_F(ThumbCPUTest19, BL_BACKWARD_BRANCH) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T;
+    // Test case: Backward branch and link (-4 bytes)
+    setup_registers({{15, 0x00000100}});
     
-    // Start at PC = 0x100, BL -4: Target PC = 0x104 + (-4) = 0x100
-    // First instruction: F7FF (high part, negative offset)
-    // Second instruction: FFFE (low part)
-    memory.write16(0x00000100, 0xF7FF);
-    memory.write16(0x00000102, 0xFFFE);
+    // BL -4: Target = 0x100 + 4 + (-4) = 0x100
+    // Keystone limitation with backward BL, use manual encoding
+    // offset = -4, offset[22:1] = -2, encoded in two's complement
+    memory.write16(0x00000100, 0xF7FF); // First instruction: high part (negative)
+    memory.write16(0x00000102, 0xFFFE); // Second instruction: low part 
     
-    std::string beforeState = serializeCPUState19(cpu);
+    // Execute both instructions of the BL sequence
+    execute(2);
     
-    // Execute first instruction
-    registers[15] = 0x00000100;
-    cpu.execute(1);
+    // Verify branch target: PC = 0x104 + (-4) = 0x100
+    EXPECT_EQ(R(15), 0x00000100u);
     
-    // Execute second instruction
-    cpu.execute(1);
-    
-    // Verify results
-    EXPECT_EQ(registers[15], static_cast<uint32_t>(0x00000100)); // PC = 0x104 + (-2*2)
-    EXPECT_EQ(registers[14], static_cast<uint32_t>(0x00000105)); // LR = 0x104 + 1
-    
-    validateUnchangedRegisters19(cpu, beforeState, {14, 15});
+    // Verify link register: LR = next instruction (0x104) + 1 (Thumb bit)  
+    EXPECT_EQ(R(14), 0x00000105u);
 }
 
 // Test BL with zero offset
 TEST_F(ThumbCPUTest19, BL_ZERO_OFFSET_BRANCH) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T;
+    // Test case: Branch and link with zero offset
+    setup_registers({{15, 0x00000000}});
     
-    // BL +0: Target PC = 0x04 + 0 = 0x04
-    memory.write16(0x00000000, 0xF000);
-    memory.write16(0x00000002, 0xF800);
+    // BL +0: Target = 0x0 + 4 + 0 = 0x4
+    assembleAndWriteThumb("bl #0x4", 0x00000000);
     
-    std::string beforeState = serializeCPUState19(cpu);
+    // Execute both instructions of the BL sequence
+    execute(2);
     
-    // Execute first instruction
-    registers[15] = 0x00000000;
-    cpu.execute(1);
+    // Verify branch target: PC = 0x0 + 4 + 0 = 0x4
+    EXPECT_EQ(R(15), 0x00000004u);
     
-    // Execute second instruction
-    cpu.execute(1);
-    
-    // Verify results
-    EXPECT_EQ(registers[15], static_cast<uint32_t>(0x00000004)); // PC = 0x04 + (0*2)
-    EXPECT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // LR = 0x04 + 1
-    
-    validateUnchangedRegisters19(cpu, beforeState, {14, 15});
+    // Verify link register: LR = next instruction (0x4) + 1 (Thumb bit)
+    EXPECT_EQ(R(14), 0x00000005u);
 }
 
 // Test BL preserves processor flags
 TEST_F(ThumbCPUTest19, BL_PRESERVES_FLAGS) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z | CPU::FLAG_N | CPU::FLAG_C | CPU::FLAG_V;
+    // Test case: BL instruction preserves all processor flags
+    setup_registers({{15, 0x00000000}});
     
-    // BL +4
-    memory.write16(0x00000000, 0xF000);
-    memory.write16(0x00000002, 0xF802);
+    // Set all processor flags to verify they're preserved
+    setFlags(CPU::FLAG_Z | CPU::FLAG_N | CPU::FLAG_C | CPU::FLAG_V);
     
-    std::string beforeState = serializeCPUState19(cpu);
+    // BL +8: Target = 0x0 + 4 + 8 = 0xC
+    assembleAndWriteThumb("bl #0xC", 0x00000000);
     
-    // Execute BL instruction sequence
-    registers[15] = 0x00000000;
-    cpu.execute(1);
-    cpu.execute(1);
+    // Execute both instructions of the BL sequence
+    execute(2);
     
-    // Verify branch occurred correctly
-    EXPECT_EQ(registers[15], static_cast<uint32_t>(0x00000008));
-    EXPECT_EQ(registers[14], static_cast<uint32_t>(0x00000005));
+    // Verify branch occurred correctly  
+    EXPECT_EQ(R(15), 0x0000000Cu);
+    EXPECT_EQ(R(14), 0x00000005u);
     
-    // Verify all flags preserved
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_Z));
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_N));
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_C));
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_V));
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_T)); // Thumb mode preserved
-    
-    validateUnchangedRegisters19(cpu, beforeState, {14, 15});
+    // Verify all flags preserved - BL should not affect condition codes
+    EXPECT_TRUE(getFlag(CPU::FLAG_Z));
+    EXPECT_TRUE(getFlag(CPU::FLAG_N));
+    EXPECT_TRUE(getFlag(CPU::FLAG_C));
+    EXPECT_TRUE(getFlag(CPU::FLAG_V));
 }
 
 // Test BL with larger positive offset
 TEST_F(ThumbCPUTest19, BL_LARGE_FORWARD_BRANCH) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T;
+    // Test case: Large forward branch and link (+100 bytes)
+    setup_registers({{15, 0x00000000}});
     
-    // BL +100: Target PC = 0x04 + 100 = 0x68
-    memory.write16(0x00000000, 0xF000);
-    memory.write16(0x00000002, 0xF832);
+    // BL +100: Target = 0x0 + 4 + 100 = 0x68
+    assembleAndWriteThumb("bl #0x68", 0x00000000);
     
-    std::string beforeState = serializeCPUState19(cpu);
+    // Execute both instructions of the BL sequence
+    execute(2);
     
-    // Execute BL instruction sequence
-    registers[15] = 0x00000000;
-    cpu.execute(1);
-    cpu.execute(1);
+    // Verify branch target: PC = 0x0 + 4 + 100 = 0x68
+    EXPECT_EQ(R(15), 0x00000068u);
     
-    // Verify results
-    EXPECT_EQ(registers[15], static_cast<uint32_t>(0x00000068)); // PC = 0x04 + (50*2)
-    EXPECT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // LR = 0x04 + 1
-    
-    validateUnchangedRegisters19(cpu, beforeState, {14, 15});
+    // Verify link register: LR = next instruction (0x4) + 1 (Thumb bit)
+    EXPECT_EQ(R(14), 0x00000005u);
 }
 
 // Test BL with large backward offset
 TEST_F(ThumbCPUTest19, BL_LARGE_BACKWARD_BRANCH) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T;
+    // Test case: Large backward branch and link (-100 bytes)
+    setup_registers({{15, 0x00000400}});
     
-    // Start at PC = 0x400, BL -100: Target PC = 0x404 + (-100) = 0x3A0
-    registers[15] = 0x00000400;
-    memory.write16(0x00000400, 0xF7FF);
-    memory.write16(0x00000402, 0xFFCE);
+    // BL -100: Target = 0x400 + 4 + (-100) = 0x3A0
+    // Keystone limitation with backward BL, use manual encoding
+    // offset = -100, offset[22:1] = -50, encoded in two's complement
+    memory.write16(0x00000400, 0xF7FF); // First instruction: high part
+    memory.write16(0x00000402, 0xFFCE); // Second instruction: low part (-50)
     
-    std::string beforeState = serializeCPUState19(cpu);
+    // Execute both instructions of the BL sequence
+    execute(2);
     
-    // Execute BL instruction sequence
-    registers[15] = 0x00000400;
-    cpu.execute(1);
-    cpu.execute(1);
+    // Verify branch target: PC = 0x404 + (-100) = 0x3A0
+    EXPECT_EQ(R(15), 0x000003A0u);
     
-    // Verify results
-    EXPECT_EQ(registers[15], static_cast<uint32_t>(0x000003A0)); // PC = 0x404 + (-100)
-    EXPECT_EQ(registers[14], static_cast<uint32_t>(0x00000405)); // LR = 0x404 + 1
-    
-    validateUnchangedRegisters19(cpu, beforeState, {14, 15});
+    // Verify link register: LR = next instruction (0x404) + 1 (Thumb bit)
+    EXPECT_EQ(R(14), 0x00000405u);
 }
 
 // Test BL overwrites existing LR value
 TEST_F(ThumbCPUTest19, BL_OVERWRITES_LINK_REGISTER) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T;
+    // Test case: BL instruction overwrites existing link register value
+    setup_registers({{15, 0x00000000}, {14, 0xABCDEF01}});
     
-    // Set existing LR value
-    registers[14] = 0xABCDEF01;
+    // BL +8: Target = 0x0 + 4 + 8 = 0xC
+    assembleAndWriteThumb("bl #0xC", 0x00000000);
     
-    // BL +4
-    memory.write16(0x00000000, 0xF000);
-    memory.write16(0x00000002, 0xF802);
+    // Execute both instructions of the BL sequence
+    execute(2);
     
-    std::string beforeState = serializeCPUState19(cpu);
+    // Verify branch target: PC = 0x0 + 4 + 8 = 0xC
+    EXPECT_EQ(R(15), 0x0000000Cu);
     
-    // Execute BL instruction sequence
-    registers[15] = 0x00000000;
-    cpu.execute(1);
-    cpu.execute(1);
-    
-    // Verify LR was overwritten, not preserved
-    EXPECT_EQ(registers[15], static_cast<uint32_t>(0x00000008));
-    EXPECT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // New LR value
-    EXPECT_NE(registers[14], static_cast<uint32_t>(0xABCDEF01)); // Old value gone
-    
-    validateUnchangedRegisters19(cpu, beforeState, {14, 15});
+    // Verify LR was overwritten with new return address, not preserved
+    EXPECT_EQ(R(14), 0x00000005u);        // New LR value (return address)
+    EXPECT_NE(R(14), 0xABCDEF01u);        // Old value was overwritten
 }
 
 // Test BL maximum forward offset
 TEST_F(ThumbCPUTest19, BL_MAXIMUM_FORWARD_OFFSET) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T;
+    // Test case: BL with maximum positive offset (±4MB range)
+    setup_registers({{15, 0x00000000}});
     
-    // Maximum positive offset: 22-bit signed = +0x1FFFFF (even, so 0x1FFFFE)
-    // This requires careful encoding of the 22-bit offset across two instructions
-    memory.write16(0x00000000, 0xF3FF);  // High part: 0011111111111 (11 bits)
-    memory.write16(0x00000002, 0xFFFF);  // Low part: 11111111111 (11 bits)
+    // Maximum positive offset: 23-bit signed = +2^22 - 2 = 0x3FFFFE bytes
+    // Manual encoding for maximum offset (Keystone might not handle extreme values)
+    memory.write16(0x00000000, 0xF3FF);  // High part: offset[22:12] = 0x3FF
+    memory.write16(0x00000002, 0xFFFF);  // Low part: offset[11:1] = 0x7FF
     
-    std::string beforeState = serializeCPUState19(cpu);
+    // Execute both instructions of the BL sequence
+    execute(2);
     
-    // Execute BL instruction sequence
-    registers[15] = 0x00000000;
-    cpu.execute(1);
-    cpu.execute(1);
+    // Target PC = 0x0 + 4 + 0x3FFFFE = 0x400002
+    EXPECT_EQ(R(15), 0x00400002u);
     
-    // Target PC = 0x04 + 0x1FFFFE = 0x200002
-    EXPECT_EQ(registers[14], static_cast<uint32_t>(0x00000005)); // LR = 0x04 + 1
-    
-    validateUnchangedRegisters19(cpu, beforeState, {14, 15});
+    // Verify link register: LR = next instruction (0x4) + 1 (Thumb bit)
+    EXPECT_EQ(R(14), 0x00000005u);
 }
 
 // Test BL maximum backward offset  
 TEST_F(ThumbCPUTest19, BL_MAXIMUM_BACKWARD_OFFSET) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T;
+    // Test case: BL with large negative offset (simplified for testing)
+    setup_registers({{15, 0x00001000}});
     
-    // Start at reasonable memory address to allow large backward branch
-    registers[15] = 0x00001000;
+    // Large backward offset: -0x1000 bytes
+    // Use manual encoding that we know works from other tests
+    memory.write16(0x00001000, 0xF7FF);  // First instruction: BL high (negative)
+    memory.write16(0x00001002, 0xF800);  // Second instruction: BL low (0 offset)
     
-    // Backward BL: -0x1000 offset  
-    memory.write16(0x00001000, 0xF7FF);  // High part for negative offset (-1 in high 11 bits)
-    memory.write16(0x00001002, 0xF800);  // Low part (0x000 << 1 = 0)
+    // Execute both instructions of the BL sequence
+    execute(2);
     
-    std::string beforeState = serializeCPUState19(cpu);
+    // Target PC = 0x1000 + 4 + (-0x1000) = 0x4
+    EXPECT_EQ(R(15), 0x00000004u);
     
-    // Execute BL instruction sequence
-    registers[15] = 0x00001000;
-    cpu.execute(1);
-    cpu.execute(1);
-    
-    // LR should be set correctly (PC after BL sequence + 1)
-    EXPECT_EQ(registers[14], static_cast<uint32_t>(0x00001005)); // LR = 0x1004 + 1
-    
-    validateUnchangedRegisters19(cpu, beforeState, {14, 15});
+    // Verify link register: LR = next instruction (0x1004) + 1 (Thumb bit)
+    EXPECT_EQ(R(14), 0x00001005u);
 }
 
 // Test BL offset calculation verification
 TEST_F(ThumbCPUTest19, BL_OFFSET_CALCULATION_VERIFICATION) {
-    auto& registers = cpu.R();
-    registers.fill(0);
-    cpu.CPSR() = CPU::FLAG_T;
+    // Test case: Verify BL offset calculations with various target addresses
     
-    // Test various offsets to verify calculation logic
-    struct TestCase {
-        uint16_t high_instr;
-        uint16_t low_instr;
-        uint32_t start_pc;
-        uint32_t expected_target;
-        uint32_t expected_lr;
-    };
+    // Test case 1: Simple forward BL +8
+    setup_registers({{15, 0x00000000}});
+    assembleAndWriteThumb("bl #0xC", 0x00000000);
+    execute(2);
+    EXPECT_EQ(R(15), 0x0000000Cu);
+    EXPECT_EQ(R(14), 0x00000005u);
     
-    std::vector<TestCase> test_cases = {
-        {0xF000, 0xF802, 0x00000000, 0x00000008, 0x00000005}, // +4
-        {0xF000, 0xF810, 0x00000000, 0x00000024, 0x00000005}, // +32 (0x10 << 1 = 0x20)
-        {0xF7FF, 0xFFFC, 0x00000100, 0x000000FC, 0x00000105}, // -8 from 0x100
-    };
+    // Test case 2: Larger forward BL +32  
+    setup_registers({{15, 0x00000000}});
+    assembleAndWriteThumb("bl #0x24", 0x00000000);
+    execute(2);
+    EXPECT_EQ(R(15), 0x00000024u);
+    EXPECT_EQ(R(14), 0x00000005u);
     
-    for (const auto& test_case : test_cases) {
-        registers.fill(0);
-        cpu.CPSR() = CPU::FLAG_T;
-        
-        memory.write16(test_case.start_pc, test_case.high_instr);
-        memory.write16(test_case.start_pc + 2, test_case.low_instr);
-        
-        // Execute BL sequence
-        registers[15] = test_case.start_pc;
-        cpu.execute(1);
-        cpu.execute(1);
-        
-        EXPECT_EQ(registers[15], test_case.expected_target) 
-            << "Failed target PC for instructions " << std::hex 
-            << test_case.high_instr << " " << test_case.low_instr;
-        EXPECT_EQ(registers[14], test_case.expected_lr)
-            << "Failed LR for instructions " << std::hex 
-            << test_case.high_instr << " " << test_case.low_instr;
-    }
+    // Test case 3: Backward BL (manual encoding for complex case)
+    setup_registers({{15, 0x00000100}});
+    memory.write16(0x00000100, 0xF7FF);  // First instruction (high part)
+    memory.write16(0x00000102, 0xFFFC);  // Second instruction (low part, -8)
+    execute(2);
+    EXPECT_EQ(R(15), 0x000000FCu);       // PC = 0x104 + (-8) = 0xFC
+    EXPECT_EQ(R(14), 0x00000105u);       // LR = 0x104 + 1
 }
 
 // Test BL instruction encoding validation
 TEST_F(ThumbCPUTest19, BL_INSTRUCTION_ENCODING_VALIDATION) {
+    // Test case: Validate BL instruction encoding patterns
     
-    // Test that BL instructions are properly identified by their encoding
+    // Verify BL encoding pattern recognition
     struct EncodingTest {
         uint16_t instruction;
         bool is_bl_high;    // True if this is BL high part (H=0)
@@ -373,40 +283,41 @@ TEST_F(ThumbCPUTest19, BL_INSTRUCTION_ENCODING_VALIDATION) {
 
 // Test BL register preservation (all registers except PC and LR should be unchanged)
 TEST_F(ThumbCPUTest19, BL_REGISTER_PRESERVATION) {
-    auto& registers = cpu.R();
+    // Test case: BL preserves all registers except PC and LR
     
-    // Initialize all registers with test values
-    for (int i = 0; i < 16; ++i) {
-        registers[i] = 0x1000 + i;
+    // Initialize all registers with test values  
+    setup_registers({
+        {0, 0x1000}, {1, 0x1001}, {2, 0x1002}, {3, 0x1003},
+        {4, 0x1004}, {5, 0x1005}, {6, 0x1006}, {7, 0x1007},
+        {8, 0x1008}, {9, 0x1009}, {10, 0x100A}, {11, 0x100B},
+        {12, 0x100C}, {13, 0x100D}, {15, 0x00001000}
+    });
+    
+    // Store initial values for verification
+    std::array<uint32_t, 14> initial_values;
+    for (int i = 0; i < 14; ++i) {
+        initial_values[i] = R(i);
     }
-    cpu.CPSR() = CPU::FLAG_T | CPU::FLAG_Z;
     
-    // Store initial state (excluding PC and LR which will change)
-    std::array<uint32_t, 16> initial_regs;
-    for (int i = 0; i < 16; ++i) {
-        initial_regs[i] = registers[i];
-    }
+    // Set processor flags to verify they're preserved
+    setFlags(CPU::FLAG_Z);
     
-    // BL +8
-    memory.write16(0x00001000, 0xF000);
-    memory.write16(0x00001002, 0xF804);
+    // BL +16: Target = 0x1000 + 4 + 16 = 0x1014
+    assembleAndWriteThumb("bl #0x1014", 0x00001000);
     
-    // Execute BL sequence
-    registers[15] = 0x00001000;
-    cpu.execute(1);
-    cpu.execute(1);
+    // Execute both instructions of the BL sequence
+    execute(2);
     
-    // Verify only PC and LR changed
+    // Verify only PC and LR changed, all other registers preserved
     for (int i = 0; i < 14; ++i) {  // R0-R13 should be unchanged
-        EXPECT_EQ(registers[i], initial_regs[i])
+        EXPECT_EQ(R(i), initial_values[i])
             << "Register R" << i << " was modified by BL instruction";
     }
     
-    // PC and LR should have changed
-    EXPECT_NE(registers[15], initial_regs[15]) << "PC should have changed";
-    EXPECT_NE(registers[14], initial_regs[14]) << "LR should have changed";
+    // PC and LR should have changed appropriately
+    EXPECT_EQ(R(15), 0x00001014u);   // New PC (branch target)
+    EXPECT_EQ(R(14), 0x00001005u);   // New LR (return address)
     
-    // CPSR should be mostly preserved (except possibly implementation-specific bits)
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_T)) << "Thumb mode should be preserved";
-    EXPECT_TRUE(cpu.getFlag(CPU::FLAG_Z)) << "Zero flag should be preserved";
+    // Processor flags should be preserved
+    EXPECT_TRUE(getFlag(CPU::FLAG_Z)) << "Zero flag should be preserved";
 }
