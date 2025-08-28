@@ -1781,12 +1781,13 @@ TEST_F(ARMDataProcessingTest, TST_FlagsUnchangedWhenConditionNotMet) {
     cpu.R()[0] = 0xFFFFFFFF;
     cpu.R()[1] = 0x1;
     cpu.R()[15] = 0x00000000;
-    cpu.CPSR() = 0xA0000000; // N and C set
+    cpu.CPSR() = 0xE0000000; // N, Z, and C set - makes NE condition false
     assemble_and_write("tstne r0, r1", cpu.R()[15]);
     arm_cpu.execute(1);
     // Should not execute, flags unchanged
-    EXPECT_TRUE(cpu.CPSR() & (1u << 31));
-    EXPECT_TRUE(cpu.CPSR() & (1u << 29));
+    EXPECT_TRUE(cpu.CPSR() & (1u << 31)); // N should remain set
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z should remain set  
+    EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C should remain set
 }
 
 TEST_F(ARMDataProcessingTest, TST_EdgeValues) {
@@ -2018,8 +2019,11 @@ TEST_F(ARMDataProcessingTest, TEQ_ImmediateRotated) {
     cpu.CPSR() = 0;
     assemble_and_write("teq r0, #0xFF000000", cpu.R()[15]);
     arm_cpu.execute(1);
-    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear
-    EXPECT_TRUE(cpu.CPSR() & (1u << 31)); // N set
+    // TEQ performs XOR: 0xFFFFFFFF XOR 0xFF000000 = 0x00FFFFFF
+    // Result has MSB = 0, so N should be 0 (false)
+    // Result is non-zero, so Z should be 0 (false)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear (result non-zero)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N clear (MSB = 0)
 }
 
 // ===================== CMP Tests =====================
@@ -2293,12 +2297,13 @@ TEST_F(ARMDataProcessingTest, CMN_FlagsUnchangedWhenConditionNotMet) {
     cpu.R()[0] = 0xFFFFFFFF;
     cpu.R()[1] = 0x1;
     cpu.R()[15] = 0x00000000;
-    cpu.CPSR() = 0xA0000000; // N and C set
+    cpu.CPSR() = 0xE0000000; // N, Z, and C set - makes NE condition false
     assemble_and_write("cmnne r0, r1", cpu.R()[15]);
     arm_cpu.execute(1);
     // Should not execute, flags unchanged
-    EXPECT_TRUE(cpu.CPSR() & (1u << 31));
-    EXPECT_TRUE(cpu.CPSR() & (1u << 29));
+    EXPECT_TRUE(cpu.CPSR() & (1u << 31)); // N should remain set
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z should remain set
+    EXPECT_TRUE(cpu.CPSR() & (1u << 29)); // C should remain set
 }
 
 TEST_F(ARMDataProcessingTest, CMN_EdgeValues) {

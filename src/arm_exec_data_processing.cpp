@@ -603,16 +603,25 @@ void ARMCPU::exec_arm_msr_imm(uint32_t instruction) {
             parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
             DEBUG_INFO("MSR IMM: CPSR control field set to " + debug_to_hex_string(value & 0xFF, 2));
         }
-        // Flag field (bit 1)
+        // Extension field (bit 1)
         if (mask & 2) {
+            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF00) | (value & 0xFF00);
+            DEBUG_INFO("MSR IMM: CPSR extension field set to " + debug_to_hex_string(value & 0xFF00, 4));
+        }
+        // Status field (bit 2) 
+        if (mask & 4) {
+            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF0000) | (value & 0xFF0000);
+            DEBUG_INFO("MSR IMM: CPSR status field set to " + debug_to_hex_string(value & 0xFF0000, 6));
+        }
+        // Flag field (bit 3)
+        if (mask & 8) {
             // Set all flag bits (N,Z,C,V) from value
             uint32_t flags = value & 0xF0000000;
             parentCPU.CPSR() = (parentCPU.CPSR() & ~0xF0000000) | flags;
             DEBUG_INFO("MSR IMM: CPSR flag field set to " + debug_to_hex_string(flags, 8));
         }
-        // Status field (bit 2) and extension field (bit 3) can be added if needed
-        if (!(mask & 1) && !(mask & 2)) {
-            DEBUG_LOG("MSR: Only control and flag fields supported, mask=" + std::to_string(mask));
+        if (!(mask & 1) && !(mask & 2) && !(mask & 4) && !(mask & 8)) {
+            DEBUG_LOG("MSR: Only control, extension, status, and flag fields supported, mask=" + std::to_string(mask));
         }
     } else {
         DEBUG_LOG("MSR IMM: SPSR write not implemented");
@@ -639,16 +648,25 @@ void ARMCPU::exec_arm_msr_reg(uint32_t instruction) {
             parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
             DEBUG_INFO("MSR REG: CPSR control field set to " + debug_to_hex_string(value & 0xFF, 2));
         }
-        // Flag field (bit 1)
+        // Extension field (bit 1)
         if (mask & 2) {
+            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF00) | (value & 0xFF00);
+            DEBUG_INFO("MSR REG: CPSR extension field set to " + debug_to_hex_string(value & 0xFF00, 4));
+        }
+        // Status field (bit 2)
+        if (mask & 4) {
+            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF0000) | (value & 0xFF0000);
+            DEBUG_INFO("MSR REG: CPSR status field set to " + debug_to_hex_string(value & 0xFF0000, 6));
+        }
+        // Flag field (bit 3)
+        if (mask & 8) {
             // Set all flag bits (N,Z,C,V) from value
             uint32_t flags = value & 0xF0000000;
             parentCPU.CPSR() = (parentCPU.CPSR() & ~0xF0000000) | flags;
             DEBUG_INFO("MSR REG: CPSR flag field set to " + debug_to_hex_string(flags, 8));
         }
-        // Status field (bit 2) and extension field (bit 3) can be added if needed
-        if (!(mask & 1) && !(mask & 2)) {
-            DEBUG_LOG("MSR REG: Only control and flag fields supported, mask=" + std::to_string(mask));
+        if (!(mask & 1) && !(mask & 2) && !(mask & 4) && !(mask & 8)) {
+            DEBUG_LOG("MSR REG: Only control, extension, status, and flag fields supported, mask=" + std::to_string(mask));
         }
     } else {
         DEBUG_LOG("MSR REG: SPSR write not implemented");
