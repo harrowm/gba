@@ -1,83 +1,44 @@
-// test_thumb13.cpp - Modern Thumb CPU test fixture for Format 13: Stack operations
+/**
+ * test_thumb13.cpp - Thumb Format 13: Add/Subtract offset to Stack Pointer
+ *
+ * Tests the ARMv4T Thumb Format 13 instruction encoding for stack pointer
+ * adjustment operations that modify the stack pointer by immediate values.
+ *
+ * THUMB FORMAT 13: Add/Subtract offset to Stack Pointer
+ * =====================================================
+ * Encoding: 1011 0000 S offset7[6:0]
+ * 
+ * Instruction Forms:
+ * - ADD SP, #imm7*4  - Add immediate to stack pointer     (S=0: 0xB000-0xB07F)
+ * - SUB SP, #imm7*4  - Subtract immediate from stack pointer (S=1: 0xB080-0xB0FF)
+ *
+ * Field Definitions:
+ * - S: Operation selector (0=ADD, 1=SUB)
+ * - offset7[6:0]: Immediate offset in words (multiply by 4 for byte offset)
+ *
+ * Operation Details:
+ * - ADD: SP = SP + (offset7 * 4)
+ * - SUB: SP = SP - (offset7 * 4)
+ * - Offset range: 0-508 bytes (0-127 words)
+ * - Used for stack frame allocation and deallocation
+ * - Does not affect condition flags
+ * - Stack pointer remains word-aligned
+ *
+ * Test Infrastructure:
+ * - Uses ThumbCPUTestBase for modern test patterns
+ * - Keystone assembler compatibility with ARMv4T Thumb-1 instruction set  
+ * - Comprehensive coverage of immediate offset ranges with scaling verification
+ * - Stack frame allocation/deallocation scenarios
+ * - Boundary condition testing for maximum offsets
+ */
+
 #include <gtest/gtest.h>
-#include "memory.h"
-#include "interrupt.h"
-#include "cpu.h"
-#include "thumb_cpu.h"
-#include <initializer_list>
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include "thumb_test_base.h"
 
-extern "C" {
-#include <keystone/keystone.h>
-}
-
-class ThumbCPUTest13 : public ::testing::Test {
-protected:
-    Memory memory;
-    InterruptController interrupts;
-    CPU cpu;
-    ThumbCPU thumb_cpu;
-    ks_engine* ks; // Keystone handle
-
-    ThumbCPUTest13() : memory(true), cpu(memory, interrupts), thumb_cpu(cpu), ks(nullptr) {}
-
-    void SetUp() override {
-        // Initialize all registers to 0
-        for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
-        
-        // Set Thumb mode (T flag) and User mode
-        cpu.CPSR() = CPU::FLAG_T | 0x10;
-        
-        // Initialize Keystone for Thumb mode
-        if (ks) ks_close(ks);
-        // Use KS_MODE_THUMB without V8 to get 16-bit Thumb-1 instructions
-        if (ks_open(KS_ARCH_ARM, KS_MODE_THUMB, &ks) != KS_ERR_OK) {
-            FAIL() << "Failed to initialize Keystone for Thumb mode";
-        }
-        
-        // Try to set syntax to not be fatal if it fails
-        ks_option(ks, KS_OPT_SYNTAX, KS_OPT_SYNTAX_INTEL);
-    }
-
-    void TearDown() override {
-        if (ks) {
-            ks_close(ks);
-            ks = nullptr;
-        }
-    }
-
-    bool assemble_and_write_thumb(const std::string& assembly, uint32_t address) {
-        unsigned char *machine_code;
-        size_t machine_size;
-        size_t statement_count;
-        
-        // Force Thumb-1 mode with .thumb directive
-        std::string full_assembly = ".thumb\n" + assembly;
-        
-        int err = ks_asm(ks, full_assembly.c_str(), address, &machine_code, &machine_size, &statement_count);
-        if ((ks_err)err != KS_ERR_OK) {
-            fprintf(stderr, "Keystone Thumb error: %s\n", ks_strerror((ks_err)err));
-            return false;
-        }
-
-        if (machine_size >= 2) {
-            // Write instruction to memory (Thumb instructions are 16-bit)
-            uint16_t instruction = (machine_code[1] << 8) | machine_code[0];
-            memory.write16(address, instruction);            
-        }
-
-        ks_free(machine_code);
-        return true;
-    }
-
-    void setup_registers(std::initializer_list<std::pair<int, uint32_t>> reg_values) {
-        // Clear all registers first
-        cpu.R().fill(0);
-        
-        // Set specified register values
-        for (const auto& pair : reg_values) {
-            cpu.R()[pair.first] = pair.second;
-        }
-    }
+class ThumbCPUTest13 : public ThumbCPUTestBase {
 };
 
 // ARM Thumb Format 13: Add/Subtract offset to Stack Pointer
@@ -91,12 +52,12 @@ TEST_F(ThumbCPUTest13, AddSpImmediateBasic) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual encoding for ADD SP, #0: 0xB000
-    memory.write16(0x00000000, 0xB000);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x0", 0x00000000);
+    execute(1);
     
     // SP should remain unchanged
-    EXPECT_EQ(cpu.R()[13], 0x00001000u);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00001000u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, AddSpImmediateSmall) {
@@ -104,12 +65,12 @@ TEST_F(ThumbCPUTest13, AddSpImmediateSmall) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual encoding for ADD SP, #4: 0xB001
-    memory.write16(0x00000000, 0xB001);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x4", 0x00000000);
+    execute(1);
     
     // SP should be incremented by 4
-    EXPECT_EQ(cpu.R()[13], 0x00001004u);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00001004u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, AddSpImmediateMedium) {
@@ -117,12 +78,12 @@ TEST_F(ThumbCPUTest13, AddSpImmediateMedium) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual instruction encoding: 1011 0000 S=0 offset7=8 (32/4)
-    memory.write16(0x00000000, 0xB008);  // ADD SP, #32
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x20", 0x00000000);  // ADD SP, #32
+    execute(1);
     
     // SP should be incremented by 32
-    EXPECT_EQ(cpu.R()[13], 0x00001020u);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00001020u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, AddSpImmediateLarge) {
@@ -130,12 +91,12 @@ TEST_F(ThumbCPUTest13, AddSpImmediateLarge) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual instruction encoding: 1011 0000 S=0 offset7=32 (128/4)
-    memory.write16(0x00000000, 0xB020);  // ADD SP, #128
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x80", 0x00000000);  // ADD SP, #128
+    execute(1);
     
     // SP should be incremented by 128
-    EXPECT_EQ(cpu.R()[13], 0x00001080u);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00001080u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, AddSpImmediateMaximum) {
@@ -143,12 +104,12 @@ TEST_F(ThumbCPUTest13, AddSpImmediateMaximum) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual instruction encoding: 1011 0000 S=0 offset7=127 (508/4)
-    memory.write16(0x00000000, 0xB07F);  // ADD SP, #508
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x1FC", 0x00000000);  // ADD SP, #508
+    execute(1);
     
     // SP should be incremented by 508
-    EXPECT_EQ(cpu.R()[13], 0x000011FCu);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x000011FCu);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, SubSpImmediateBasic) {
@@ -156,12 +117,12 @@ TEST_F(ThumbCPUTest13, SubSpImmediateBasic) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual encoding for SUB SP, #0: 0xB080
-    memory.write16(0x00000000, 0xB080);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("sub sp, #0x0", 0x00000000);
+    execute(1);
     
     // SP should remain unchanged
-    EXPECT_EQ(cpu.R()[13], 0x00001000u);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00001000u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, SubSpImmediateSmall) {
@@ -169,12 +130,12 @@ TEST_F(ThumbCPUTest13, SubSpImmediateSmall) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual encoding for SUB SP, #4: 0xB081
-    memory.write16(0x00000000, 0xB081);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("sub sp, #0x4", 0x00000000);
+    execute(1);
     
     // SP should be decremented by 4
-    EXPECT_EQ(cpu.R()[13], 0x00000FFCu);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00000FFCu);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, SubSpImmediateMedium) {
@@ -182,12 +143,12 @@ TEST_F(ThumbCPUTest13, SubSpImmediateMedium) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual instruction encoding: 1011 0000 S=1 offset7=8 (32/4)
-    memory.write16(0x00000000, 0xB088);  // SUB SP, #32
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("sub sp, #0x20", 0x00000000);  // SUB SP, #32
+    execute(1);
     
     // SP should be decremented by 32
-    EXPECT_EQ(cpu.R()[13], 0x00000FE0u);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00000FE0u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, SubSpImmediateLarge) {
@@ -195,12 +156,12 @@ TEST_F(ThumbCPUTest13, SubSpImmediateLarge) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual instruction encoding: 1011 0000 S=1 offset7=32 (128/4)
-    memory.write16(0x00000000, 0xB0A0);  // SUB SP, #128
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("sub sp, #0x80", 0x00000000);  // SUB SP, #128
+    execute(1);
     
     // SP should be decremented by 128
-    EXPECT_EQ(cpu.R()[13], 0x00000F80u);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00000F80u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, SubSpImmediateMaximum) {
@@ -208,12 +169,12 @@ TEST_F(ThumbCPUTest13, SubSpImmediateMaximum) {
     setup_registers({{13, 0x00001000}});  // Set SP
     
     // Manual instruction encoding: 1011 0000 S=1 offset7=127 (508/4)
-    memory.write16(0x00000000, 0xB0FF);  // SUB SP, #508
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("sub sp, #0x1FC", 0x00000000);  // SUB SP, #508
+    execute(1);
     
     // SP should be decremented by 508
-    EXPECT_EQ(cpu.R()[13], 0x00000E04u);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00000E04u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, OffsetRangeValidation) {
@@ -223,35 +184,36 @@ TEST_F(ThumbCPUTest13, OffsetRangeValidation) {
     for (uint32_t offset : test_offsets) {
         // Test ADD SP
         cpu.R().fill(0);
-        cpu.R()[13] = 0x00001000;
-        cpu.R()[15] = 0x00000000;
+        R(13) = 0x00001000;
+        R(15) = 0x00000000;
         
-        // Manual instruction encoding for ADD: 1011 0000 0 [offset7]
-        uint16_t offset7 = offset / 4;
-        uint16_t add_opcode = 0xB000 | offset7;
-        memory.write16(0x00000000, add_opcode);
-        thumb_cpu.execute(1);
+        // Use assembleAndWriteThumb for ADD SP with hex format
+        std::stringstream ss;
+        ss << "add sp, #0x" << std::hex << offset;
+        assembleAndWriteThumb(ss.str(), 0x00000000);
+        execute(1);
         
         uint32_t expected_sp = 0x00001000 + offset;
-        EXPECT_EQ(cpu.R()[13], expected_sp) 
+        EXPECT_EQ(R(13), expected_sp) 
             << "ADD SP, #" << offset << " failed. Expected: 0x" 
-            << std::hex << expected_sp << ", Got: 0x" << cpu.R()[13];
+            << std::hex << expected_sp << ", Got: 0x" << R(13);
         
         // Test SUB SP (only if SP won't underflow too much)
         if (offset <= 0x1000) {
             cpu.R().fill(0);
-            cpu.R()[13] = 0x00001000;
-            cpu.R()[15] = 0x00000000;
+            R(13) = 0x00001000;
+            R(15) = 0x00000000;
             
-            // Manual instruction encoding for SUB: 1011 0000 1 [offset7]
-            uint16_t sub_opcode = 0xB080 | offset7;
-            memory.write16(0x00000000, sub_opcode);
-            thumb_cpu.execute(1);
+            // Use assembleAndWriteThumb for SUB SP with hex format
+            std::stringstream ss;
+            ss << "sub sp, #0x" << std::hex << offset;
+            assembleAndWriteThumb(ss.str(), 0x00000000);
+            execute(1);
             
             uint32_t expected_sp_sub = 0x00001000 - offset;
-            EXPECT_EQ(cpu.R()[13], expected_sp_sub)
+            EXPECT_EQ(R(13), expected_sp_sub)
                 << "SUB SP, #" << offset << " failed. Expected: 0x" 
-                << std::hex << expected_sp_sub << ", Got: 0x" << cpu.R()[13];
+                << std::hex << expected_sp_sub << ", Got: 0x" << R(13);
         }
     }
 }
@@ -259,55 +221,55 @@ TEST_F(ThumbCPUTest13, OffsetRangeValidation) {
 TEST_F(ThumbCPUTest13, AddSubSequenceTest) {
     // Test ADD then SUB same amount - should return to original
     setup_registers({{13, 0x00001000}});  // Set SP
-    uint32_t initial_sp = cpu.R()[13];
+    uint32_t initial_sp = R(13);
     
     // ADD SP, #32 - Manual encoding: 0xB008
-    memory.write16(0x00000000, 0xB008);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x20", 0x00000000);
+    execute(1);
     
-    EXPECT_EQ(cpu.R()[13], initial_sp + 32);
+    EXPECT_EQ(R(13), initial_sp + 32);
     
     // SUB SP, #32 - Manual encoding: 0xB088
-    cpu.R()[15] = 0x00000000; // Reset PC
-    memory.write16(0x00000000, 0xB088);
-    thumb_cpu.execute(1);
+    R(15) = 0x00000000; // Reset PC
+    assembleAndWriteThumb("sub sp, #0x20", 0x00000000);
+    execute(1);
     
     // Should be back to original value
-    EXPECT_EQ(cpu.R()[13], initial_sp);
+    EXPECT_EQ(R(13), initial_sp);
 }
 
 TEST_F(ThumbCPUTest13, MultipleAddOperations) {
     // Test multiple ADD operations accumulate correctly
     setup_registers({{13, 0x00001000}});  // Set SP
-    uint32_t initial_sp = cpu.R()[13];
+    uint32_t initial_sp = R(13);
     
     // ADD SP, #16 three times - Manual encoding: 0xB004
     for (int i = 0; i < 3; i++) {
-        cpu.R()[15] = 0x00000000; // Reset PC
-        memory.write16(0x00000000, 0xB004);  // ADD SP, #16
-        thumb_cpu.execute(1);
-        EXPECT_EQ(cpu.R()[13], initial_sp + 16 * (i + 1));
+        R(15) = 0x00000000; // Reset PC
+        assembleAndWriteThumb("add sp, #0x10", 0x00000000);  // ADD SP, #16
+        execute(1);
+        EXPECT_EQ(R(13), initial_sp + 16 * (i + 1));
     }
     
     // Final SP should be initial + 48
-    EXPECT_EQ(cpu.R()[13], initial_sp + 48);
+    EXPECT_EQ(R(13), initial_sp + 48);
 }
 
 TEST_F(ThumbCPUTest13, MultipleSubOperations) {
     // Test multiple SUB operations accumulate correctly
     setup_registers({{13, 0x00001200}});  // Higher starting point for SUB
-    uint32_t initial_sp = cpu.R()[13];
+    uint32_t initial_sp = R(13);
     
     // SUB SP, #16 three times - Manual encoding: 0xB084
     for (int i = 0; i < 3; i++) {
-        cpu.R()[15] = 0x00000000; // Reset PC
-        memory.write16(0x00000000, 0xB084);  // SUB SP, #16
-        thumb_cpu.execute(1);
-        EXPECT_EQ(cpu.R()[13], initial_sp - 16 * (i + 1));
+        R(15) = 0x00000000; // Reset PC
+        assembleAndWriteThumb("sub sp, #0x10", 0x00000000);  // SUB SP, #16
+        execute(1);
+        EXPECT_EQ(R(13), initial_sp - 16 * (i + 1));
     }
     
     // Final SP should be initial - 48
-    EXPECT_EQ(cpu.R()[13], initial_sp - 48);
+    EXPECT_EQ(R(13), initial_sp - 48);
 }
 
 TEST_F(ThumbCPUTest13, MemoryBoundaryAddTest) {
@@ -315,11 +277,11 @@ TEST_F(ThumbCPUTest13, MemoryBoundaryAddTest) {
     setup_registers({{13, 0x00001F00}});  // Near end of test memory (0x1FFF)
     
     // Manual encoding for ADD SP, #4: 0xB001
-    memory.write16(0x00000000, 0xB001);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x4", 0x00000000);
+    execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x00001F04u);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x00001F04u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, MemoryBoundarySubTest) {
@@ -327,11 +289,11 @@ TEST_F(ThumbCPUTest13, MemoryBoundarySubTest) {
     setup_registers({{13, 0x00000100}});  // Near start of memory
     
     // Manual encoding for SUB SP, #4: 0xB081
-    memory.write16(0x00000000, 0xB081);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("sub sp, #0x4", 0x00000000);
+    execute(1);
     
-    EXPECT_EQ(cpu.R()[13], 0x000000FCu);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), 0x000000FCu);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, SpOverflowTest) {
@@ -339,13 +301,13 @@ TEST_F(ThumbCPUTest13, SpOverflowTest) {
     setup_registers({{13, 0xFFFFFF00}});  // High value that will overflow
     
     // Manual encoding for ADD SP, #508: 0xB07F
-    memory.write16(0x00000000, 0xB07F);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x1FC", 0x00000000);
+    execute(1);
     
     // Should wrap around due to 32-bit arithmetic
     uint32_t expected = 0xFFFFFF00 + 508;
-    EXPECT_EQ(cpu.R()[13], expected);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), expected);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, SpUnderflowTest) {
@@ -353,13 +315,13 @@ TEST_F(ThumbCPUTest13, SpUnderflowTest) {
     setup_registers({{13, 0x00000100}});  // Low value
     
     // Manual encoding for SUB SP, #508: 0xB0FF
-    memory.write16(0x00000000, 0xB0FF);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("sub sp, #0x1FC", 0x00000000);
+    execute(1);
     
     // Should wrap around due to 32-bit arithmetic
     uint32_t expected = 0x00000100 - 508;
-    EXPECT_EQ(cpu.R()[13], expected);
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(13), expected);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, OtherRegistersUnaffected) {
@@ -367,16 +329,16 @@ TEST_F(ThumbCPUTest13, OtherRegistersUnaffected) {
     setup_registers({{0, 0xDEADBEEF}, {1, 0xCAFEBABE}, {13, 0x00001000}});
     
     // Manual encoding for ADD SP, #64: 0xB010
-    memory.write16(0x00000000, 0xB010);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x40", 0x00000000);
+    execute(1);
     
     // Verify SP was modified correctly
-    EXPECT_EQ(cpu.R()[13], 0x00001040u);
+    EXPECT_EQ(R(13), 0x00001040u);
     // Verify other registers unchanged
-    EXPECT_EQ(cpu.R()[0], 0xDEADBEEFu);
-    EXPECT_EQ(cpu.R()[1], 0xCAFEBABEu);
+    EXPECT_EQ(R(0), 0xDEADBEEFu);
+    EXPECT_EQ(R(1), 0xCAFEBABEu);
     // Verify PC was incremented
-    EXPECT_EQ(cpu.R()[15], 0x00000002u);
+    EXPECT_EQ(R(15), 0x00000002u);
 }
 
 TEST_F(ThumbCPUTest13, FlagsUnaffected) {
@@ -388,12 +350,12 @@ TEST_F(ThumbCPUTest13, FlagsUnaffected) {
     uint32_t original_cpsr = cpu.CPSR();
     
     // Manual encoding for ADD SP, #32: 0xB008
-    memory.write16(0x00000000, 0xB008);
-    thumb_cpu.execute(1);
+    assembleAndWriteThumb("add sp, #0x20", 0x00000000);
+    execute(1);
     
     // CPSR should be unchanged
     EXPECT_EQ(cpu.CPSR(), original_cpsr);
-    EXPECT_EQ(cpu.R()[13], 0x00001020u);
+    EXPECT_EQ(R(13), 0x00001020u);
 }
 
 TEST_F(ThumbCPUTest13, InstructionEncodingValidation) {
@@ -401,7 +363,7 @@ TEST_F(ThumbCPUTest13, InstructionEncodingValidation) {
     // Based on the original format13_stack_operations.cpp INSTRUCTION_ENCODING_VALIDATION test
     
     struct TestCase {
-        uint16_t opcode;
+        const char* instruction;
         const char* description;
         uint32_t initial_sp;
         uint32_t expected_sp;
@@ -409,38 +371,38 @@ TEST_F(ThumbCPUTest13, InstructionEncodingValidation) {
     
     std::vector<TestCase> test_cases = {
         // ADD instructions
-        {0xB000, "ADD SP, #0",   0x1000, 0x1000},
-        {0xB001, "ADD SP, #4",   0x1000, 0x1004},
-        {0xB002, "ADD SP, #8",   0x1000, 0x1008},
-        {0xB004, "ADD SP, #16",  0x1000, 0x1010},
-        {0xB008, "ADD SP, #32",  0x1000, 0x1020},
-        {0xB010, "ADD SP, #64",  0x1000, 0x1040},
-        {0xB020, "ADD SP, #128", 0x1000, 0x1080},
-        {0xB040, "ADD SP, #256", 0x1000, 0x1100},
-        {0xB07F, "ADD SP, #508", 0x1000, 0x11FC},
+        {"add sp, #0x0",   "ADD SP, #0",   0x1000, 0x1000},
+        {"add sp, #0x4",   "ADD SP, #4",   0x1000, 0x1004},
+        {"add sp, #0x8",   "ADD SP, #8",   0x1000, 0x1008},
+        {"add sp, #0x10",  "ADD SP, #16",  0x1000, 0x1010},
+        {"add sp, #0x20",  "ADD SP, #32",  0x1000, 0x1020},
+        {"add sp, #0x40",  "ADD SP, #64",  0x1000, 0x1040},
+        {"add sp, #0x80",  "ADD SP, #128", 0x1000, 0x1080},
+        {"add sp, #0x100", "ADD SP, #256", 0x1000, 0x1100},
+        {"add sp, #0x1FC", "ADD SP, #508", 0x1000, 0x11FC},
         
         // SUB instructions
-        {0xB080, "SUB SP, #0",   0x1000, 0x1000},
-        {0xB081, "SUB SP, #4",   0x1000, 0x0FFC},
-        {0xB082, "SUB SP, #8",   0x1000, 0x0FF8},
-        {0xB084, "SUB SP, #16",  0x1000, 0x0FF0},
-        {0xB088, "SUB SP, #32",  0x1000, 0x0FE0},
-        {0xB090, "SUB SP, #64",  0x1000, 0x0FC0},
-        {0xB0A0, "SUB SP, #128", 0x1000, 0x0F80},
-        {0xB0C0, "SUB SP, #256", 0x1000, 0x0F00},
-        {0xB0FF, "SUB SP, #508", 0x1000, 0x0E04},
+        {"sub sp, #0x0",   "SUB SP, #0",   0x1000, 0x1000},
+        {"sub sp, #0x4",   "SUB SP, #4",   0x1000, 0x0FFC},
+        {"sub sp, #0x8",   "SUB SP, #8",   0x1000, 0x0FF8},
+        {"sub sp, #0x10",  "SUB SP, #16",  0x1000, 0x0FF0},
+        {"sub sp, #0x20",  "SUB SP, #32",  0x1000, 0x0FE0},
+        {"sub sp, #0x40",  "SUB SP, #64",  0x1000, 0x0FC0},
+        {"sub sp, #0x80",  "SUB SP, #128", 0x1000, 0x0F80},
+        {"sub sp, #0x100", "SUB SP, #256", 0x1000, 0x0F00},
+        {"sub sp, #0x1FC", "SUB SP, #508", 0x1000, 0x0E04},
     };
     
     for (const auto& test : test_cases) {
-        setup_registers({{13, test.initial_sp}});
+        setup_registers({{13, test.initial_sp}, {15, 0x00000000}});  // Reset SP and PC
         
-        // Write the opcode directly to memory
-        memory.write16(0x00000000, test.opcode);
-        thumb_cpu.execute(1);
+        // Use assembleAndWriteThumb and properly reset PC for each test
+        assembleAndWriteThumb(test.instruction, 0x00000000);
+        execute(1);
         
-        EXPECT_EQ(cpu.R()[13], test.expected_sp) 
+        EXPECT_EQ(R(13), test.expected_sp) 
             << test.description << " failed. Expected: 0x" << std::hex << test.expected_sp
-            << ", Got: 0x" << cpu.R()[13];
-        EXPECT_EQ(cpu.R()[15], 0x00000002u) << test.description << " - PC should advance to 0x2";
+            << ", Got: 0x" << R(13);
+        EXPECT_EQ(R(15), 0x00000002u) << test.description << " - PC should advance to 0x2";
     }
 }
