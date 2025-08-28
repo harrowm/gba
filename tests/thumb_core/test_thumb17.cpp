@@ -1,147 +1,87 @@
-// test_thumb17.cpp - Modern Thumb CPU test fixture for Format 17: Software interrupt operations
-#include <gtest/gtest.h>
-#include "memory.h"
-#include "interrupt.h"
-#include "cpu.h"
-#include "thumb_cpu.h"
-#include <initializer_list>
+/**
+ * Thumb Format 17: Software interrupt operations
+ * Instruction encoding: 1101 1111 Value8[7:0]
+ * 
+ * Software interrupt (SWI):
+ * - Encoding: 1101 1111 Value8 (0xDF00-0xDFFF)
+ * - Causes a software interrupt exception
+ * - Value8 is an 8-bit comment field (0x00-0xFF)
+ * - Comment field is ignored by processor but available to interrupt handler
+ * - Forces processor into Supervisor mode
+ * - Sets PC to SWI exception vector (0x08)
+ * - Stores return address in LR_svc
+ * - Sets I flag in CPSR to disable IRQ
+ *
+ * Exception behavior:
+ * - LR_svc = PC + 2 (return to instruction after SWI)
+ * - PC = 0x08 (SWI exception vector)
+ * - CPSR mode bits = 10011 (Supervisor mode)
+ * - CPSR I flag = 1 (IRQ disabled)
+ * - SPSR_svc = CPSR (saved processor state)
+ *
+ * Comment field values:
+ * - 0x00: Often used for system calls
+ * - 0x01-0x0F: Common OS service numbers
+ * - 0x10-0xFF: Application-specific services
+ */
+#include "thumb_test_base.h"
 
-extern "C" {
-#include <keystone/keystone.h>
-}
-
-// ThumbCPUTest17 fixture for Format 17: Software interrupt operations
-// ARM Thumb Format 17: Software interrupt
-// Encoding: 11011111[Value8]
-// Instructions: SWI
-class ThumbCPUTest17 : public ::testing::Test {
-protected:
-    Memory memory;
-    InterruptController interrupts;
-    CPU cpu;
-    ThumbCPU thumb_cpu;
-    ks_engine* ks; // Keystone handle
-
-    ThumbCPUTest17() : memory(true), cpu(memory, interrupts), thumb_cpu(cpu), ks(nullptr) {}
-
-    void SetUp() override {
-        // Initialize all registers to 0
-        for (int i = 0; i < 16; ++i) cpu.R()[i] = 0;
-        
-        // Set Thumb mode (T flag) and User mode
-        cpu.CPSR() = CPU::FLAG_T | 0x10;
-        
-        // Initialize Keystone for Thumb mode
-        if (ks_open(KS_ARCH_ARM, KS_MODE_THUMB, &ks) != KS_ERR_OK) {
-            ks = nullptr;
-        }
-    }
-    
-    void TearDown() override {
-        if (ks) {
-            ks_close(ks);
-        }
-    }
-    
-    // Helper to set up multiple registers at once
-    void setup_registers(std::initializer_list<std::pair<int, uint32_t>> reg_values) {
-        cpu.R().fill(0);
-        for (const auto& pair : reg_values) {
-            cpu.R()[pair.first] = pair.second;
-        }
-    }
-    
-    // Helper to set CPU flags
-    void set_flags(uint32_t flags) {
-        cpu.CPSR() = CPU::FLAG_T | 0x10 | flags;
-    }
-    
-    // Helper to assemble Thumb instruction using Keystone
-    bool assemble_and_write_thumb(const std::string& assembly, uint32_t address) {
-        return false; // Force fallback to hex encodings for consistency
-        if (!ks) return false;
-        
-        std::string full_assembly = ".syntax unified\n.thumb\n" + assembly;
-        unsigned char *machine_code;
-        size_t count;
-        size_t size;
-        
-        if (ks_asm(ks, full_assembly.c_str(), address, &machine_code, &size, &count) == KS_ERR_OK) {
-            if (size >= 2) {
-                uint16_t instruction = machine_code[0] | (machine_code[1] << 8);
-                memory.write16(address, instruction);
-                ks_free(machine_code);
-                return true;
-            }
-            ks_free(machine_code);
-        }
-        return false;
-    }
+class ThumbCPUTest17 : public ThumbCPUTestBase {
 };
 
 TEST_F(ThumbCPUTest17, SWI_BASIC_COMMENT_VALUES) {
     // Test case 1: SWI #0 (comment = 0x00)
     setup_registers({{0, 0x12345678}, {1, 0x87654321}});
     
-    if (!assemble_and_write_thumb("swi #0", 0x00000000)) {
-        memory.write16(0x00000000, 0xDF00); // SWI #0
-    }
+    assembleAndWriteThumb("swi #0", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
     // SWI should not modify registers (in basic implementation)
-    EXPECT_EQ(cpu.R()[0], 0x12345678u);
-    EXPECT_EQ(cpu.R()[1], 0x87654321u);
+    EXPECT_EQ(R(0), 0x12345678u);
+    EXPECT_EQ(R(1), 0x87654321u);
     
     // Test case 2: SWI #1 (comment = 0x01)
     setup_registers({{2, 0xDEADBEEF}});
     
-    if (!assemble_and_write_thumb("swi #1", 0x00000000)) {
-        memory.write16(0x00000000, 0xDF01); // SWI #1
-    }
+    assembleAndWriteThumb("swi #1", 0x00000000);
     
-    cpu.execute(1);
+    execute(1);
     
-    EXPECT_EQ(cpu.R()[2], 0xDEADBEEFu);
+    EXPECT_EQ(R(2), 0xDEADBEEFu);
     
     // Test case 3: SWI #0xFF (comment = 0xFF, maximum value)
     setup_registers({{7, 0xCAFEBABE}});
     
-    if (!assemble_and_write_thumb("swi #255", 0x00000000)) {
-        memory.write16(0x00000000, 0xDFFF); // SWI #0xFF
-    }
+    assembleAndWriteThumb("swi #255", 0x00000000);
     
-    cpu.execute(1);
+    execute();
     
-    EXPECT_EQ(cpu.R()[7], 0xCAFEBABEu);
+    EXPECT_EQ(R(7), 0xCAFEBABEu);
 }
 
 TEST_F(ThumbCPUTest17, SWI_COMMON_COMMENT_VALUES) {
     // Test case 1: SWI #0x10 (common system call value)
     setup_registers({{0, 0x11111111}, {1, 0x22222222}, {2, 0x33333333}});
     
-    if (!assemble_and_write_thumb("swi #16", 0x00000000)) {
-        memory.write16(0x00000000, 0xDF10); // SWI #0x10
-    }
+    assembleAndWriteThumb("swi #16", 0x00000000);
     
-    cpu.execute(1);
+    execute();
     
     // Verify registers are preserved
-    EXPECT_EQ(cpu.R()[0], 0x11111111u);
-    EXPECT_EQ(cpu.R()[1], 0x22222222u);
-    EXPECT_EQ(cpu.R()[2], 0x33333333u);
+    EXPECT_EQ(R(0), 0x11111111u);
+    EXPECT_EQ(R(1), 0x22222222u);
+    EXPECT_EQ(R(2), 0x33333333u);
     
     // Test case 2: SWI #0x80 (another common system call value)
     setup_registers({{3, 0x44444444}, {4, 0x55555555}});
     
-    if (!assemble_and_write_thumb("swi #128", 0x00000000)) {
-        memory.write16(0x00000000, 0xDF80); // SWI #0x80
-    }
+    assembleAndWriteThumb("swi #128", 0x00000000);
     
-    cpu.execute(1);
+    execute();
     
-    EXPECT_EQ(cpu.R()[3], 0x44444444u);
-    EXPECT_EQ(cpu.R()[4], 0x55555555u);
+    EXPECT_EQ(R(3), 0x44444444u);
+    EXPECT_EQ(R(4), 0x55555555u);
 }
 
 TEST_F(ThumbCPUTest17, SWI_ENCODING_VERIFICATION) {
@@ -169,10 +109,10 @@ TEST_F(ThumbCPUTest17, SWI_ENCODING_VERIFICATION) {
         setup_registers({{0, 0x12345678}});
         
         memory.write16(0x00000000, test_case.expected_instruction);
-        cpu.execute(1);
+        execute();
         
         // Verify the instruction was recognized and registers preserved
-        EXPECT_EQ(cpu.R()[0], 0x12345678u) << "Failed for " << test_case.description;
+        EXPECT_EQ(R(0), 0x12345678u) << "Failed for " << test_case.description;
         
         // Verify encoding structure: 11011111[Value8]
         uint16_t expected = 0xDF00 | test_case.comment;
@@ -189,14 +129,12 @@ TEST_F(ThumbCPUTest17, SWI_INSTRUCTION_FORMAT) {
     setup_registers({{0, 0xAAAAAAAA}});
     
     // Test the boundary between Format 16 (0xDE__) and Format 17 (0xDF__)
-    if (!assemble_and_write_thumb("swi #66", 0x00000000)) {
-        memory.write16(0x00000000, 0xDF42); // SWI #0x42
-    }
+    assembleAndWriteThumb("swi #66", 0x00000000);
     
-    cpu.execute(1);
+    execute();
     
     // Verify instruction executed (registers preserved)
-    EXPECT_EQ(cpu.R()[0], 0xAAAAAAAAu);
+    EXPECT_EQ(R(0), 0xAAAAAAAAu);
 }
 
 TEST_F(ThumbCPUTest17, SWI_COMMENT_FIELD_EXTRACTION) {
@@ -218,7 +156,7 @@ TEST_F(ThumbCPUTest17, SWI_COMMENT_FIELD_EXTRACTION) {
         setup_registers({{5, 0xBEEFCAFE}});
         
         memory.write16(0x00000000, test.instruction);
-        cpu.execute(1);
+        execute();
         
         // Verify comment extraction: comment = instruction & 0xFF
         uint8_t extracted_comment = test.instruction & 0xFF;
@@ -226,7 +164,7 @@ TEST_F(ThumbCPUTest17, SWI_COMMENT_FIELD_EXTRACTION) {
             << "Comment extraction failed for " << test.description;
         
         // Verify registers preserved
-        EXPECT_EQ(cpu.R()[5], 0xBEEFCAFEu) << "Registers not preserved for " << test.description;
+        EXPECT_EQ(R(5), 0xBEEFCAFEu) << "Registers not preserved for " << test.description;
     }
 }
 
@@ -234,14 +172,14 @@ TEST_F(ThumbCPUTest17, SWI_EDGE_CASES_AND_BOUNDARIES) {
     // Test case 1: Minimum comment value
     setup_registers({{1, 0x00000001}});
     memory.write16(0x00000000, 0xDF00); // SWI #0
-    cpu.execute(1);
-    EXPECT_EQ(cpu.R()[1], 0x00000001u);
+    execute();
+    EXPECT_EQ(R(1), 0x00000001u);
     
     // Test case 2: Maximum comment value
     setup_registers({{2, 0x00000002}});
     memory.write16(0x00000000, 0xDFFF); // SWI #255
-    cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0x00000002u);
+    execute();
+    EXPECT_EQ(R(2), 0x00000002u);
     
     // Test case 3: Powers of 2 comment values
     uint8_t power_of_2_values[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
@@ -250,8 +188,8 @@ TEST_F(ThumbCPUTest17, SWI_EDGE_CASES_AND_BOUNDARIES) {
         setup_registers({{i, static_cast<uint32_t>(0x10000000 + i)}});
         uint16_t instruction = 0xDF00 | power_of_2_values[i];
         memory.write16(0x00000000, instruction);
-        cpu.execute(1);
-        EXPECT_EQ(cpu.R()[i], static_cast<uint32_t>(0x10000000 + i)) 
+        execute();
+        EXPECT_EQ(R(i), static_cast<uint32_t>(0x10000000 + i)) 
             << "Failed for power of 2 value: " << static_cast<int>(power_of_2_values[i]);
     }
     
@@ -264,17 +202,17 @@ TEST_F(ThumbCPUTest17, SWI_EDGE_CASES_AND_BOUNDARIES) {
     memory.write16(0x00000004, 0xDF33); // SWI #51
     
     // Execute all three
-    cpu.execute(1);
-    EXPECT_EQ(cpu.R()[6], 0xFEEDFACEu);
-    EXPECT_EQ(cpu.R()[7], 0xDEADC0DEu);
+    execute();
+    EXPECT_EQ(R(6), 0xFEEDFACEu);
+    EXPECT_EQ(R(7), 0xDEADC0DEu);
     
-    cpu.execute(1);
-    EXPECT_EQ(cpu.R()[6], 0xFEEDFACEu);
-    EXPECT_EQ(cpu.R()[7], 0xDEADC0DEu);
+    execute();
+    EXPECT_EQ(R(6), 0xFEEDFACEu);
+    EXPECT_EQ(R(7), 0xDEADC0DEu);
     
-    cpu.execute(1);  
-    EXPECT_EQ(cpu.R()[6], 0xFEEDFACEu);
-    EXPECT_EQ(cpu.R()[7], 0xDEADC0DEu);
+    execute();  
+    EXPECT_EQ(R(6), 0xFEEDFACEu);
+    EXPECT_EQ(R(7), 0xDEADC0DEu);
 }
 
 TEST_F(ThumbCPUTest17, SWI_INSTRUCTION_RECOGNITION) {
@@ -288,14 +226,14 @@ TEST_F(ThumbCPUTest17, SWI_INSTRUCTION_RECOGNITION) {
     
     // This should be Format 16 (BVS - condition 0x6) 
     memory.write16(0x00000000, 0xD6AA); // BVS with offset 0xAA (condition 6 = VS/overflow set)
-    cpu.execute(1);
-    EXPECT_EQ(cpu.R()[0], 0x12345678u);
+    execute();
+    EXPECT_EQ(R(0), 0x12345678u);
     
     // This should be Format 17 (SWI)
     setup_registers({{0, 0x87654321}});
     memory.write16(0x00000000, 0xDFAA); // SWI #0xAA
-    cpu.execute(1);
-    EXPECT_EQ(cpu.R()[0], 0x87654321u);
+    execute();
+    EXPECT_EQ(R(0), 0x87654321u);
     
     // Verify the distinguishing bit pattern
     // Format 17 requires bits 15-8 to be 11011111 (0xDF)
