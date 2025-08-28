@@ -32,20 +32,10 @@
  * - Boundary condition testing for maximum offsets
  */
 
-#include <gtest/gtest.h>
-#include <string>
-#include <sstream>
-#include <iomanip>
 #include "thumb_test_base.h"
 
 class ThumbCPUTest13 : public ThumbCPUTestBase {
 };
-
-// ARM Thumb Format 13: Add/Subtract offset to Stack Pointer
-// Encoding: 1011 0000 S [offset7]
-// S=0: ADD SP, #imm (SP = SP + (offset7 * 4))
-// S=1: SUB SP, #imm (SP = SP - (offset7 * 4))
-// Offset range: 0-508 bytes (0-127 * 4)
 
 TEST_F(ThumbCPUTest13, AddSpImmediateBasic) {
     // Test case: ADD SP, #0 - no change
