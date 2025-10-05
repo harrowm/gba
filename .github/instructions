@@ -1,0 +1,327 @@
+# GBA Emulator Development Instructions
+
+## Project Overview
+This is a Game Boy Advance (GBA) emulator written in C++. The emulator implements ARM7TDMI CPU emulation with both ARM and Thumb instruction sets, memory management, timing systems, and debugging capabilities.
+
+## Architecture
+
+### Core Components
+- **CPU Emulation**: ARM7TDMI processor with ARM and Thumb instruction sets
+- **Memory System**: GBA memory map with BIOS, ROM, RAM regions
+- **Timing System**: Cycle-accurate timing for CPU, timers, and video events
+- **Debug System**: Macro-based logging with Capstone disassembly support
+
+### Key Files
+- `src/thumb_cpu.cpp` / `include/thumb_cpu.h` - Thumb instruction set implementation
+- `src/arm_cpu.cpp` / `include/arm_cpu.h` - ARM instruction set implementation
+- `src/cpu.cpp` / `include/cpu.h` - Main CPU state and register management
+- `src/memory.cpp` / `include/memory.h` - Memory management and address mapping
+- `src/timing.c` / `include/timing.h` - Timing and event scheduling
+- `src/debug.cpp` / `include/debug.h` - Debug logging system
+- `src/scheduler.cpp` / `include/scheduler.h` - Event scheduler
+
+## Code Style and Conventions
+
+### Naming Conventions
+- Functions: `snake_case` (e.g., `thumb_alu_add`, `calculateInstructionCycles`)
+- Classes: `PascalCase` (e.g., `ThumbCPU`, `CPU`, `Memory`)
+- Member variables: `camelCase` (e.g., `parentCPU`, `capstone_handle`)
+- Constants/Macros: `UPPER_SNAKE_CASE` (e.g., `FLAG_Z`, `DEBUG_INFO`)
+
+### Debug Logging
+Always use the macro-based debug system defined in `debug.h`:
+```cpp
+DEBUG_INFO("Message");           // Informational messages
+DEBUG_ERROR("Error message");    // Error messages
+DEBUG_WARN("Warning message");   // Warnings
+```
+
+Use `debug_to_hex_string()` for hexadecimal formatting:
+```cpp
+DEBUG_INFO("PC: " + debug_to_hex_string(pc, 8));
+DEBUG_INFO("Instruction: " + debug_to_hex_string(instruction, 4));
+```
+
+### Instruction Implementation Pattern
+When implementing CPU instructions:
+1. Extract operands using bit manipulation macros (`bits2to0`, `bits5to3`, `bits10to6`, etc.)
+2. Perform the operation
+3. Update destination register
+4. Update CPU flags as appropriate
+5. Add DEBUG_INFO logging
+
+Example:
+```cpp
+void ThumbCPU::thumb_add_register(uint16_t instruction) {
+    uint8_t rd = bits2to0(instruction);
+    uint8_t rs = bits5to3(instruction);
+    uint8_t rn = bits8to6(instruction);
+
+    uint32_t op1 = parentCPU.R()[rs];
+    uint32_t op2 = parentCPU.R()[rn];
+    uint32_t result = op1 + op2;
+
+    parentCPU.R()[rd] = result;
+
+    parentCPU.updateZFlag(result);
+    parentCPU.updateNFlag(result);
+    parentCPU.updateCFlagAdd(op1, op2);
+    parentCPU.updateVFlag(op1, op2, result);
+
+    DEBUG_INFO("Executing Thumb ADD (register): R" + std::to_string(rd) + 
+               " = R" + std::to_string(rs) + " + R" + std::to_string(rn));
+}
+```
+
+## Flag Updates
+
+### When to Update Flags
+- **Arithmetic operations** (ADD, SUB, ADC, SBC): Update Z, N, C, V
+- **Logical operations** (AND, ORR, EOR, BIC): Update Z, N only
+- **Shift operations** (LSL, LSR, ASR, ROR): Update Z, N, C
+- **Comparison operations** (CMP, CMN, TST): Update Z, N, C, V
+- **Move operations** (MOV): Update Z, N (context-dependent)
+- **High register operations** (Format 5): Usually do NOT update flags (except CMP)
+
+### Flag Update Methods
+```cpp
+parentCPU.updateZFlag(result);              // Zero flag
+parentCPU.updateNFlag(result);              // Negative flag
+parentCPU.updateCFlagAdd(op1, op2);         // Carry for addition
+parentCPU.updateCFlagSub(op1, op2);         // Carry for subtraction
+parentCPU.updateVFlag(op1, op2, result);    // Overflow for addition
+parentCPU.updateVFlagSub(op1, op2, result); // Overflow for subtraction
+parentCPU.setFlag(CPU::FLAG_C);             // Set flag manually
+parentCPU.clearFlag(CPU::FLAG_C);           // Clear flag manually
+parentCPU.getFlag(CPU::FLAG_Z);             // Read flag state
+```
+
+### Flag Definitions
+```cpp
+CPU::FLAG_N  // Negative flag (bit 31)
+CPU::FLAG_Z  // Zero flag (bit 30)
+CPU::FLAG_C  // Carry flag (bit 29)
+CPU::FLAG_V  // Overflow flag (bit 28)
+CPU::FLAG_T  // Thumb mode flag (bit 5)
+```
+
+## Timing System
+
+### Cycle-Accurate Execution
+The emulator supports two execution modes:
+
+1. **Simple execution**: `execute()` - Fixed 1 cycle per instruction
+2. **Timing-aware execution**: `executeWithTiming()` - Uses `thumb_calculate_instruction_cycles()` for accurate timing
+
+When adding new instructions to timing system:
+```c
+// In thumb_timing.c
+uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, uint32_t registers[16]) {
+    // Decode instruction and return cycle count
+    // Consider memory access penalties, branch prediction, etc.
+}
+```
+
+### Event Processing
+The timing system processes events in priority order:
+1. Check cycles until next event using `timing_cycles_until_next_event()`
+2. Execute instruction if it completes before event
+3. Otherwise, process event first then continue
+4. Use `timing_advance()` to advance the timing state
+5. Process timer events with `timing_process_timer_events()`
+6. Process video events with `timing_process_video_events()`
+
+## Memory Access
+
+### Read Operations
+```cpp
+uint32_t word = parentCPU.getMemory().read32(address);
+uint16_t halfword = parentCPU.getMemory().read16(address);
+uint8_t byte = parentCPU.getMemory().read8(address);
+```
+
+### Write Operations
+```cpp
+parentCPU.getMemory().write32(address, value);
+parentCPU.getMemory().write16(address, value & 0xFFFF);
+parentCPU.getMemory().write8(address, value & 0xFF);
+```
+
+### Alignment Considerations
+- Word accesses: Must be 4-byte aligned
+- Halfword accesses: Must be 2-byte aligned
+- PC reads in Thumb mode: Add 4 to current instruction address for pipeline-adjusted value
+- Use `(address & ~0x3)` for word alignment
+
+## Special Handling
+
+### Program Counter (PC/R15)
+- Thumb instructions are 2 bytes, ARM instructions are 4 bytes
+- PC incremented by 2 after fetch in Thumb mode, by 4 in ARM mode
+- PC points to current instruction + 4 (pipeline effect)
+- For PC-relative addressing, use `(PC & ~0x3)` for word alignment
+- When branching, ensure PC is properly aligned for instruction set
+- In Thumb mode, BL instruction uses bit 0 to maintain Thumb state
+
+### Stack Pointer (SP/R13)
+- Grows downward in memory
+- PUSH: Decrement SP first, then store registers in ascending order
+- POP: Load registers in ascending order, then increment SP
+- Stack operations maintain 4-byte alignment
+
+### Link Register (LR/R14)
+- Stores return address for function calls
+- BL instruction sets LR with Thumb bit (bit 0) set for return mode
+- BX instruction uses bit 0 to determine ARM/Thumb mode on branch
+
+### Mode Switching
+- Check `FLAG_T` in CPSR to determine ARM vs Thumb mode
+- BX instruction can switch between modes based on bit 0 of target address
+- PC writes may affect mode depending on instruction type
+
+## Special Instruction Handling
+
+### Shift Operations
+- LSL/LSR/ASR with shift amount 0 have special behavior
+- LSR #0 means LSR #32 (result is 0, C = bit 31 of operand)
+- ASR #0 means ASR #32 (result is all bits set to sign bit)
+- Update carry flag BEFORE performing the shift
+
+### Conditional Branches
+- 8-bit signed offset, shifted left by 1
+- Check condition codes against CPSR flags
+- Only branch if condition is met
+- Increment PC by offset if taken
+
+### Multi-Register Operations (LDMIA/STMIA, PUSH/POP)
+- Process registers in ascending order (R0, R1, ..., R7)
+- For LDMIA: If base register is in list, don't write back
+- For STMIA: Always write back the updated base register
+- PUSH/POP include optional LR/PC handling
+
+### Two-Part Instructions (BL)
+- First instruction (0xF000-0xF7FF): Sets up high part in LR
+- Second instruction (0xF800-0xFFFF): Completes branch with link
+- Both parts must execute consecutively
+
+## Testing and Debugging
+
+### Capstone Disassembly
+Enable with global flag:
+```cpp
+extern bool g_disassemble_enabled;
+g_disassemble_enabled = true;
+```
+
+The disassembler will print each instruction as it executes.
+
+### Common Issues
+1. **Flag updates**: Ensure all arithmetic operations update flags correctly
+2. **Sign extension**: Use proper casts for signed operations (e.g., `static_cast<int32_t>`)
+3. **Shift operations**: Handle special cases (shift by 0, shift by 32+)
+4. **Register list operations**: Process in correct order (ascending addresses)
+5. **PC updates**: Account for pipeline effects and instruction size
+6. **Mode switching**: Verify FLAG_T is set/cleared correctly
+7. **Alignment**: Ensure memory accesses are properly aligned
+
+### Debugging Tips
+- Use DEBUG_INFO extensively to trace execution
+- Check register values at key points with `debug_to_hex_string()`
+- Verify memory addresses are correctly calculated
+- Ensure flags match expected CPU state
+- Use Capstone disassembly to verify instruction decoding
+- Check that PC pipeline offset is correct (+4 for Thumb)
+
+## Build System
+- Project uses Makefile
+- Requires Capstone library for disassembly
+- macOS development environment (can be adapted for Linux)
+- Tests located in `tests/` directory
+
+### Building
+```bash
+make                    # Build main executable
+make clean             # Clean build artifacts
+```
+
+### Running Tests
+```bash
+cd tests/arm_core && make && ./run_all
+cd tests/thumb_core && make && ./run_all
+```
+
+## Common Patterns
+
+### Conditional Execution
+```cpp
+if (parentCPU.getFlag(CPU::FLAG_Z)) {
+    // Execute if zero flag set
+}
+
+bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
+bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
+if (n_flag == v_flag) {
+    // Execute if N and V have same value (for BGE)
+}
+```
+
+### Register List Processing
+```cpp
+for (int i = 0; i < 8; i++) {
+    if (register_list & (1 << i)) {
+        // Process register i
+        parentCPU.R()[i] = parentCPU.getMemory().read32(address);
+        address += 4;
+    }
+}
+```
+
+### Sign Extension
+```cpp
+// 8-bit to 32-bit
+int32_t value = static_cast<int8_t>(byte_value);
+
+// 16-bit to 32-bit
+int32_t value = static_cast<int16_t>(halfword_value);
+
+// 11-bit to 32-bit
+int32_t offset = instruction & 0x7FF;
+if (offset & 0x400) {
+    offset |= 0xFFFFF800;
+}
+```
+
+### PC-Relative Addressing
+```cpp
+// For LDR PC-relative (Thumb format 6)
+uint32_t instruction_address = parentCPU.R()[15] - 2;  // Get instruction address
+uint32_t pc_base = (instruction_address + 4) & ~0x3;   // Pipeline PC, word-aligned
+uint32_t address = pc_base + (offset << 2);            // Add scaled offset
+```
+
+## Contributing Guidelines
+1. Follow existing code style and naming conventions
+2. Add DEBUG logging to all new instruction implementations
+3. Update timing calculations for new instructions in `thumb_timing.c` or `arm_timing.c`
+4. Test thoroughly with known GBA ROMs and test cases
+5. Document any special cases or ARM7TDMI quirks
+6. Keep flag update logic consistent with ARM specification
+7. Ensure memory accesses are properly aligned
+8. Handle PC pipeline effects correctly
+
+## Resources
+- ARM7TDMI Technical Reference Manual (in `docs/`)
+- ARM Instruction Set documentation (in `docs/arm_instruction_set.md`)
+- GBA Programming Manual
+- GBATEK (comprehensive GBA documentation)
+- Capstone disassembly engine documentation
+- Memory map documentation (in `docs/memory_map.md`)
+- Timing reference (in `docs/timing_reference.md`)
+
+## Code Organization
+- `src/` - Source implementation files
+- `include/` - Header files
+- `tests/` - Test suites for ARM and Thumb instructions
+- `docs/` - Documentation and reference materials
+- `assets/` - BIOS and ROM files
+- `comparison_benchmarks/` - Performance benchmarking tools
