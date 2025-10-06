@@ -3096,6 +3096,15 @@ TEST_F(ARMDataProcessingTest, MOV_ImmediateRotated) {
     EXPECT_EQ(cpu.R()[2], 0xFF000000u);
 }
 
+TEST_F(ARMDataProcessingTest, MOV_REG_WithPC) {
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("mov r2, r15", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // MOV: R2 = R15, where R15 should be read as PC+8
+    EXPECT_EQ(cpu.R()[2], 0x1000u + 8);
+}
+
 // ===================== BIC Tests =====================
 // BIC: Rd = Rn & ~Operand2
 TEST_F(ARMDataProcessingTest, BIC_Basic) {
@@ -3487,5 +3496,14 @@ TEST_F(ARMDataProcessingTest, MVN_ImmediateRotated) {
     assemble_and_write("mvn r2, #0xFF000000", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], ~0xFF000000u);
+}
+
+TEST_F(ARMDataProcessingTest, MVN_REG_WithPC) {
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("mvn r2, r15", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // MVN: R2 = ~R15, where R15 should be read as PC+8
+    EXPECT_EQ(cpu.R()[2], ~(0x1000u + 8));
 }
 
