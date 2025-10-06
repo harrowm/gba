@@ -53,7 +53,7 @@ Memory::Memory(bool testMode) {
         io = (uint8_t*)std::malloc(1 * 1024);
         regionTable[0x04000000 / BLOCK_SIZE] = io;
         // Initialize critical boot-related registers for clean BIOS boot
-        io[0x300] = 0x01; // POSTFLG: First Boot Flag
+        io[0x300] = 0x00; // POSTFLG: Boot Flag (0=First boot from power-on, 1=Further boot/reset)
         io[0x301] = 0x00; // HALTCNT: Power Down Control
         io[0x204] = 0x00; // WAITCNT: Game Pak Waitstate Control
         io[0x200] = 0x00; // IE: Interrupt Enable Register
@@ -131,6 +131,10 @@ uint8_t Memory::read8(uint32_t address) const {
     if (address == 0x0800009C || address == 0x080000B4) {
         printf("[Memory::read8] Read from 0x%08X: 0x%02X\n", address, base[offset]);
     }
+    // Debug: Print POSTFLG reads
+    if (address == 0x04000300) {
+        printf("[Memory::read8] POSTFLG read: 0x%02X\n", base[offset]);
+    }
     return base[offset];
 }
 
@@ -144,6 +148,11 @@ void Memory::write8(uint32_t address, uint8_t value) {
     // if (address >= 0x06000000 && address < 0x06018000) {
     //     printf("[VRAM Write8] Address: 0x%08X, Value: 0x%02X\n", address, value);
     // }
+    
+    // Debug: Track POSTFLG writes
+    if (address == 0x04000300) {
+        printf("[Memory::write8] POSTFLG write: 0x%02X (was 0x%02X)\n", value, base[offset]);
+    }
     
     base[offset] = value;
 }

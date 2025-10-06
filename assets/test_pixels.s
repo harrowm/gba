@@ -40,7 +40,8 @@ _start:
     @ Mode 3 = 0x0003, BG2 enable = 0x0400
     @ Combined: 0x0403
     ldr r0, =0x04000000     @ DISPCNT register address
-    mov r1, #0x0403         @ Mode 3 + BG2
+    mov r1, #0x0003         @ Mode 3
+    orr r1, r1, #0x0400     @ Add BG2 enable bit
     strh r1, [r0]           @ Write to DISPCNT
     
     @ Now write 3 colored pixels to VRAM

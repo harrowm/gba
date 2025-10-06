@@ -8,7 +8,7 @@ void ARMCPU::exec_arm_ldrb_reg_pre_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
@@ -22,7 +22,7 @@ void ARMCPU::exec_arm_ldrb_reg_pre_nowb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
@@ -35,7 +35,7 @@ void ARMCPU::exec_arm_ldrb_reg_post_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
     uint32_t addr = up ? base + offset : base - offset;
@@ -49,7 +49,7 @@ void ARMCPU::exec_arm_str_imm_pre_wb(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
     parentCPU.R()[rn] = addr;  // Writeback
@@ -62,7 +62,7 @@ void ARMCPU::exec_arm_str_imm_pre_nowb(uint32_t instruction) {
     uint8_t rd = bits<15,12>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -74,7 +74,7 @@ void ARMCPU::exec_arm_str_imm_post_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rn] = addr;  // Writeback
@@ -87,7 +87,7 @@ void ARMCPU::exec_arm_str_reg_pre_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
@@ -101,7 +101,7 @@ void ARMCPU::exec_arm_str_reg_pre_nowb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
@@ -114,7 +114,7 @@ void ARMCPU::exec_arm_str_reg_post_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
     uint32_t addr = up ? base + offset : base - offset;
@@ -128,7 +128,7 @@ void ARMCPU::exec_arm_ldr_imm_pre_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
     parentCPU.R()[rn] = addr;  // Writeback
@@ -141,7 +141,8 @@ void ARMCPU::exec_arm_ldr_imm_pre_nowb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    // When PC is used as base register, use PC+8 (pipeline offset)
+    uint32_t base = (rn == 15) ? (parentCPU.R()[rn] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -153,7 +154,7 @@ void ARMCPU::exec_arm_ldr_imm_post_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rn] = addr;  // Writeback
@@ -166,7 +167,7 @@ void ARMCPU::exec_arm_ldr_reg_pre_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
@@ -180,7 +181,7 @@ void ARMCPU::exec_arm_ldr_reg_pre_nowb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
@@ -193,7 +194,7 @@ void ARMCPU::exec_arm_ldr_reg_post_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
@@ -207,7 +208,7 @@ void ARMCPU::exec_arm_strb_imm_pre_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
     parentCPU.R()[rn] = addr;  // Writeback
@@ -220,7 +221,7 @@ void ARMCPU::exec_arm_strb_imm_pre_nowb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -232,7 +233,7 @@ void ARMCPU::exec_arm_strb_imm_post_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     parentCPU.getMemory().write8(base, parentCPU.R()[rd] & 0xFF);
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rn] = addr;  // Writeback
@@ -245,7 +246,7 @@ void ARMCPU::exec_arm_strb_reg_pre_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
@@ -259,7 +260,7 @@ void ARMCPU::exec_arm_strb_reg_pre_nowb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
@@ -272,7 +273,7 @@ void ARMCPU::exec_arm_strb_reg_post_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     // Store at original base address
     parentCPU.getMemory().write8(base, parentCPU.R()[rd] & 0xFF);
@@ -287,7 +288,7 @@ void ARMCPU::exec_arm_ldrb_imm_pre_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
     parentCPU.R()[rn] = addr;  // Writeback
@@ -300,7 +301,7 @@ void ARMCPU::exec_arm_ldrb_imm_pre_nowb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -312,7 +313,7 @@ void ARMCPU::exec_arm_ldrb_imm_post_wb(uint32_t instruction) {
     uint8_t rn = bits<19,16>(instruction);
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
-    uint32_t base = parentCPU.R()[rn];
+    uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rn] = addr;  // Writeback

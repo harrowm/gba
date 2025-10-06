@@ -129,9 +129,11 @@ int main(int argc, char* argv[]) {
         
         // Main loop
         while (!display.shouldQuit()) {
+            printf("[main loop] About to call runFrame(), frame %d\n", frameCount);
             // Run one frame of emulation (280,896 cycles)
             // This will trigger scanline rendering and V-Blank
             gba.runFrame();
+            printf("[main loop] Returned from runFrame()\n");
             
             // Render the frame to display
             display.renderFrame(vram);

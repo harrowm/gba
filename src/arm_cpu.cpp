@@ -136,6 +136,11 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     
     instruction_count++;
     
+    // Progress indicator every 100K instructions
+    if (instruction_count % 100000 == 0) {
+        printf("[Progress] %llu instructions executed, PC=0x%08X\n", instruction_count, pc);
+    }
+    
     bool pc_in_rom = (pc >= 0x08000000 && pc < 0x0E000000);
     bool pc_in_bios = (pc < 0x00004000);
     bool pc_in_iwram = (pc >= 0x03000000 && pc < 0x03008000);
@@ -149,24 +154,39 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     }
     
     // Track ROM entry
+    static uint64_t rom_instructions = 0;
     if (pc_in_rom && !in_rom) {
         printf("\n*** [%llu] PC ENTERED ROM REGION at 0x%08X (from 0x%08X) ***\n", 
                instruction_count, pc, last_pc);
         printf("*** First ROM instruction: 0x%08X ***\n\n", instruction);
         in_rom = true;
+        rom_instructions = 0;
     } else if (!pc_in_rom && in_rom) {
         printf("\n*** [%llu] PC LEFT ROM REGION at 0x%08X ***\n\n", instruction_count, pc);
         in_rom = false;
     }
     
-    // Debug critical BIOS instructions
-    if (pc >= 0x00000060 && pc <= 0x00000068 && in_bios) {
-        printf("[BIOS @0x%08X] Instruction: 0x%08X, SP=0x%08X, LR=0x%08X, CPSR=0x%08X\n",
-               pc, instruction, parentCPU.R()[13], parentCPU.R()[14], parentCPU.CPSR());
-        // If it's the ldm instruction, show what we're reading from stack
-        if (pc == 0x00000060) {
+    // Debug ROM execution - trace first 20 instructions
+    if (in_rom && rom_instructions < 20) {
+        rom_instructions++;
+        printf("[ROM #%llu @0x%08X] Instr: 0x%08X | R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R5=%08X | SP=%08X LR=%08X\n",
+               rom_instructions, pc, instruction,
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+               parentCPU.R()[4], parentCPU.R()[5],
+               parentCPU.R()[13], parentCPU.R()[14]);
+    }
+    
+    // Debug BIOS execution - trace first 50 instructions
+    if (in_bios && instruction_count <= 50) {
+        printf("[%3llu] BIOS PC=0x%08X: Instr=0x%08X | R0-R3=0x%08X 0x%08X 0x%08X 0x%08X | SP=0x%08X LR=0x%08X\n",
+               instruction_count, pc, instruction,
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+               parentCPU.R()[13], parentCPU.R()[14]);
+        
+        // Show specific details for critical instructions
+        if (pc == 0x00000060 || pc == 0x00000064) {
             uint32_t sp = parentCPU.R()[13];
-            printf("  -> Reading from stack: [0x%08X]=0x%08X, [0x%08X]=0x%08X\n",
+            printf("     -> Stack contents: [0x%08X]=0x%08X, [0x%08X]=0x%08X\n",
                    sp, parentCPU.getMemory().read32(sp),
                    sp+4, parentCPU.getMemory().read32(sp+4));
         }

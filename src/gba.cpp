@@ -75,9 +75,15 @@ void GBA::run() {
 }
 
 void GBA::runFrame() {
+    static int frame_num = 0;
+    frame_num++;
+    printf("[GBA::runFrame #%d] Starting frame\n", frame_num);
+    
     // One frame = 280,896 cycles (228 scanlines * 1232 cycles)
     uint64_t startCycle = scheduler.getCurrentCycle();
+    printf("[GBA::runFrame #%d] Got start cycle: %llu\n", frame_num, startCycle);
     uint64_t targetCycle = startCycle + CYCLES_PER_FRAME;
+    printf("[GBA::runFrame #%d] Target cycle: %llu\n", frame_num, targetCycle);
     
     // Execute CPU instructions and process events in chunks
     // This prevents blocking the main loop for too long

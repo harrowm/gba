@@ -156,7 +156,9 @@ void ARMCPU::exec_arm_add_imm(uint32_t instruction) {
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
-    uint32_t result = parentCPU.R()[rn] + value;
+    // When PC is used as operand (Rn), apply +8 pipeline offset
+    uint32_t op1 = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    uint32_t result = op1 + value;
     parentCPU.R()[rd] = result;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -277,11 +279,13 @@ void ARMCPU::exec_arm_add_reg(uint32_t instruction) {
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    uint32_t value = parentCPU.R()[rm];
+    // When PC is used as operand (Rm or Rn), apply +8 pipeline offset
+    uint32_t value = (rm == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rm];
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
-    uint32_t result = parentCPU.R()[rn] + shifted.value;
+    uint32_t op1 = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    uint32_t result = op1 + shifted.value;
     parentCPU.R()[rd] = result;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -598,8 +602,18 @@ void ARMCPU::exec_arm_msr_imm(uint32_t instruction) {
     if (psr_dest == 0) {
         // Mask: bits 19-16 (field mask)
         uint32_t mask = (instruction >> 16) & 0xF;
-        // Control field (bit 0)
+        // Control field (bit 0) - includes mode bits
         if (mask & 1) {
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            uint32_t new_mode = value & 0x1F;
+            // If mode bits changed, call setMode to bank/unbank registers BEFORE changing CPSR
+            // This allows setMode to read the old mode from CPSR correctly
+            if (old_mode != new_mode) {
+                printf("[MSR IMM] Mode switch: 0x%02X → 0x%02X\n", old_mode, new_mode);
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+                printf("[MSR IMM] After setMode: LR=0x%08X\n", parentCPU.R()[14]);
+            }
+            // Now update CPSR after setMode (setMode also updates CPSR, but we need to set all control bits)
             parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
             DEBUG_INFO("MSR IMM: CPSR control field set to " + debug_to_hex_string(value & 0xFF, 2));
         }
@@ -643,8 +657,19 @@ void ARMCPU::exec_arm_msr_reg(uint32_t instruction) {
     if (psr_dest == 0) {
         // Mask: bits 19-16 (field mask)
         uint32_t mask = (instruction >> 16) & 0xF;
-        // Control field (bit 0)
+        // Control field (bit 0) - includes mode bits
         if (mask & 1) {
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            uint32_t new_mode = value & 0x1F;
+            printf("[MSR REG] mask=0x%X, old_mode=0x%02X, new_mode=0x%02X\n", mask, old_mode, new_mode);
+            // If mode bits changed, call setMode to bank/unbank registers BEFORE changing CPSR
+            // This allows setMode to read the old mode from CPSR correctly
+            if (old_mode != new_mode) {
+                printf("[MSR REG] Mode switch: 0x%02X → 0x%02X\n", old_mode, new_mode);
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+                printf("[MSR REG] After setMode: LR=0x%08X\n", parentCPU.R()[14]);
+            }
+            // Now update CPSR after setMode (setMode also updates CPSR, but we need to set all control bits)
             parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
             DEBUG_INFO("MSR REG: CPSR control field set to " + debug_to_hex_string(value & 0xFF, 2));
         }

@@ -154,7 +154,16 @@ void ARMCPU::exec_arm_bl(uint32_t instruction) {
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
     int32_t branch_offset = (offset << 2) + 8;
     DEBUG_LOG(std::string("[BL] offset=") + std::to_string(offset) + ", branch_offset=" + std::to_string(branch_offset));
+    
+    // Debug: Print mode and old LR before setting
+    uint32_t old_lr = parentCPU.R()[14];
+    uint32_t mode = parentCPU.CPSR() & 0x1F;
+    
     parentCPU.R()[14] = parentCPU.R()[15] + 4;
+    
+    printf("[BL @0x%08X] Mode=0x%02X, Old LR=0x%08X, New LR=0x%08X\n", 
+           pc_before, mode, old_lr, parentCPU.R()[14]);
+    
     parentCPU.R()[15] += branch_offset;
     DEBUG_LOG(std::string("[BL] pc_after=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
 }
@@ -250,6 +259,13 @@ void ARMCPU::exec_arm_stc_reg(uint32_t instruction) {
 
 // Handler for BX (possible) region: checks for BX, MRS, MSR, else undefined
 void ARMCPU::exec_arm_bx_possible(uint32_t instruction) {
+    static int call_count = 0;
+    if (call_count < 5) {
+        printf("[exec_arm_bx_possible #%d] PC=0x%08X, Instr=0x%08X\n", 
+               call_count++, parentCPU.R()[15], instruction);
+        printf("  BX check: (instr & 0x0FFFFFF0) = 0x%08X (vs 0x012FFF10)\n", instruction & 0x0FFFFFF0);
+        printf("  MSR check: (instr & 0x0FF00FF0) = 0x%08X (vs 0x01200F00)\n", instruction & 0x0FF00FF0);
+    }
     DEBUG_LOG(std::string("exec_arm_bx_possible: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // BX encoding: bits 27-4 == 0001 0010 1111 1111 1111 0001 (0x012FFF10)
     if ((instruction & 0x0FFFFFF0) == 0x012FFF10) {
@@ -268,6 +284,7 @@ void ARMCPU::exec_arm_bx_possible(uint32_t instruction) {
     }
     
     // MSR (register): bits 27-21 == 0001001 (0x12), bit 20 == 0, bits 15-12 == 1111, bits 11-4 == 00000000
+    // bits 19-16 are the field mask and can be any value
     if ((instruction & 0x0FF0FFF0) == 0x0120F000) {
         exec_arm_msr_reg(instruction);
         return;

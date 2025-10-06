@@ -105,6 +105,15 @@ void CPU::advanceCycles(uint32_t cycles) {
 // ============================================================================
 
 void CPU::executeOneInstruction() {
+    static uint64_t exec_count = 0;
+    exec_count++;
+    
+    // Debug: Print first few calls to see if we're even getting here
+    if (exec_count <= 5 || exec_count % 50000 == 0) {
+        printf("[CPU::executeOneInstruction #%llu] PC=0x%08X CPSR=0x%08X T=%d\n",
+               exec_count, registers[15], cpsr, getFlag(FLAG_T));
+    }
+    
     // Check for pending interrupts before executing
     if (checkPendingInterrupts()) {
         handleInterrupt();
@@ -185,22 +194,13 @@ void CPU::reset() {
     banked_r13_und = banked_r14_und = 0;
     banked_r13_usr = banked_r14_usr = 0;
     
-    // Initialize stack pointers for different modes FIRST
-    // These are typical GBA stack locations
+    // Initialize stack pointers for different modes
+    // BIOS will set these up properly, but we initialize to safe values
     setMode(IRQ);
     registers[13] = 0x03007FA0; // IRQ stack
     
     setMode(SVC);
-    registers[13] = 0x03007FE0; // Supervisor stack (top)
-    // Push ROM entry point onto SVC stack
-    // BIOS expects to pop LR from stack (ldm sp!, {r12, r14})
-    // The stack grows downward, so we write below SP
-    uint32_t stack_addr = 0x03007FD8; // Two words below 0x03007FE0
-    memory.write32(stack_addr, 0x00000000);     // R12 (don't care)
-    memory.write32(stack_addr + 4, 0x08000000); // R14 (LR) - ROM entry point!
-    registers[13] = stack_addr; // SP points to data ready to be popped
-    printf("[CPU Reset] Set up SVC stack at 0x%08X, wrote 0x08000000 at 0x%08X\n", stack_addr, stack_addr + 4);
-    printf("[CPU Reset] SP=0x%08X (should point to stack data)\n", registers[13]);
+    registers[13] = 0x03007FE0; // Supervisor stack
     
     setMode(SYS);
     registers[13] = 0x03007F00; // System/User stack

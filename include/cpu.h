@@ -146,11 +146,13 @@ public:
                     ", IRQ SP=0x" + debug_to_hex_string(banked_r13_irq,8) + ", LR=0x" + debug_to_hex_string(banked_r14_irq,8) +
                     ", UND SP=0x" + debug_to_hex_string(banked_r13_und,8) + ", LR=0x" + debug_to_hex_string(banked_r14_und,8));
         Mode oldMode = getMode();
+        printf("[setMode] Called: oldMode=0x%02X, newMode=0x%02X, current LR=0x%08X\n", (int)oldMode, (int)newMode, registers[14]);
         DEBUG_INFO("setMode: BEFORE swap, mode=" + std::to_string((int)oldMode) + ", SP=0x" + debug_to_hex_string(registers[13], 8) + ", LR=0x" + debug_to_hex_string(registers[14], 8));
         DEBUG_INFO(std::string("setMode: switching from ") + std::to_string((int)oldMode) + " to " + std::to_string((int)newMode));
         assert((int)newMode >= 0x10 && (int)newMode <= 0x1F && "Invalid newMode in setMode");
         // Always update CPSR mode bits, even if mode is unchanged
         // Save current SP/LR to bank
+        printf("[setMode] About to save from oldMode=0x%02X\n", (int)oldMode);
         switch (oldMode) {
             case FIQ: banked_r13_fiq = registers[13]; banked_r14_fiq = registers[14]; break;
             case SVC: banked_r13_svc = registers[13]; banked_r14_svc = registers[14]; break;
@@ -158,7 +160,11 @@ public:
             case IRQ: banked_r13_irq = registers[13]; banked_r14_irq = registers[14]; break;
             case UND: banked_r13_und = registers[13]; banked_r14_und = registers[14]; break;
             case USER:
-            case SYS: banked_r13_usr = registers[13]; /* banked_r14_usr is only updated on explicit save, not here */ break;
+            case SYS: 
+                banked_r13_usr = registers[13]; 
+                banked_r14_usr = registers[14];
+                printf("[setMode] Saved System/User LR=0x%08X to banked_r14_usr\n", registers[14]);
+                break;
             default: break;
         }
         // Update CPSR mode bits BEFORE loading new banked registers
@@ -176,7 +182,9 @@ public:
         }
         // Always update LR after mode switch to match banked LR (including User/System)
         if (newMode == USER || newMode == SYS) {
+            printf("[setMode] Loading System/User: banked_r14_usr=0x%08X\n", banked_r14_usr);
             registers[14] = banked_r14_usr;
+            printf("[setMode] After restore: R[14]=0x%08X\n", registers[14]);
         } else {
             registers[14] = bankedLR(newMode);
         }
