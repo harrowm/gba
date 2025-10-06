@@ -1634,6 +1634,32 @@ TEST_F(ARMDataProcessingTest, SBC_ImmediateRotated) {
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu - 0xFF000000u - 0u);
 }
 
+TEST_F(ARMDataProcessingTest, SBC_IMM_WithPC) {
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000; // C flag set
+    assemble_and_write("sbc r2, r15, #8", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], (0x1000 + 8) - 8 - 0);
+}
+
+TEST_F(ARMDataProcessingTest, SBC_REG_WithPC_AsRn) {
+    cpu.R()[1] = 0x4;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000; // C flag set
+    assemble_and_write("sbc r2, r15, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], (0x1000 + 8) - 0x4 - 0);
+}
+
+TEST_F(ARMDataProcessingTest, SBC_REG_WithPC_AsRm) {
+    cpu.R()[1] = 0x2000;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000; // C flag set
+    assemble_and_write("sbc r2, r1, r15", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], 0x2000 - (0x1000 + 8) - 0);
+}
+
 // ===================== RSC Tests =====================
 // RSC: Rd = Operand2 - Rn - (1 - C)
 TEST_F(ARMDataProcessingTest, RSC_Basic) {
@@ -1852,6 +1878,32 @@ TEST_F(ARMDataProcessingTest, RSC_ImmediateRotated) {
     assemble_and_write("rsc r2, r0, #0xFF000000", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFF000000u - 0xFFFFFFFFu - 0u);
+}
+
+TEST_F(ARMDataProcessingTest, RSC_IMM_WithPC) {
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000; // C flag set
+    assemble_and_write("rsc r2, r15, #8", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], 8 - (0x1000 + 8) - 0);
+}
+
+TEST_F(ARMDataProcessingTest, RSC_REG_WithPC_AsRn) {
+    cpu.R()[1] = 0x4;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000; // C flag set
+    assemble_and_write("rsc r2, r15, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], 0x4 - (0x1000 + 8) - 0);
+}
+
+TEST_F(ARMDataProcessingTest, RSC_REG_WithPC_AsRm) {
+    cpu.R()[1] = 0x2000;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000; // C flag set
+    assemble_and_write("rsc r2, r1, r15", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], (0x1000 + 8) - 0x2000 - 0);
 }
 
 // ===================== TST Tests =====================

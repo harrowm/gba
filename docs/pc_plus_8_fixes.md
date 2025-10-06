@@ -8,11 +8,11 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 - ⏳ Todo
 - 🧪 Test written, awaiting fix
 
-## Progress: 16/32 Complete (50%)
+## Progress: 18/32 Complete (56.25%)
 
 ---
 
-## Category 1: Two-Operand Instructions - Register Versions (9 functions)
+## Category 1: Two-Operand Instructions - Register Versions (9 functions) ✅ COMPLETE
 **Need to fix: Both Rn and Rm operands**
 
 | Function | Rn | Rm | Status | Test | Notes |
@@ -25,12 +25,12 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 | exec_arm_orr_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_bic_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_adc_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
-| exec_arm_sbc_reg | ⏳ | ⏳ | ⏳ | ⏳ | Subtract with carry |
-| exec_arm_rsc_reg | ⏳ | ⏳ | ⏳ | ⏳ | Reverse subtract with carry |
+| exec_arm_sbc_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_rsc_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
 
 ---
 
-## Category 2: Two-Operand Instructions - Immediate Versions (9 functions)
+## Category 2: Two-Operand Instructions - Immediate Versions (9 functions) ✅ COMPLETE
 **Need to fix: Only Rn operand**
 
 | Function | Rn | Status | Test | Notes |
@@ -43,8 +43,8 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 | exec_arm_orr_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_bic_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_adc_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
-| exec_arm_sbc_imm | ⏳ | ⏳ | ⏳ | Subtract with carry |
-| exec_arm_rsc_imm | ⏳ | ⏳ | ⏳ | Reverse subtract with carry |
+| exec_arm_sbc_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_rsc_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
 
 ---
 
