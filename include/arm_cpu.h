@@ -166,6 +166,12 @@ public:
         shift_lsl, shift_lsr, shift_asr, shift_ror
     };
    
+    // Helper function for PC+8 pipeline offset in data processing instructions
+    // When R15 (PC) is used as an operand, the value read is PC+8 due to ARM7TDMI pipeline
+    FORCE_INLINE uint32_t readOperand(uint8_t reg) const {
+        return (reg == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[reg];
+    }
+   
     void handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq);
    
 public:

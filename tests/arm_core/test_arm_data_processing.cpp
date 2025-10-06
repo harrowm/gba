@@ -669,6 +669,40 @@ TEST_F(ARMDataProcessingTest, SUB_ImmediateRotated) {
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu - 0xFF000000u);
 }
 
+// PC+8 Pipeline offset tests for SUB
+TEST_F(ARMDataProcessingTest, SUB_IMM_WithPC) {
+    // Test: SUB R0, PC, #4
+    // PC at instruction = 0x1000
+    // Expected: R0 = (0x1000 + 8) - 4 = 0x1004
+    cpu.R()[15] = 0x00001000;
+    assemble_and_write("sub r0, pc, #4", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00001004u) << "SUB R0, PC, #4 should use PC+8";
+    EXPECT_EQ(cpu.R()[15], 0x00001004u) << "PC should advance by 4";
+}
+
+TEST_F(ARMDataProcessingTest, SUB_REG_WithPC_AsRn) {
+    // Test: SUB R0, PC, R1
+    // PC at instruction = 0x2000, R1 = 0x100
+    // Expected: R0 = (0x2000 + 8) - 0x100 = 0x1F08
+    cpu.R()[15] = 0x00002000;
+    cpu.R()[1] = 0x00000100;
+    assemble_and_write("sub r0, pc, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00001F08u) << "SUB R0, PC, R1 should use PC+8 for Rn";
+}
+
+TEST_F(ARMDataProcessingTest, SUB_REG_WithPC_AsRm) {
+    // Test: SUB R0, R1, PC
+    // PC at instruction = 0x3000, R1 = 0x4000
+    // Expected: R0 = 0x4000 - (0x3000 + 8) = 0xFF8
+    cpu.R()[15] = 0x00003000;
+    cpu.R()[1] = 0x00004000;
+    assemble_and_write("sub r0, r1, pc", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00000FF8u) << "SUB R0, R1, PC should use PC+8 for Rm";
+}
+
 // ===================== RSB Tests =====================
 // RSB: Rd = Operand2 - Rn
 TEST_F(ARMDataProcessingTest, RSB_Basic) {
@@ -858,6 +892,40 @@ TEST_F(ARMDataProcessingTest, RSB_ImmediateRotated) {
     assemble_and_write("rsb r2, r0, #0xFF000000", cpu.R()[15]); // RSB r2, r0, #0xFF000000
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFF000000u - 0xFFFFFFFFu);
+}
+
+// PC+8 Pipeline offset tests for RSB
+TEST_F(ARMDataProcessingTest, RSB_IMM_WithPC) {
+    // Test: RSB R0, PC, #0x100
+    // PC at instruction = 0x1000
+    // Expected: R0 = 0x100 - (0x1000 + 8) = 0x100 - 0x1008 = 0xFFFFF0F8 (negative)
+    cpu.R()[15] = 0x00001000;
+    assemble_and_write("rsb r0, pc, #0x100", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0xFFFFF0F8u) << "RSB R0, PC, #0x100 should use PC+8";
+    EXPECT_EQ(cpu.R()[15], 0x00001004u) << "PC should advance by 4";
+}
+
+TEST_F(ARMDataProcessingTest, RSB_REG_WithPC_AsRn) {
+    // Test: RSB R0, PC, R1
+    // PC at instruction = 0x2000, R1 = 0x3000
+    // Expected: R0 = 0x3000 - (0x2000 + 8) = 0x3000 - 0x2008 = 0xFF8
+    cpu.R()[15] = 0x00002000;
+    cpu.R()[1] = 0x00003000;
+    assemble_and_write("rsb r0, pc, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00000FF8u) << "RSB R0, PC, R1 should use PC+8 for Rn";
+}
+
+TEST_F(ARMDataProcessingTest, RSB_REG_WithPC_AsRm) {
+    // Test: RSB R0, R1, PC
+    // PC at instruction = 0x3000, R1 = 0x100
+    // Expected: R0 = (0x3000 + 8) - 0x100 = 0x3008 - 0x100 = 0x2F08
+    cpu.R()[15] = 0x00003000;
+    cpu.R()[1] = 0x00000100;
+    assemble_and_write("rsb r0, r1, pc", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00002F08u) << "RSB R0, R1, PC should use PC+8 for Rm";
 }
 
 // ===================== ADD Tests =====================
