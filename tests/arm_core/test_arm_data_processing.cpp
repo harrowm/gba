@@ -2071,6 +2071,35 @@ TEST_F(ARMDataProcessingTest, TST_ImmediateRotated) {
     EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear
 }
 
+TEST_F(ARMDataProcessingTest, TST_IMM_WithPC) {
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("tst r15, #0x1008", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // TST: (0x1000 + 8) AND 0x1008 = 0x1008 AND 0x1008 = 0x1008 (non-zero)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear (result non-zero)
+}
+
+TEST_F(ARMDataProcessingTest, TST_REG_WithPC_AsRn) {
+    cpu.R()[1] = 0x1008;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("tst r15, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // TST: (0x1000 + 8) AND 0x1008 = 0x1008
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear (result non-zero)
+}
+
+TEST_F(ARMDataProcessingTest, TST_REG_WithPC_AsRm) {
+    cpu.R()[1] = 0x1008;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("tst r1, r15", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // TST: 0x1008 AND (0x1000 + 8) = 0x1008
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear (result non-zero)
+}
+
 // ===================== TEQ Tests =====================
 // TEQ: updates flags as if EOR, result not written
 TEST_F(ARMDataProcessingTest, TEQ_Basic) {
@@ -2251,6 +2280,35 @@ TEST_F(ARMDataProcessingTest, TEQ_ImmediateRotated) {
     EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N clear (MSB = 0)
 }
 
+TEST_F(ARMDataProcessingTest, TEQ_IMM_WithPC) {
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("teq r15, #0x1008", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // TEQ: (0x1000 + 8) XOR 0x1008 = 0x1008 XOR 0x1008 = 0
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z set (result zero)
+}
+
+TEST_F(ARMDataProcessingTest, TEQ_REG_WithPC_AsRn) {
+    cpu.R()[1] = 0x1008;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("teq r15, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // TEQ: (0x1000 + 8) XOR 0x1008 = 0
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z set (result zero)
+}
+
+TEST_F(ARMDataProcessingTest, TEQ_REG_WithPC_AsRm) {
+    cpu.R()[1] = 0x1008;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("teq r1, r15", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // TEQ: 0x1008 XOR (0x1000 + 8) = 0
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z set (result zero)
+}
+
 // ===================== CMP Tests =====================
 // CMP: updates flags as if SUB, result not written
 TEST_F(ARMDataProcessingTest, CMP_Basic) {
@@ -2420,6 +2478,35 @@ TEST_F(ARMDataProcessingTest, CMP_ImmediateRotated) {
     EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear
 }
 
+TEST_F(ARMDataProcessingTest, CMP_IMM_WithPC) {
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("cmp r15, #8", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // CMP: (0x1000 + 8) - 8 = 0x1008 - 8 = 0x1000 (non-zero)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear (result non-zero)
+}
+
+TEST_F(ARMDataProcessingTest, CMP_REG_WithPC_AsRn) {
+    cpu.R()[1] = 0x1008;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("cmp r15, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // CMP: (0x1000 + 8) - 0x1008 = 0
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z set (result zero)
+}
+
+TEST_F(ARMDataProcessingTest, CMP_REG_WithPC_AsRm) {
+    cpu.R()[1] = 0x1008;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0;
+    assemble_and_write("cmp r1, r15", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // CMP: 0x1008 - (0x1000 + 8) = 0
+    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z set (result zero)
+}
+
 // ===================== CMN Tests =====================
 // CMN: updates flags as if ADD, result not written
 TEST_F(ARMDataProcessingTest, CMN_Basic) {
@@ -2585,6 +2672,35 @@ TEST_F(ARMDataProcessingTest, CMN_ImmediateRotated) {
     assemble_and_write("cmn r0, #0xFF000000", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear
+}
+
+TEST_F(ARMDataProcessingTest, CMN_IMM_WithPC) {
+    cpu.R()[15] = 0xFFFFFFF8;
+    cpu.CPSR() = 0;
+    assemble_and_write("cmn r15, #8", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // CMN: (0xFFFFFFF8 + 8) + 8 = 0x00000000 + 8 = 8 (non-zero)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear (result non-zero)
+}
+
+TEST_F(ARMDataProcessingTest, CMN_REG_WithPC_AsRn) {
+    cpu.R()[1] = 8;
+    cpu.R()[15] = 0xFFFFFFF8;
+    cpu.CPSR() = 0;
+    assemble_and_write("cmn r15, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // CMN: (0xFFFFFFF8 + 8) + 8 = 8
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear (result non-zero)
+}
+
+TEST_F(ARMDataProcessingTest, CMN_REG_WithPC_AsRm) {
+    cpu.R()[1] = 8;
+    cpu.R()[15] = 0xFFFFFFF8;
+    cpu.CPSR() = 0;
+    assemble_and_write("cmn r1, r15", cpu.R()[15]);
+    arm_cpu.execute(1);
+    // CMN: 8 + (0xFFFFFFF8 + 8) = 8
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear (result non-zero)
 }
 
 // ===================== ORR Tests =====================

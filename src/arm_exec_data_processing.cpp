@@ -445,7 +445,8 @@ void ARMCPU::exec_arm_tst_imm(uint32_t instruction) {
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
-    uint32_t result = parentCPU.R()[rn] & value;
+    uint32_t op1 = readOperand(rn);
+    uint32_t result = op1 & value;
     // Update flags, especially Z
     updateFlagsLogical(result, 0);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -458,11 +459,12 @@ void ARMCPU::exec_arm_tst_reg(uint32_t instruction) {
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    uint32_t value = parentCPU.R()[rm];
+    uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
-    uint32_t result = parentCPU.R()[rn] & shifted.value;
+    uint32_t op1 = readOperand(rn);
+    uint32_t result = op1 & shifted.value;
     // Update flags, especially Z
     updateFlagsLogical(result, shifted.carry_out);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -474,7 +476,8 @@ void ARMCPU::exec_arm_teq_imm(uint32_t instruction) {
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
-    uint32_t result = parentCPU.R()[rn] ^ value;
+    uint32_t op1 = readOperand(rn);
+    uint32_t result = op1 ^ value;
     // Update flags, especially Z
     updateFlagsLogical(result, 0);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -487,8 +490,9 @@ void ARMCPU::exec_arm_cmp_imm(uint32_t instruction) {
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
-    uint32_t result = parentCPU.R()[rn] - value;
-    updateFlagsSub(parentCPU.R()[rn], value, result);
+    uint32_t op1 = readOperand(rn);
+    uint32_t result = op1 - value;
+    updateFlagsSub(op1, value, result);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
@@ -499,12 +503,13 @@ void ARMCPU::exec_arm_cmp_reg(uint32_t instruction) {
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    uint32_t value = parentCPU.R()[rm];
+    uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
-    uint32_t result = parentCPU.R()[rn] - shifted.value;
-    updateFlagsSub(parentCPU.R()[rn], shifted.value, result);
+    uint32_t op1 = readOperand(rn);
+    uint32_t result = op1 - shifted.value;
+    updateFlagsSub(op1, shifted.value, result);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
@@ -515,8 +520,9 @@ void ARMCPU::exec_arm_cmn_imm(uint32_t instruction) {
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
-    uint32_t result = parentCPU.R()[rn] + value;
-    updateFlagsAdd(parentCPU.R()[rn], value, result);
+    uint32_t op1 = readOperand(rn);
+    uint32_t result = op1 + value;
+    updateFlagsAdd(op1, value, result);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
@@ -527,12 +533,13 @@ void ARMCPU::exec_arm_cmn_reg(uint32_t instruction) {
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    uint32_t value = parentCPU.R()[rm];
+    uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
-    uint32_t result = parentCPU.R()[rn] + shifted.value;
-    updateFlagsAdd(parentCPU.R()[rn], shifted.value, result);
+    uint32_t op1 = readOperand(rn);
+    uint32_t result = op1 + shifted.value;
+    updateFlagsAdd(op1, shifted.value, result);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
@@ -543,11 +550,12 @@ void ARMCPU::exec_arm_teq_reg(uint32_t instruction) {
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    uint32_t value = parentCPU.R()[rm];
+    uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
-    uint32_t result = parentCPU.R()[rn] ^ shifted.value;
+    uint32_t op1 = readOperand(rn);
+    uint32_t result = op1 ^ shifted.value;
     // Update flags, especially Z
     updateFlagsLogical(result, shifted.carry_out);
     parentCPU.R()[15] += 4; // Increment PC for next instruction

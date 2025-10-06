@@ -8,7 +8,7 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 - ⏳ Todo
 - 🧪 Test written, awaiting fix
 
-## Progress: 18/32 Complete (56.25%)
+## Progress: 26/32 Complete (81.25%)
 
 ---
 
@@ -48,19 +48,19 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 
 ---
 
-## Category 3: Comparison/Test Instructions (8 functions)
+## Category 3: Comparison/Test Instructions (8 functions) ✅ COMPLETE
 **Need to fix: Only Rn operand (these don't write results, only set flags)**
 
 | Function | Rn | Status | Test | Notes |
 |----------|----| -------|------|-------|
-| exec_arm_cmp_imm | ⏳ | ⏳ | ⏳ | Compare: sets flags like SUB but doesn't store |
-| exec_arm_cmp_reg | ⏳ | ⏳ | ⏳ | |
-| exec_arm_cmn_imm | ⏳ | ⏳ | ⏳ | Compare negative: sets flags like ADD |
-| exec_arm_cmn_reg | ⏳ | ⏳ | ⏳ | |
-| exec_arm_tst_imm | ⏳ | ⏳ | ⏳ | Test: sets flags like AND |
-| exec_arm_tst_reg | ⏳ | ⏳ | ⏳ | |
-| exec_arm_teq_imm | ⏳ | ⏳ | ⏳ | Test equivalence: sets flags like EOR |
-| exec_arm_teq_reg | ⏳ | ⏳ | ⏳ | |
+| exec_arm_cmp_imm | ✅ | ✅ | ✅ | Compare: sets flags like SUB but doesn't store |
+| exec_arm_cmp_reg | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_cmn_imm | ✅ | ✅ | ✅ | Compare negative: sets flags like ADD |
+| exec_arm_cmn_reg | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_tst_imm | ✅ | ✅ | ✅ | Test: sets flags like AND |
+| exec_arm_tst_reg | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_teq_imm | ✅ | ✅ | ✅ | Test equivalence: sets flags like EOR |
+| exec_arm_teq_reg | ✅ | ✅ | ✅ | Fixed - tests passing |
 
 ---
 
