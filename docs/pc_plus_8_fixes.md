@@ -8,7 +8,7 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 - ⏳ Todo
 - 🧪 Test written, awaiting fix
 
-## Progress: 10/32 Complete (31.25%)
+## Progress: 16/32 Complete (50%)
 
 ---
 
@@ -22,9 +22,9 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 | exec_arm_rsb_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_and_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_eor_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
-| exec_arm_orr_reg | ⏳ | ⏳ | ⏳ | ⏳ | Logical OR |
-| exec_arm_bic_reg | ⏳ | ⏳ | ⏳ | ⏳ | Bit clear |
-| exec_arm_adc_reg | ⏳ | ⏳ | ⏳ | ⏳ | Add with carry |
+| exec_arm_orr_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_bic_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_adc_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_sbc_reg | ⏳ | ⏳ | ⏳ | ⏳ | Subtract with carry |
 | exec_arm_rsc_reg | ⏳ | ⏳ | ⏳ | ⏳ | Reverse subtract with carry |
 
@@ -40,9 +40,9 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 | exec_arm_rsb_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_and_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_eor_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
-| exec_arm_orr_imm | ⏳ | ⏳ | ⏳ | Logical OR |
-| exec_arm_bic_imm | ⏳ | ⏳ | ⏳ | Bit clear |
-| exec_arm_adc_imm | ⏳ | ⏳ | ⏳ | Add with carry |
+| exec_arm_orr_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_bic_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_adc_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_sbc_imm | ⏳ | ⏳ | ⏳ | Subtract with carry |
 | exec_arm_rsc_imm | ⏳ | ⏳ | ⏳ | Reverse subtract with carry |
 

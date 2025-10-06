@@ -1391,6 +1391,43 @@ TEST_F(ARMDataProcessingTest, ADC_ImmediateRotated) {
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu + 0xFF000000u + 1u);
 }
 
+// PC+8 Pipeline offset tests for ADC
+TEST_F(ARMDataProcessingTest, ADC_IMM_WithPC) {
+    // Test: ADC R0, PC, #4
+    // PC at instruction = 0x1000, Carry = 1
+    // Expected: R0 = (0x1000 + 8) + 4 + 1 = 0x100D
+    cpu.R()[15] = 0x00001000;
+    cpu.CPSR() = 0x20000000; // C flag set
+    assemble_and_write("adc r0, pc, #4", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x0000100Du) << "ADC R0, PC, #4 should use PC+8";
+    EXPECT_EQ(cpu.R()[15], 0x00001004u) << "PC should advance by 4";
+}
+
+TEST_F(ARMDataProcessingTest, ADC_REG_WithPC_AsRn) {
+    // Test: ADC R0, PC, R1
+    // PC at instruction = 0x2000, R1 = 0x100, Carry = 0
+    // Expected: R0 = (0x2000 + 8) + 0x100 + 0 = 0x2108
+    cpu.R()[15] = 0x00002000;
+    cpu.R()[1] = 0x00000100;
+    cpu.CPSR() = 0; // C flag clear
+    assemble_and_write("adc r0, pc, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00002108u) << "ADC R0, PC, R1 should use PC+8 for Rn";
+}
+
+TEST_F(ARMDataProcessingTest, ADC_REG_WithPC_AsRm) {
+    // Test: ADC R0, R1, PC
+    // PC at instruction = 0x3000, R1 = 0x200, Carry = 1
+    // Expected: R0 = 0x200 + (0x3000 + 8) + 1 = 0x3209
+    cpu.R()[15] = 0x00003000;
+    cpu.R()[1] = 0x00000200;
+    cpu.CPSR() = 0x20000000; // C flag set
+    assemble_and_write("adc r0, r1, pc", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00003209u) << "ADC R0, R1, PC should use PC+8 for Rm";
+}
+
 // ===================== SBC Tests =====================
 // SBC: Rd = Rn - Operand2 - (1 - C)
 TEST_F(ARMDataProcessingTest, SBC_Basic) {
@@ -2688,6 +2725,40 @@ TEST_F(ARMDataProcessingTest, ORR_ImmediateRotated) {
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu);
 }
 
+// PC+8 Pipeline offset tests for ORR
+TEST_F(ARMDataProcessingTest, ORR_IMM_WithPC) {
+    // Test: ORR R0, PC, #0xF
+    // PC at instruction = 0x1000
+    // Expected: R0 = (0x1000 + 8) | 0xF = 0x1008 | 0xF = 0x100F
+    cpu.R()[15] = 0x00001000;
+    assemble_and_write("orr r0, pc, #0xF", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x0000100Fu) << "ORR R0, PC, #0xF should use PC+8";
+    EXPECT_EQ(cpu.R()[15], 0x00001004u) << "PC should advance by 4";
+}
+
+TEST_F(ARMDataProcessingTest, ORR_REG_WithPC_AsRn) {
+    // Test: ORR R0, PC, R1
+    // PC at instruction = 0x2000, R1 = 0xFF
+    // Expected: R0 = (0x2000 + 8) | 0xFF = 0x2008 | 0xFF = 0x20FF
+    cpu.R()[15] = 0x00002000;
+    cpu.R()[1] = 0x000000FF;
+    assemble_and_write("orr r0, pc, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x000020FFu) << "ORR R0, PC, R1 should use PC+8 for Rn";
+}
+
+TEST_F(ARMDataProcessingTest, ORR_REG_WithPC_AsRm) {
+    // Test: ORR R0, R1, PC
+    // PC at instruction = 0x3000, R1 = 0xFF
+    // Expected: R0 = 0xFF | (0x3000 + 8) = 0xFF | 0x3008 = 0x30FF
+    cpu.R()[15] = 0x00003000;
+    cpu.R()[1] = 0x000000FF;
+    assemble_and_write("orr r0, r1, pc", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x000030FFu) << "ORR R0, R1, PC should use PC+8 for Rm";
+}
+
 // ===================== MOV Tests =====================
 // MOV: Rd = Operand2
 TEST_F(ARMDataProcessingTest, MOV_Basic) {
@@ -3045,6 +3116,40 @@ TEST_F(ARMDataProcessingTest, BIC_ImmediateRotated) {
     assemble_and_write("bic r2, r0, #0xFF000000", cpu.R()[15]);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0xFFFFFFFFu & ~0xFF000000u);
+}
+
+// PC+8 Pipeline offset tests for BIC
+TEST_F(ARMDataProcessingTest, BIC_IMM_WithPC) {
+    // Test: BIC R0, PC, #0xF
+    // PC at instruction = 0x1000
+    // Expected: R0 = (0x1000 + 8) & ~0xF = 0x1008 & 0xFFFFFFF0 = 0x1000
+    cpu.R()[15] = 0x00001000;
+    assemble_and_write("bic r0, pc, #0xF", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00001000u) << "BIC R0, PC, #0xF should use PC+8";
+    EXPECT_EQ(cpu.R()[15], 0x00001004u) << "PC should advance by 4";
+}
+
+TEST_F(ARMDataProcessingTest, BIC_REG_WithPC_AsRn) {
+    // Test: BIC R0, PC, R1
+    // PC at instruction = 0x2000, R1 = 0xF
+    // Expected: R0 = (0x2000 + 8) & ~0xF = 0x2008 & 0xFFFFFFF0 = 0x2000
+    cpu.R()[15] = 0x00002000;
+    cpu.R()[1] = 0x0000000F;
+    assemble_and_write("bic r0, pc, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00002000u) << "BIC R0, PC, R1 should use PC+8 for Rn";
+}
+
+TEST_F(ARMDataProcessingTest, BIC_REG_WithPC_AsRm) {
+    // Test: BIC R0, R1, PC
+    // PC at instruction = 0x3000, R1 = 0xFFFF
+    // Expected: R0 = 0xFFFF & ~(0x3000 + 8) = 0xFFFF & ~0x3008 = 0xCFF7
+    cpu.R()[15] = 0x00003000;
+    cpu.R()[1] = 0x0000FFFF;
+    assemble_and_write("bic r0, r1, pc", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x0000CFF7u) << "BIC R0, R1, PC should use PC+8 for Rm";
 }
 
 // ===================== MVN Tests =====================
