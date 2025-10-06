@@ -315,6 +315,7 @@ public:
 
     void execute(uint32_t cycles);
     void executeWithTiming(uint32_t cycles, TimingState* timing);
+    void executeOneInstruction(); // Execute one instruction with scheduler integration
     uint32_t calculateInstructionCycles(uint32_t instruction);    
 };
 

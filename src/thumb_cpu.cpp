@@ -1356,3 +1356,33 @@ void ThumbCPU::thumb_bl(uint16_t instruction) {
         DEBUG_INFO("Executing Thumb BL (second part): Branch to 0x" + debug_to_hex_string(parentCPU.R()[15], 8) + " with link, LR=0x" + debug_to_hex_string(parentCPU.R()[14], 8));
     }
 }
+
+// ============================================================================
+// Scheduler-Integrated Execution
+// ============================================================================
+
+void ThumbCPU::executeOneInstruction() {
+    // Check if we're still in Thumb mode
+    if (!parentCPU.getFlag(CPU::FLAG_T)) {
+        DEBUG_INFO("CPU switched to ARM mode");
+        return;
+    }
+    
+    uint32_t pc = parentCPU.R()[15];
+    uint16_t instruction = parentCPU.getMemory().read16(pc);
+    
+    // Calculate how many cycles this instruction will take
+    uint32_t instruction_cycles = calculateInstructionCycles(instruction);
+    
+    // Increment PC before execution (Thumb instructions do this)
+    parentCPU.R()[15] += 2;
+    
+    // Execute the instruction
+    uint8_t opcode = instruction >> 8;
+    (this->*thumb_instruction_table[opcode])(instruction);
+    
+    // Advance scheduler by instruction execution cycles
+    // Note: Memory access cycles are already handled by memory.cpp addWaitCycles()
+    // This adds the CPU execution cycles on top of memory wait states
+    parentCPU.advanceCycles(instruction_cycles);
+}

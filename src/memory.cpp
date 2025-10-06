@@ -268,9 +268,9 @@ uint32_t Memory::calculateWaitStates(uint32_t address, uint32_t accessWidth) con
 void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
     if (scheduler) {
         uint32_t cycles = calculateWaitStates(address, accessWidth);
-        // In a real implementation, we'd advance the scheduler here
-        // For now, just calculate the cycles (scheduler integration comes next)
-        (void)cycles; // Suppress unused variable warning
+        // Advance scheduler by wait state cycles
+        uint64_t targetCycle = scheduler->getCurrentCycle() + cycles;
+        scheduler->runUntil(targetCycle);
     }
 }
 

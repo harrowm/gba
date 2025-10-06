@@ -3,8 +3,9 @@
 #include "thumb_cpu.h" // Include complete definition
 #include "arm_cpu.h"   // Include complete definition
 #include "timing.h"
+#include "scheduler.h"
 
-CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptController(ic) {
+CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptController(ic), scheduler(nullptr) {
     thumbCPU = new ThumbCPU(*this); // Pass itself as the parent reference
     armCPU = new ARMCPU(*this);     // Pass itself as the parent reference
     std::fill(std::begin(registers), std::end(registers), 0); // Reset all registers to zero using std::fill
@@ -85,4 +86,16 @@ void CPU::printCPUState() const {
 CPU::~CPU() {
     delete thumbCPU;
     delete armCPU;
+}
+
+// ============================================================================
+// Scheduler Integration
+// ============================================================================
+
+void CPU::advanceCycles(uint32_t cycles) {
+    if (scheduler) {
+        // Advance the scheduler by the given number of cycles
+        uint64_t targetCycle = scheduler->getCurrentCycle() + cycles;
+        scheduler->runUntil(targetCycle);
+    }
 }

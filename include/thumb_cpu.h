@@ -248,6 +248,7 @@ public:
 
     void execute(uint32_t cycles);
     void executeWithTiming(uint32_t cycles, TimingState* timing);  // New cycle-driven execution
+    void executeOneInstruction(); // Execute one instruction with scheduler integration
     uint32_t calculateInstructionCycles(uint16_t instruction);     // Calculate cycles for next instruction
 };
 

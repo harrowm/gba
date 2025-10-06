@@ -9,16 +9,20 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
 ✅ **Completed**:
 - ARM7TDMI CPU emulation (ARM instruction set)
 - Thumb instruction set implementation
-- Comprehensive test coverage (825 tests passing)
+- Comprehensive test coverage (500 ARM core tests + 36 scheduler tests + 33 memory timing tests = **569 tests passing**)
 - Basic memory system
 - Debug infrastructure with Capstone disassembly
 - **✅ Event scheduler fully implemented and tested (36 tests passing)**
 - **✅ Timing system foundation complete**
 - **✅ All compilation warnings resolved across test suites**
+- **✅ CPU-Scheduler integration complete (6 integration tests passing)**
+  - CPU advances scheduler during instruction execution
+  - Memory wait states actively tracked
+  - Both ARM and Thumb instruction execution integrated
 
 🚧 **In Progress**:
 - GPU/Graphics system (Mode 3 foundation ready)
-- Integration of scheduler with emulation loop
+- Wiring scheduler into main emulation loop
 
 ## Phased Approach
 
@@ -48,7 +52,16 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
    - ⬜ Sequential vs non-sequential access timing (TODO: requires prefetch buffer)
    - ⬜ WAITCNT register implementation (TODO: configurable wait states)
 
-3. **Simple test ROMs** 🚧 **READY TO START**
+3. **Wire Scheduler into CPU execution loop** ✅ **COMPLETE**
+   - ✅ CPU class has Scheduler pointer and integration methods
+   - ✅ `advanceCycles(uint32_t cycles)` implemented
+   - ✅ Memory wait cycles actively advance scheduler
+   - ✅ ARM `executeOneInstruction()` implemented with timing
+   - ✅ Thumb `executeOneInstruction()` implemented with timing
+   - ✅ 6 integration tests verifying cycle advancement
+   - **Measurable**: Every instruction and memory access advances global cycle counter
+
+4. **Simple test ROMs** 🚧 **READY TO START**
    - ⬜ Use existing ARM/Thumb test ROMs
    - ⬜ Create timing verification tests (measure cycle counts)
    - **Measurable**: Compare cycle counts against mGBA or known values
@@ -56,7 +69,8 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
 ### Deliverables
 - [x] Event scheduler working with cycle accuracy ✅ **DONE**
 - [x] Memory wait states implemented ✅ **DONE** (33 tests passing)
-- [ ] Timing test ROMs pass with correct cycle counts (TODO: integrate with CPU execution)
+- [x] CPU-Scheduler integration complete ✅ **DONE** (6 integration tests passing)
+- [ ] Timing test ROMs pass with correct cycle counts (TODO: create dedicated timing tests)
 
 ---
 
@@ -439,6 +453,15 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
 - **2025-10-06**: Initial plan created
   - CPU implementation complete with 825 tests passing
   - Starting Phase 1 & 2 (timing + Mode 3 graphics)
+
+- **2025-10-06 Evening**: Phase 1 major milestones completed
+  - Event scheduler fully implemented and tested (36 tests)
+  - Memory wait states complete (33 tests)
+  - CPU-Scheduler integration complete (6 integration tests)
+  - Total: 569 tests passing (500 CPU + 36 scheduler + 33 timing)
+  - Linker error resolved (added scheduler.cpp to Makefile)
+  - Every instruction and memory access now advances global cycle counter
+  - Ready for Phase 2: V-Blank interrupt and graphics timing
 
 - **2025-10-06 (Evening)**: Phase 1 Timing System Complete
   - ✅ Event scheduler fully implemented and tested

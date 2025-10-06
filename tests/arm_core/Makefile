@@ -18,6 +18,7 @@ RUN_ALL_SRCS = test_basic.cpp \
   test_arm_multiply.cpp \
   test_arm_data_processing.cpp \
   test_arm_other.cpp \
+  test_scheduler_integration.cpp \
   ../../src/arm_cpu.cpp \
   ../../src/arm_exec_other.cpp \
   ../../src/arm_further_decode.cpp \
@@ -28,10 +29,12 @@ RUN_ALL_SRCS = test_basic.cpp \
   ../../src/debug.cpp \
   ../../src/memory.cpp \
   ../../src/thumb_cpu.cpp \
+  ../../src/scheduler.cpp \
   ../../src/arm_timing.c \
   ../../src/thumb_timing.c \
   ../../src/timer.c \
   ../../src/timing.c \
+  ../../src/interrupt.c \
   ../../src/gba.cpp \
   ../../src/gpu.cpp
 

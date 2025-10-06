@@ -262,47 +262,47 @@ TEST_F(MemoryWaitStatesTest, ComprehensiveSummary) {
     printf("%-20s %6s %6s %6s\n", "Region", "8-bit", "16-bit", "32-bit");
     printf("%-20s %6s %6s %6s\n", "--------------------", "------", "------", "------");
     
-    printf("%-20s %6lu %6lu %6lu\n", "BIOS",
+    printf("%-20s %6u %6u %6u\n", "BIOS",
            memory.getWaitStates(0x00000000, 8),
            memory.getWaitStates(0x00000000, 16),
            memory.getWaitStates(0x00000000, 32));
     
-    printf("%-20s %6lu %6lu %6lu\n", "EWRAM",
+    printf("%-20s %6u %6u %6u\n", "EWRAM",
            memory.getWaitStates(0x02000000, 8),
            memory.getWaitStates(0x02000000, 16),
            memory.getWaitStates(0x02000000, 32));
     
-    printf("%-20s %6lu %6lu %6lu  ← Fastest!\n", "IWRAM",
+    printf("%-20s %6u %6u %6u  ← Fastest!\n", "IWRAM",
            memory.getWaitStates(0x03000000, 8),
            memory.getWaitStates(0x03000000, 16),
            memory.getWaitStates(0x03000000, 32));
     
-    printf("%-20s %6lu %6lu %6lu\n", "I/O Registers",
+    printf("%-20s %6u %6u %6u\n", "I/O Registers",
            memory.getWaitStates(0x04000000, 8),
            memory.getWaitStates(0x04000000, 16),
            memory.getWaitStates(0x04000000, 32));
     
-    printf("%-20s %6lu %6lu %6lu\n", "Palette RAM",
+    printf("%-20s %6u %6u %6u\n", "Palette RAM",
            memory.getWaitStates(0x05000000, 8),
            memory.getWaitStates(0x05000000, 16),
            memory.getWaitStates(0x05000000, 32));
     
-    printf("%-20s %6lu %6lu %6lu\n", "VRAM",
+    printf("%-20s %6u %6u %6u\n", "VRAM",
            memory.getWaitStates(0x06000000, 8),
            memory.getWaitStates(0x06000000, 16),
            memory.getWaitStates(0x06000000, 32));
     
-    printf("%-20s %6lu %6lu %6lu\n", "OAM",
+    printf("%-20s %6u %6u %6u\n", "OAM",
            memory.getWaitStates(0x07000000, 8),
            memory.getWaitStates(0x07000000, 16),
            memory.getWaitStates(0x07000000, 32));
     
-    printf("%-20s %6lu %6lu %6lu\n", "GamePak ROM (WS0)",
+    printf("%-20s %6u %6u %6u\n", "GamePak ROM (WS0)",
            memory.getWaitStates(0x08000000, 8),
            memory.getWaitStates(0x08000000, 16),
            memory.getWaitStates(0x08000000, 32));
     
-    printf("%-20s %6lu %6lu %6lu\n", "GamePak SRAM",
+    printf("%-20s %6u %6u %6u\n", "GamePak SRAM",
            memory.getWaitStates(0x0E000000, 8),
            memory.getWaitStates(0x0E000000, 16),
            memory.getWaitStates(0x0E000000, 32));

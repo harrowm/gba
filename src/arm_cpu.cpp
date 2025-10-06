@@ -221,3 +221,29 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
     parentCPU.R()[15] = vector_address;
 }
 
+// ============================================================================
+// Scheduler-Integrated Execution
+// ============================================================================
+
+void ARMCPU::executeOneInstruction() {
+    // Check if we're still in ARM mode
+    if (parentCPU.getFlag(CPU::FLAG_T)) {
+        DEBUG_INFO("CPU switched to Thumb mode");
+        return;
+    }
+    
+    uint32_t pc = parentCPU.R()[15];
+    uint32_t instruction = parentCPU.getMemory().read32(pc);
+    
+    // Calculate how many cycles this instruction will take
+    uint32_t instruction_cycles = calculateInstructionCycles(instruction);
+    
+    // Execute the instruction
+    executeInstruction(pc, instruction);
+    
+    // Advance scheduler by instruction execution cycles
+    // Note: Memory access cycles are already handled by memory.cpp addWaitCycles()
+    // This adds the CPU execution cycles on top of memory wait states
+    parentCPU.advanceCycles(instruction_cycles);
+}
+

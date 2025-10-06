@@ -11,9 +11,10 @@
 #include <array>
 #include <cstdint>
 
-// Forward definition of ThumbCPU and ARMCPU
+// Forward declarations
 class ThumbCPU;
 class ARMCPU;
+class Scheduler;
 
 class CPU {
     // Prevent accidental copies/moves (breaks memory reference)
@@ -49,6 +50,7 @@ private:
     std::array<uint32_t, 16> registers; // Shared registers (User/System)
     uint32_t cpsr; // Current Program Status Register
     TimingState timing; // Timing state for cycle-driven execution
+    Scheduler* scheduler; // Scheduler for cycle-accurate timing
 
     // Banked registers for privileged modes
     // R13 (SP) and R14 (LR) for each mode except User/System
@@ -117,6 +119,11 @@ public:
 
     void execute(uint32_t cycles);
     void executeWithTiming(uint32_t cycles); // New timing-aware execution
+    
+    // Scheduler integration
+    void setScheduler(Scheduler* sched) { scheduler = sched; }
+    Scheduler* getScheduler() { return scheduler; }
+    void advanceCycles(uint32_t cycles); // Advance scheduler by cycles
 
     std::array<uint32_t, 16>& R() { return registers; }
     uint32_t& CPSR() { return cpsr; }
