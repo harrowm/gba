@@ -103,15 +103,13 @@ void GPU::renderMode3Scanline(uint16_t scanline) {
     }
     
     // Mode 3: 240x160 @ 16bpp bitmap at VRAM 0x06000000
-    // The framebuffer is already in VRAM, so rendering just means
-    // the data is available for display. In a real emulator, we'd
-    // copy this to the actual display buffer here.
+    // In Mode 3, VRAM directly contains the framebuffer in RGB555 format
+    // One scanline = 240 pixels * 2 bytes = 480 bytes
     
-    // For now, we just verify the data is accessible
-    uint16_t* framebuffer = getFrameBuffer();
-    if (framebuffer) {
-        // In a full implementation, we'd copy this scanline to the display
-        // For example: memcpy(displayBuffer + scanline * 240, framebuffer + scanline * 240, 240 * 2);
-        UNUSED(framebuffer); // Suppress warning for now
-    }
+    // The actual rendering happens when Display::renderFrame() is called
+    // which reads directly from VRAM via getFrameBuffer()
+    // This method is called during H-Draw to simulate scanline rendering timing
+    
+    // In a more accurate emulator, we might do per-pixel effects here,
+    // but for basic Mode 3, the framebuffer is already in the correct format
 }
