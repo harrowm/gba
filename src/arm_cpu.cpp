@@ -128,18 +128,59 @@ const ARMCPU::CondFunc ARMCPU::condTable[16] = {
 };
 
 void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
-    // Track when we enter ROM region
+    // Track PC regions and transitions
     static bool in_rom = false;
+    static bool in_bios = true;
     static uint32_t last_pc = 0;
-    bool pc_in_rom = (pc >= 0x08000000 && pc < 0x0E000000);
+    static uint64_t instruction_count = 0;
     
+    instruction_count++;
+    
+    bool pc_in_rom = (pc >= 0x08000000 && pc < 0x0E000000);
+    bool pc_in_bios = (pc < 0x00004000);
+    bool pc_in_iwram = (pc >= 0x03000000 && pc < 0x03008000);
+    bool pc_in_ewram = (pc >= 0x02000000 && pc < 0x02040000);
+    
+    // Track BIOS exit
+    if (!pc_in_bios && in_bios) {
+        printf("\n*** [%llu] PC LEFT BIOS at 0x%08X (last BIOS PC: 0x%08X) ***\n", 
+               instruction_count, pc, last_pc);
+        in_bios = false;
+    }
+    
+    // Track ROM entry
     if (pc_in_rom && !in_rom) {
-        printf("\n*** PC ENTERED ROM REGION at 0x%08X (from 0x%08X) ***\n", pc, last_pc);
+        printf("\n*** [%llu] PC ENTERED ROM REGION at 0x%08X (from 0x%08X) ***\n", 
+               instruction_count, pc, last_pc);
         printf("*** First ROM instruction: 0x%08X ***\n\n", instruction);
         in_rom = true;
     } else if (!pc_in_rom && in_rom) {
-        printf("\n*** PC LEFT ROM REGION at 0x%08X ***\n\n", pc);
+        printf("\n*** [%llu] PC LEFT ROM REGION at 0x%08X ***\n\n", instruction_count, pc);
         in_rom = false;
+    }
+    
+    // Debug critical BIOS instructions
+    if (pc >= 0x00000060 && pc <= 0x00000068 && in_bios) {
+        printf("[BIOS @0x%08X] Instruction: 0x%08X, SP=0x%08X, LR=0x%08X, CPSR=0x%08X\n",
+               pc, instruction, parentCPU.R()[13], parentCPU.R()[14], parentCPU.CPSR());
+        // If it's the ldm instruction, show what we're reading from stack
+        if (pc == 0x00000060) {
+            uint32_t sp = parentCPU.R()[13];
+            printf("  -> Reading from stack: [0x%08X]=0x%08X, [0x%08X]=0x%08X\n",
+                   sp, parentCPU.getMemory().read32(sp),
+                   sp+4, parentCPU.getMemory().read32(sp+4));
+        }
+    }
+    
+    // Sample PC every 100k instructions to see if we're making progress
+    if (instruction_count % 100000 == 0) {
+        const char* region = "UNKNOWN";
+        if (pc_in_bios) region = "BIOS";
+        else if (pc_in_rom) region = "ROM";
+        else if (pc_in_iwram) region = "IWRAM";
+        else if (pc_in_ewram) region = "EWRAM";
+        printf("[%llu instructions] PC=0x%08X (%s), Instr=0x%08X, LR=0x%08X\n", 
+               instruction_count, pc, region, instruction, parentCPU.R()[14]);
     }
     
     last_pc = pc;

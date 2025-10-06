@@ -29,6 +29,7 @@ $(ELF): $(OBJ)
 $(ROM): $(ELF)
 	$(OBJCOPY) -O binary $(ELF) $(ROM)
 	@echo "ROM built: $(ROM)"
+	@python3 fix_header.py $(ROM)
 	@ls -lh $(ROM)
 
 clean:

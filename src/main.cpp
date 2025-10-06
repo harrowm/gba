@@ -30,14 +30,19 @@ void printUsage(const char* programName) {
     printf("  rom_path            Path to GBA ROM file (.gba)\n\n");
     printf("Options:\n");
     printf("  -h, --help          Show this help message\n");
-    printf("  -t, --test-pattern  Use test pattern instead of ROM\n\n");
+    printf("  -t, --test-pattern  Use test pattern instead of ROM\n");
+    printf("  --skip-bios         Skip BIOS and jump directly to ROM (for homebrew ROMs)\n\n");
     printf("Examples:\n");
     printf("  %s game.gba                    # Load and run game.gba\n", programName);
     printf("  %s assets/roms/sonic.bin       # Load ROM from assets\n", programName);
+    printf("  %s --skip-bios test.gba        # Skip BIOS for homebrew ROMs\n", programName);
     printf("  %s --test-pattern              # Run with gradient test pattern\n", programName);
     printf("  %s                             # Run with test pattern (default)\n\n", programName);
     printf("Controls:\n");
     printf("  ESC                 Quit emulator\n");
+    printf("\nNotes:\n");
+    printf("  - Most homebrew ROMs require --skip-bios flag\n");
+    printf("  - Commercial ROMs may boot through BIOS (experimental)\n");
 }
 
 int main(int argc, char* argv[]) {
@@ -47,12 +52,16 @@ int main(int argc, char* argv[]) {
     const char* romPath = nullptr;
     bool useTestPattern = false;
     
+    bool skipBIOS = false;
+    
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printUsage(argv[0]);
             return 0;
         } else if (strcmp(argv[i], "--test-pattern") == 0 || strcmp(argv[i], "-t") == 0) {
             useTestPattern = true;
+        } else if (strcmp(argv[i], "--skip-bios") == 0) {
+            skipBIOS = true;
         } else if (argv[i][0] != '-') {
             // Assume it's a ROM path
             if (romPath != nullptr) {
@@ -96,9 +105,9 @@ int main(int argc, char* argv[]) {
             }
             printf("\n");
             
-            // Check if this is our simple test ROM (test_pixels.gba)
-            if (romPath && strstr(romPath, "test_pixels") != nullptr) {
-                printf("Detected test_pixels.gba - skipping BIOS boot\n");
+            // Skip BIOS if requested (for ROMs that don't work with current BIOS)
+            if (skipBIOS) {
+                printf("Skipping BIOS boot (--skip-bios flag)\n");
                 gba.skipBIOS();
             }
         }

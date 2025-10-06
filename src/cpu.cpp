@@ -185,23 +185,32 @@ void CPU::reset() {
     banked_r13_und = banked_r14_und = 0;
     banked_r13_usr = banked_r14_usr = 0;
     
+    // Initialize stack pointers for different modes FIRST
+    // These are typical GBA stack locations
+    setMode(IRQ);
+    registers[13] = 0x03007FA0; // IRQ stack
+    
+    setMode(SVC);
+    registers[13] = 0x03007FE0; // Supervisor stack (top)
+    // Push ROM entry point onto SVC stack
+    // BIOS expects to pop LR from stack (ldm sp!, {r12, r14})
+    // The stack grows downward, so we write below SP
+    uint32_t stack_addr = 0x03007FD8; // Two words below 0x03007FE0
+    memory.write32(stack_addr, 0x00000000);     // R12 (don't care)
+    memory.write32(stack_addr + 4, 0x08000000); // R14 (LR) - ROM entry point!
+    registers[13] = stack_addr; // SP points to data ready to be popped
+    printf("[CPU Reset] Set up SVC stack at 0x%08X, wrote 0x08000000 at 0x%08X\n", stack_addr, stack_addr + 4);
+    printf("[CPU Reset] SP=0x%08X (should point to stack data)\n", registers[13]);
+    
+    setMode(SYS);
+    registers[13] = 0x03007F00; // System/User stack
+    
     // Start in Supervisor mode with interrupts disabled
     cpsr = 0x000000D3; // SVC mode (0x13) | IRQ disabled (bit 7) | FIQ disabled (bit 6)
     
     // Set PC to reset vector (0x00000000)
     // In a real GBA, the BIOS starts here
     registers[15] = 0x00000000;
-    
-    // Initialize stack pointers for different modes
-    // These are typical GBA stack locations
-    setMode(IRQ);
-    registers[13] = 0x03007FA0; // IRQ stack
-    
-    setMode(SVC);
-    registers[13] = 0x03007FE0; // Supervisor stack
-    
-    setMode(SYS);
-    registers[13] = 0x03007F00; // System/User stack
     
     DEBUG_INFO("CPU: Reset complete, PC=0x00000000");
 }
