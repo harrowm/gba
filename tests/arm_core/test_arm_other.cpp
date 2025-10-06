@@ -149,9 +149,9 @@ TEST_F(ARMOtherTest, UndefinedAndSWI) {
     cpu.R()[15] = 0x00000000;
     assemble_and_write("mov r0, pc", cpu.R()[15]); 
     arm_cpu.execute(1);
-    // Current implementation behavior: PC as source returns current PC value
-    // ARM spec says it should be PC+8, but our implementation differs
-    EXPECT_EQ(cpu.R()[0], 0x00u);  // Current PC value when instruction executes
+    // ARM spec: PC as source returns PC+8 (pipeline offset)
+    // Instruction at 0x00, PC reads as 0x08
+    EXPECT_EQ(cpu.R()[0], 0x08u);  // PC+8 due to pipeline
     EXPECT_EQ(cpu.R()[15], 0x04u);  // PC incremented normally
 }
 

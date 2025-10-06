@@ -804,10 +804,11 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_Post_WB_Down) {
 // LDR (immediate, base register is PC)
 TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_BaseIsPC) {
     cpu.R()[15] = 0x00000000;
-    memory.write32(0x00000008, 0xDEADBEEF);
+    // With PC+8 pipeline offset: base=0+8=8, address=8+8=16
+    memory.write32(0x00000010, 0xDEADBEEF);
     ASSERT_TRUE(assemble_and_write("ldr r2, [pc, #8]", cpu.R()[15]));
     arm_cpu.execute(1);
-    // PC is 8 ahead due to pipeline
+    // PC is 8 ahead due to pipeline, so [pc, #8] = [0+8, #8] = [8, #8] = 16
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xDEADBEEF);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
@@ -818,7 +819,8 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_BaseIsPC) {
     cpu.R()[15] = 0x00000000;
     ASSERT_TRUE(assemble_and_write("str r2, [pc, #8]", cpu.R()[15]));
     arm_cpu.execute(1);
-    EXPECT_EQ(memory.read32(0x00000008), (uint32_t)0xCAFEBABE);
+    // With PC+8 pipeline offset: base=0+8=8, address=8+8=16
+    EXPECT_EQ(memory.read32(0x00000010), (uint32_t)0xCAFEBABE);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 

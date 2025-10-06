@@ -85,24 +85,9 @@ void GBA::runFrame() {
     uint64_t targetCycle = startCycle + CYCLES_PER_FRAME;
     printf("[GBA::runFrame #%d] Target cycle: %llu\n", frame_num, targetCycle);
     
-    // Execute CPU instructions and process events in chunks
-    // This prevents blocking the main loop for too long
-    const uint32_t CHUNK_SIZE = 1000; // Process 1000 cycles at a time
-    
-    while (scheduler.getCurrentCycle() < targetCycle) {
-        uint64_t chunkTarget = scheduler.getCurrentCycle() + CHUNK_SIZE;
-        if (chunkTarget > targetCycle) {
-            chunkTarget = targetCycle;
-        }
-        
-        // Execute CPU instructions until we reach the chunk target
-        while (scheduler.getCurrentCycle() < chunkTarget) {
-            cpu->executeOneInstruction();
-        }
-        
-        // Process scheduler events for this chunk (video timing, interrupts, etc.)
-        scheduler.runUntil(chunkTarget);
-    }
+    // Simply advance the scheduler to process all events for this frame
+    // The CPU execution happens separately in the main loop
+    scheduler.runUntil(targetCycle);
     
     frameCount++;
     
