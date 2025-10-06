@@ -1,5 +1,6 @@
 // test_arm_multiply.cpp
 #include <gtest/gtest.h>
+#include <unistd.h>  // For dup, dup2, close
 #include "memory.h"
 #include "interrupt.h"
 #include "cpu.h"
@@ -40,7 +41,22 @@ protected:
     bool assemble_and_write(const std::string& asm_code, uint32_t addr, std::vector<uint8_t>* out_bytes = nullptr) {
         unsigned char* encode = nullptr;
         size_t size, count;
+        
+        // Temporarily suppress Keystone warnings about deprecated instructions
+        // (PC/SP in STM/LDM is valid for ARM7TDMI but deprecated in newer ARM)
+        fflush(stderr);
+        int old_stderr = dup(fileno(stderr));
+        FILE* null_stream = fopen("/dev/null", "w");
+        dup2(fileno(null_stream), fileno(stderr));
+        
         int err = ks_asm(ks, asm_code.c_str(), addr, &encode, &size, &count);
+        
+        // Restore stderr
+        fflush(stderr);
+        dup2(old_stderr, fileno(stderr));
+        close(old_stderr);
+        fclose(null_stream);
+        
         if ((ks_err)err != KS_ERR_OK) {
             fprintf(stderr, "Keystone error: %s\n", ks_strerror((ks_err)err));
             return false;

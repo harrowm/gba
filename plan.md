@@ -487,6 +487,9 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
   - Mode 3 framebuffer access ready
   - Total: **579 tests passing** (500 ARM + 36 scheduler + 33 memory + 10 video)
   - Fixed test infrastructure issue (test mode vs normal mode for I/O registers)
+  - **All compilation and runtime warnings eliminated** (0 warnings)
+    - Fixed sign comparison warnings in test_scheduler_integration.cpp
+    - Suppressed Keystone assembler warnings about deprecated PC/SP in STM/LDM (valid for ARM7TDMI)
   - Total: 569 tests passing (500 CPU + 36 scheduler + 33 timing)
   - Linker error resolved (added scheduler.cpp to Makefile)
   - Every instruction and memory access now advances global cycle counter

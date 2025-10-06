@@ -102,7 +102,7 @@ TEST_F(CPUSchedulerIntegrationTest, MemoryAccessesAddWaitStates) {
     uint64_t cycles_after_iwram = scheduler->getCurrentCycle();
     uint64_t iwram_cycles = cycles_after_iwram - cycles_before_iwram;
     
-    EXPECT_EQ(cpu->R()[0], 0x12345678);
+    EXPECT_EQ(cpu->R()[0], 0x12345678u);
     
     // Test 2: Load from ROM (slow, wait states)
     cpu->R()[1] = 0x08000100;  // ROM
@@ -116,7 +116,7 @@ TEST_F(CPUSchedulerIntegrationTest, MemoryAccessesAddWaitStates) {
     uint64_t cycles_after_rom = scheduler->getCurrentCycle();
     uint64_t rom_cycles = cycles_after_rom - cycles_before_rom;
     
-    EXPECT_EQ(cpu->R()[0], 0x87654321);
+    EXPECT_EQ(cpu->R()[0], 0x87654321u);
     
     // ROM access should take more cycles than IWRAM due to wait states
     EXPECT_GT(rom_cycles, iwram_cycles);
@@ -164,5 +164,5 @@ TEST_F(CPUSchedulerIntegrationTest, PCAdvancesCorrectly) {
     cpu->getARMCPU().executeOneInstruction();
     
     // In ARM mode, PC should advance by 4
-    EXPECT_EQ(cpu->R()[15], 0x08000004);
+    EXPECT_EQ(cpu->R()[15], 0x08000004u);
 }
