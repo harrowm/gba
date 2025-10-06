@@ -45,8 +45,8 @@ TEST_F(ThumbCPUTest12, AddPcLoadAddressBasic) {
     assembleAndWriteThumb("adr r0, #0x0", 0x00000000);
     execute(1);
     
-    // PC is word-aligned during execution, so PC (0x02) aligns to 0x00, + 0 = 0x00
-    EXPECT_EQ(R(0), 0x00000000u);
+    // PC after fetch = 0x02, add +2 for pipeline = 0x04, word-align = 0x04, + offset 0 = 0x04
+    EXPECT_EQ(R(0), 0x00000004u);
     EXPECT_EQ(R(15), 0x00000002u);
     
     // ADD PC doesn't affect flags
@@ -63,8 +63,8 @@ TEST_F(ThumbCPUTest12, AddPcLoadAddressWithOffset) {
     assembleAndWriteThumb("adr r1, #0x4", 0x00000000);
     execute(1);
     
-    // PC aligned (0x00) + 4 = 0x04
-    EXPECT_EQ(R(1), 0x00000004u);
+    // PC after fetch = 0x02, add +2 for pipeline = 0x04, word-align = 0x04, + offset 4 = 0x08
+    EXPECT_EQ(R(1), 0x00000008u);
     EXPECT_EQ(R(15), 0x00000002u);
 }
 
@@ -75,8 +75,8 @@ TEST_F(ThumbCPUTest12, AddPcLoadAddressMediumOffset) {
     assembleAndWriteThumb("adr r2, #0x120", 0x00000000);
     execute(1);
     
-    // PC aligned (0x00) + 288 = 0x120
-    EXPECT_EQ(R(2), 0x00000120u);
+    // PC after fetch = 0x02, add +2 for pipeline = 0x04, word-align = 0x04, + offset 288 = 0x124
+    EXPECT_EQ(R(2), 0x00000124u);
     EXPECT_EQ(R(15), 0x00000002u);
 }
 
@@ -87,8 +87,8 @@ TEST_F(ThumbCPUTest12, AddPcLoadAddressMaximumOffsetOriginal) {
     assembleAndWriteThumb("adr r2, #0x3fc", 0x00000000);
     execute(1);
     
-    // PC aligned (0x00) + 1020 = 0x3FC
-    EXPECT_EQ(R(2), 0x000003FCu);
+    // PC after fetch = 0x02, add +2 for pipeline = 0x04, word-align = 0x04, + offset 1020 = 0x400
+    EXPECT_EQ(R(2), 0x00000400u);
     EXPECT_EQ(R(15), 0x00000002u);
 }
 
@@ -99,8 +99,8 @@ TEST_F(ThumbCPUTest12, AddPcLoadAddressMaximumOffset) {
     assembleAndWriteThumb("adr r2, #0x3fc", 0x00000000);
     execute(1);
     
-    // PC aligned (0x00) + 1020 = 0x3FC
-    EXPECT_EQ(R(2), 0x000003FCu);
+    // PC after fetch = 0x02, add +2 for pipeline = 0x04, word-align = 0x04, + offset 1020 = 0x400
+    EXPECT_EQ(R(2), 0x00000400u);
     EXPECT_EQ(R(15), 0x00000002u);
 }
 
@@ -111,7 +111,7 @@ TEST_F(ThumbCPUTest12, AddPcLoadAddressUnalignedPc) {
     assembleAndWriteThumb("adr r3, #0x40", 0x00000006);
     execute(1);
     
-    // PC=0x08 after fetch, aligned to 0x08, + 64 = 0x48
+    // PC after fetch = 0x08, add +2 for pipeline = 0x0A, word-align = 0x08, + offset 64 = 0x48
     EXPECT_EQ(R(3), 0x00000048u);
     EXPECT_EQ(R(15), 0x00000008u);
 }
@@ -125,8 +125,9 @@ TEST_F(ThumbCPUTest12, AddPcLoadAddressAllRegisters) {
         assembleAndWriteThumb("adr r" + std::to_string(rd) + ", #0x4", rd * 2);
         execute(1);
         
-        uint32_t expected_pc = ((rd * 2) + 2) & ~3; // PC after fetch, word-aligned
-        EXPECT_EQ(R(rd), expected_pc + 4) << "Register R" << rd;
+        // PC after fetch, add +2 for pipeline, word-align, then add offset
+        uint32_t expected_pc = (((rd * 2) + 2 + 2) & ~3) + 4;
+        EXPECT_EQ(R(rd), expected_pc) << "Register R" << rd;
     }
 }
 
@@ -137,8 +138,8 @@ TEST_F(ThumbCPUTest12, AddPcLoadAddressNearMemoryBoundary) {
     assembleAndWriteThumb("adr r4, #0x1c", 0x00001FF0);
     execute(1);
     
-    // PC=0x1FF2 after fetch, aligned to 0x1FF0, + 28 = 0x200C
-    EXPECT_EQ(R(4), 0x0000200Cu);
+    // PC after fetch = 0x1FF2, add +2 for pipeline = 0x1FF4, word-align = 0x1FF4, + offset 28 = 0x2010
+    EXPECT_EQ(R(4), 0x00002010u);
     EXPECT_EQ(R(15), 0x00001FF2u);
 }
 
@@ -150,7 +151,8 @@ TEST_F(ThumbCPUTest12, AddPcLoadAddressFlagPreservation) {
     assembleAndWriteThumb("adr r5, #0x40", 0x00000000);
     execute(1);
     
-    EXPECT_EQ(R(5), 0x00000040u); // PC aligned (0x00) + 64 = 0x40
+    // PC after fetch = 0x02, add +2 for pipeline = 0x04, word-align = 0x04, + offset 64 = 0x44
+    EXPECT_EQ(R(5), 0x00000044u);
     
     // All flags should be preserved
     EXPECT_TRUE(getFlag(CPU::FLAG_Z));
@@ -340,6 +342,62 @@ TEST_F(ThumbCPUTest12, PcSpComparison) {
     // Verify they calculated different addresses
     EXPECT_NE(pc_result, sp_result);
     EXPECT_EQ(sp_result, 0x00001008u);  // SP + 8
-    // PC result: (0x102 aligned to 0x100) + 8 = 0x108
-    EXPECT_EQ(pc_result, 0x00000108u);
+    // PC after fetch = 0x102, add +2 for pipeline = 0x104, word-align = 0x104, + offset 8 = 0x10C
+    EXPECT_EQ(pc_result, 0x0000010Cu);
+}
+
+TEST_F(ThumbCPUTest12, AddPcPipelineOffset) {
+    // Test PC+4 pipeline offset in THUMB mode
+    // This is the THUMB equivalent of the ARM PC+8 pipeline offset issue
+    // In THUMB, PC reads as current instruction address + 4
+    
+    // Instruction at 0x1000, PC will be 0x1000 during fetch
+    // After fetch, PC = 0x1002 (pointing to next instruction)
+    // For PC-relative addressing: use (PC+2) to get 0x1004, then word-align, then add offset
+    setup_registers({{15, 0x00001000}});
+    
+    assembleAndWriteThumb("adr r0, #0x0", 0x00001000);
+    execute(1);
+    
+    // Expected calculation:
+    // PC after fetch = 0x1002
+    // PC+4 for pipeline = 0x1002 + 2 = 0x1004 (this gives us the +4 relative to instruction address)
+    // Word-align: 0x1004 & ~0x3 = 0x1004
+    // Add offset (0): 0x1004 + 0 = 0x1004
+    // This is 4 bytes ahead of the instruction address (0x1000 + 4 = 0x1004)
+    EXPECT_EQ(R(0), 0x00001004u) << "PC-relative ADR should use PC+4 pipeline offset";
+    EXPECT_EQ(R(15), 0x00001002u) << "PC should advance by 2 after THUMB instruction";
+}
+
+TEST_F(ThumbCPUTest12, AddPcPipelineOffsetUnaligned) {
+    // Test PC+4 with unaligned PC (PC at 0x1002)
+    // This verifies that PC+4 happens BEFORE word-alignment
+    setup_registers({{15, 0x00001002}});
+    
+    assembleAndWriteThumb("adr r1, #0x0", 0x00001002);
+    execute(1);
+    
+    // Expected calculation:
+    // PC after fetch = 0x1004
+    // PC+4 for pipeline = 0x1004 + 2 = 0x1006
+    // Word-align: 0x1006 & ~0x3 = 0x1004
+    // Add offset (0): 0x1004 + 0 = 0x1004
+    EXPECT_EQ(R(1), 0x00001004u) << "Word-alignment should happen after PC+4 offset";
+    EXPECT_EQ(R(15), 0x00001004u);
+}
+
+TEST_F(ThumbCPUTest12, AddPcPipelineOffsetWithImmediate) {
+    // Test PC+4 with non-zero offset
+    setup_registers({{15, 0x00002000}});
+    
+    assembleAndWriteThumb("adr r2, #0x10", 0x00002000);
+    execute(1);
+    
+    // Expected calculation:
+    // PC after fetch = 0x2002
+    // PC+4 for pipeline = 0x2002 + 2 = 0x2004
+    // Word-align: 0x2004 & ~0x3 = 0x2004
+    // Add offset (16): 0x2004 + 0x10 = 0x2014
+    EXPECT_EQ(R(2), 0x00002014u) << "PC+4 pipeline offset should work with immediate offsets";
+    EXPECT_EQ(R(15), 0x00002002u);
 }

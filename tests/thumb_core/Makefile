@@ -38,7 +38,8 @@ CPP_SRCS = test_thumb01.cpp \
 	../../src/memory.cpp \
 	../../src/thumb_cpu.cpp \
 	../../src/gba.cpp \
-	../../src/gpu.cpp
+	../../src/gpu.cpp \
+	../../src/scheduler.cpp
 
 
 C_SRCS = ../../src/arm_timing.c \

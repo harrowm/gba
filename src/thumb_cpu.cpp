@@ -1001,7 +1001,9 @@ void ThumbCPU::thumb_ldr_address_pc(uint16_t instruction) {
     uint16_t offset = instruction & 0xFF; // Immediate offset (bits 0-7)
 
     // Calculate the address (ADD Rd, PC, #imm)
-    uint32_t address = (parentCPU.R()[15] & ~0x3) + (offset << 2); // PC-relative addressing with word alignment
+    // In THUMB mode, PC reads as PC+4 (pipeline offset), then word-align, then add offset
+    // PC is already pointing to next instruction (+2 from current), so add +2 more for +4 total
+    uint32_t address = ((parentCPU.R()[15] + 2) & ~0x3) + (offset << 2);
 
     // Store the calculated address in the destination register
     parentCPU.R()[rd] = address;
