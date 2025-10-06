@@ -99,3 +99,109 @@ void CPU::advanceCycles(uint32_t cycles) {
         scheduler->runUntil(targetCycle);
     }
 }
+
+// ============================================================================
+// Single Instruction Execution
+// ============================================================================
+
+void CPU::executeOneInstruction() {
+    // Check for pending interrupts before executing
+    if (checkPendingInterrupts()) {
+        handleInterrupt();
+        return;
+    }
+    
+    // Use the existing executeOneInstruction methods from ARM/Thumb CPUs
+    if (getFlag(FLAG_T)) {
+        // Thumb mode
+        thumbCPU->executeOneInstruction();
+    } else {
+        // ARM mode  
+        armCPU->executeOneInstruction();
+    }
+}
+
+// ============================================================================
+// Interrupt Handling
+// ============================================================================
+
+bool CPU::checkPendingInterrupts() {
+    // Check if interrupts are enabled (IME bit and I flag in CPSR)
+    bool ime = interruptController.isIMESet();
+    bool irqDisabled = (cpsr & 0x80) != 0; // I flag in CPSR bit 7
+    
+    if (!ime || irqDisabled) {
+        return false;
+    }
+    
+    // Check if any interrupts are pending
+    return interruptController.hasPendingInterrupt();
+}
+
+void CPU::handleInterrupt() {
+    DEBUG_INFO("CPU: Handling interrupt");
+    
+    // Save current PC+4 to LR_irq
+    // In ARM mode, PC is current instruction + 8
+    // In Thumb mode, PC is current instruction + 4
+    uint32_t returnAddress = registers[15] + (getFlag(FLAG_T) ? 0 : 4);
+    
+    // Switch to IRQ mode
+    setMode(IRQ);
+    
+    // Now that we're in IRQ mode, set LR_irq
+    registers[14] = returnAddress; // LR_irq
+    
+    // Save old CPSR to SPSR_irq (not implemented yet, would need SPSR banking)
+    // TODO: Implement SPSR (Saved Program Status Register) banking
+    
+    // Disable further interrupts (set I flag)
+    cpsr |= 0x80; // Set I flag (bit 7)
+    
+    // Switch to ARM mode (clear T flag)
+    cpsr &= ~FLAG_T;
+    
+    // Set PC to IRQ vector (0x00000018)
+    registers[15] = 0x00000018;
+    
+    DEBUG_INFO("CPU: Interrupt handled, jumped to 0x00000018");
+}
+
+// ============================================================================
+// Reset and Initialization
+// ============================================================================
+
+void CPU::reset() {
+    DEBUG_INFO("CPU: Resetting");
+    
+    // Reset all registers
+    std::fill(std::begin(registers), std::end(registers), 0);
+    
+    // Reset banked registers
+    banked_r13_fiq = banked_r14_fiq = 0;
+    banked_r13_svc = banked_r14_svc = 0;
+    banked_r13_abt = banked_r14_abt = 0;
+    banked_r13_irq = banked_r14_irq = 0;
+    banked_r13_und = banked_r14_und = 0;
+    banked_r13_usr = banked_r14_usr = 0;
+    
+    // Start in Supervisor mode with interrupts disabled
+    cpsr = 0x000000D3; // SVC mode (0x13) | IRQ disabled (bit 7) | FIQ disabled (bit 6)
+    
+    // Set PC to reset vector (0x00000000)
+    // In a real GBA, the BIOS starts here
+    registers[15] = 0x00000000;
+    
+    // Initialize stack pointers for different modes
+    // These are typical GBA stack locations
+    setMode(IRQ);
+    registers[13] = 0x03007FA0; // IRQ stack
+    
+    setMode(SVC);
+    registers[13] = 0x03007FE0; // Supervisor stack
+    
+    setMode(SYS);
+    registers[13] = 0x03007F00; // System/User stack
+    
+    DEBUG_INFO("CPU: Reset complete, PC=0x00000000");
+}

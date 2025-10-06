@@ -44,6 +44,9 @@ public:
     // Check if any enabled interrupts are pending
     bool hasPendingInterrupt() const;
     
+    // Check if IME (Interrupt Master Enable) is set
+    bool isIMESet() const;
+    
     // Specific interrupt triggers
     void triggerVBlank() { requestInterrupt(IRQ_VBLANK); }
     void triggerHBlank() { requestInterrupt(IRQ_HBLANK); }

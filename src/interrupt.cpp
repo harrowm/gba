@@ -23,14 +23,23 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
     }
 }
 
-bool InterruptController::hasPendingInterrupt() const {
+bool InterruptController::isIMESet() const {
     if (!memory) {
         return false;
     }
     
     // Read IME (Interrupt Master Enable)
     uint16_t ime = memory->read16(REG_IME);
-    if (!(ime & 0x0001)) {
+    return (ime & 0x0001) != 0;
+}
+
+bool InterruptController::hasPendingInterrupt() const {
+    if (!memory) {
+        return false;
+    }
+    
+    // Read IME (Interrupt Master Enable)
+    if (!isIMESet()) {
         return false;  // Master interrupt disabled
     }
     

@@ -41,7 +41,11 @@ GBA::GBA(bool testMode)
     // Initialize video timing
     gpu.setupTiming(&scheduler);
     
+    // Reset CPU to initial state (PC starts at 0x00000000 - BIOS entry point)
+    cpu->reset();
+    
     DEBUG_INFO("GBA initialized with scheduler, CPU, GPU, and interrupts wired");
+    DEBUG_INFO("CPU will boot from BIOS at 0x00000000");
 }
 
 GBA::~GBA() {
@@ -64,15 +68,16 @@ void GBA::runFrame() {
     uint64_t targetCycle = scheduler.getCurrentCycle() + CYCLES_PER_FRAME;
     
     // Run scheduler until end of frame
-    // The scheduler will process all scanline, H-Blank, and V-Blank events
+    // This will process all scanline, H-Blank, and V-Blank events
+    // TODO: Integrate CPU execution here once interrupt handling is complete
     scheduler.runUntil(targetCycle);
     
     frameCount++;
     
     // In a real emulator, we'd also:
     // - Handle input
-    // - Render to display
-    // - Synchronize to 59.73 Hz
+    // - Render to display (already done in main loop)
+    // - Synchronize to 59.73 Hz (SDL2 VSync handles this)
     // - Process audio samples
 }
 

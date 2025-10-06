@@ -120,6 +120,16 @@ public:
     void execute(uint32_t cycles);
     void executeWithTiming(uint32_t cycles); // New timing-aware execution
     
+    // Single instruction execution (for main loop)
+    void executeOneInstruction();
+    
+    // Interrupt handling
+    void handleInterrupt();
+    bool checkPendingInterrupts();
+    
+    // Reset and initialization
+    void reset();
+    
     // Scheduler integration
     void setScheduler(Scheduler* sched) { scheduler = sched; }
     Scheduler* getScheduler() { return scheduler; }

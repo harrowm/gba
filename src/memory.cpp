@@ -19,9 +19,12 @@ Memory::Memory(bool testMode) {
         // --- BIOS: 16KB at 0x00000000 ---
         bios = (uint8_t*)std::malloc(16 * 1024);
         regionTable[0x00000000 / BLOCK_SIZE] = bios;
-        // Load BIOS file
+        // Load BIOS file - try relative path first, then absolute path
         {
-            FILE* biosFile = fopen("/Users/malcolm/gba/assets/bios.bin", "rb");
+            FILE* biosFile = fopen("assets/bios.bin", "rb");
+            if (!biosFile) {
+                biosFile = fopen("/Users/malcolm/gba/assets/bios.bin", "rb");
+            }
             if (biosFile) {
                 size_t read = fread(bios, 1, 16 * 1024, biosFile);
                 fclose(biosFile);
@@ -29,8 +32,10 @@ Memory::Memory(bool testMode) {
                     DEBUG_ERROR("BIOS file too small, padding with zeros");
                     memset(bios + read, 0, 16 * 1024 - read);
                 }
+                DEBUG_INFO("BIOS loaded successfully: " + std::to_string(read) + " bytes");
             } else {
                 DEBUG_ERROR("Failed to open BIOS file: assets/bios.bin");
+                DEBUG_ERROR("BIOS is required for proper ROM execution");
                 memset(bios, 0x1, 16 * 1024);
             }
         }
