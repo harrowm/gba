@@ -128,12 +128,26 @@ const ARMCPU::CondFunc ARMCPU::condTable[16] = {
 };
 
 void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
-    UNUSED(pc); // maybe useful for debugging
+    // Track when we enter ROM region
+    static bool in_rom = false;
+    static uint32_t last_pc = 0;
+    bool pc_in_rom = (pc >= 0x08000000 && pc < 0x0E000000);
+    
+    if (pc_in_rom && !in_rom) {
+        printf("\n*** PC ENTERED ROM REGION at 0x%08X (from 0x%08X) ***\n", pc, last_pc);
+        printf("*** First ROM instruction: 0x%08X ***\n\n", instruction);
+        in_rom = true;
+    } else if (!pc_in_rom && in_rom) {
+        printf("\n*** PC LEFT ROM REGION at 0x%08X ***\n\n", pc);
+        in_rom = false;
+    }
+    
+    last_pc = pc;
 
-    // Print CPSR flags before disassembly
-    uint32_t cpsr = parentCPU.CPSR();
-    printf("[ARMCPU] CPSR flags before disasm: N:%d Z:%d C:%d V:%d (CPSR=0x%08X)\n",
-        (cpsr >> 31) & 1, (cpsr >> 30) & 1, (cpsr >> 29) & 1, (cpsr >> 28) & 1, cpsr);
+    // Print CPSR flags before disassembly (commented out - too verbose for normal use)
+    // uint32_t cpsr = parentCPU.CPSR();
+    // printf("[ARMCPU] CPSR flags before disasm: N:%d Z:%d C:%d V:%d (CPSR=0x%08X)\n",
+    //     (cpsr >> 31) & 1, (cpsr >> 30) & 1, (cpsr >> 29) & 1, (cpsr >> 28) & 1, cpsr);
 
     uint32_t index = (bits<27,20>(instruction) << 1) | ((instruction & 0x90) == 0x90); // bit 7 and 4 are set
     DEBUG_INFO("executeInstruction: PC=0x" + debug_to_hex_string(pc, 8) + 

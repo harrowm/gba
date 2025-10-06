@@ -139,6 +139,12 @@ void Memory::write8(uint32_t address, uint8_t value) {
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
+    
+    // Debug: Track VRAM writes (commented out - verified working)
+    // if (address >= 0x06000000 && address < 0x06018000) {
+    //     printf("[VRAM Write8] Address: 0x%08X, Value: 0x%02X\n", address, value);
+    // }
+    
     base[offset] = value;
 }
 
@@ -159,6 +165,27 @@ void Memory::write16(uint32_t address, uint16_t value) {
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
+    
+    // Debug: Track VRAM writes (commented out - verified working)
+    // if (address >= 0x06000000 && address < 0x06018000) {
+    //     printf("[VRAM Write16] Address: 0x%08X, Value: 0x%04X (RGB555)\n", address, value);
+    // }
+    
+    // Debug: Track important register writes
+    if (address == 0x04000000) { // REG_DISPCNT
+        printf("[REG Write] DISPCNT = 0x%04X (Mode: %d, BG0-3: %d%d%d%d, OBJ: %d)\n",
+               value, value & 0x7,
+               (value >> 8) & 1, (value >> 9) & 1, (value >> 10) & 1, (value >> 11) & 1,
+               (value >> 12) & 1);
+    } else if (address == 0x04000208) { // REG_IME
+        printf("[REG Write] IME = 0x%04X (Interrupts %s)\n", 
+               value, (value & 1) ? "ENABLED" : "DISABLED");
+    } else if (address == 0x04000200) { // REG_IE
+        printf("[REG Write] IE = 0x%04X (Enabled interrupts)\n", value);
+    } else if (address == 0x04000202) { // REG_IF
+        printf("[REG Write] IF = 0x%04X (Acknowledge interrupts)\n", value);
+    }
+    
     base[offset] = val & 0xFF;
     base[(offset + 1) % Memory::BLOCK_SIZE] = (val >> 8) & 0xFF;
 }
@@ -187,6 +214,12 @@ void Memory::write32(uint32_t address, uint32_t value) {
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
+    
+    // Debug: Track VRAM writes (commented out - verified working)
+    // if (address >= 0x06000000 && address < 0x06018000) {
+    //     printf("[VRAM Write32] Address: 0x%08X, Value: 0x%08X (2 pixels)\n", address, value);
+    // }
+    
     base[offset] = val & 0xFF;
     base[(offset + 1) % Memory::BLOCK_SIZE] = (val >> 8) & 0xFF;
     base[(offset + 2) % Memory::BLOCK_SIZE] = (val >> 16) & 0xFF;

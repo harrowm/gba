@@ -52,6 +52,17 @@ GBA::~GBA() {
     delete cpu;
 }
 
+void GBA::skipBIOS() {
+    // Skip BIOS boot process and jump directly to ROM
+    // Set up registers as if BIOS had already initialized them
+    cpu->setMode(CPU::SYS);  // System mode
+    cpu->R()[13] = 0x03007F00;  // SP for system mode
+    cpu->R()[15] = 0x08000000;  // PC at ROM start
+    cpu->CPSR() = 0x0000001F;  // System mode, no flags set
+    
+    DEBUG_INFO("Skipped BIOS, jumping directly to ROM at 0x08000000");
+}
+
 void GBA::run() {
     DEBUG_INFO("Starting GBA main loop");
     running = true;
@@ -65,12 +76,27 @@ void GBA::run() {
 
 void GBA::runFrame() {
     // One frame = 280,896 cycles (228 scanlines * 1232 cycles)
-    uint64_t targetCycle = scheduler.getCurrentCycle() + CYCLES_PER_FRAME;
+    uint64_t startCycle = scheduler.getCurrentCycle();
+    uint64_t targetCycle = startCycle + CYCLES_PER_FRAME;
     
-    // Run scheduler until end of frame
-    // This will process all scanline, H-Blank, and V-Blank events
-    // TODO: Integrate CPU execution here once interrupt handling is complete
-    scheduler.runUntil(targetCycle);
+    // Execute CPU instructions and process events in chunks
+    // This prevents blocking the main loop for too long
+    const uint32_t CHUNK_SIZE = 1000; // Process 1000 cycles at a time
+    
+    while (scheduler.getCurrentCycle() < targetCycle) {
+        uint64_t chunkTarget = scheduler.getCurrentCycle() + CHUNK_SIZE;
+        if (chunkTarget > targetCycle) {
+            chunkTarget = targetCycle;
+        }
+        
+        // Execute CPU instructions until we reach the chunk target
+        while (scheduler.getCurrentCycle() < chunkTarget) {
+            cpu->executeOneInstruction();
+        }
+        
+        // Process scheduler events for this chunk (video timing, interrupts, etc.)
+        scheduler.runUntil(chunkTarget);
+    }
     
     frameCount++;
     

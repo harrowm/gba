@@ -94,9 +94,9 @@ CPU::~CPU() {
 
 void CPU::advanceCycles(uint32_t cycles) {
     if (scheduler) {
-        // Advance the scheduler by the given number of cycles
-        uint64_t targetCycle = scheduler->getCurrentCycle() + cycles;
-        scheduler->runUntil(targetCycle);
+        // Just advance the cycle counter without processing events
+        // Events will be processed by runFrame() when the full frame completes
+        scheduler->advanceCycles(cycles);
     }
 }
 

@@ -37,6 +37,9 @@ public:
     // ROM loading
     bool loadROM(const char* filepath) { return memory.loadROM(filepath); }
     
+    // Skip BIOS and jump directly to ROM (for simple test ROMs without proper headers)
+    void skipBIOS();
+    
     // Legacy sync
     void syncScanline();
     

@@ -95,6 +95,12 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             printf("\n");
+            
+            // Check if this is our simple test ROM (test_pixels.gba)
+            if (romPath && strstr(romPath, "test_pixels") != nullptr) {
+                printf("Detected test_pixels.gba - skipping BIOS boot\n");
+                gba.skipBIOS();
+            }
         }
         
         // Set GPU to Mode 3 (bitmap mode)
