@@ -273,6 +273,40 @@ TEST_F(ARMDataProcessingTest, AND_ImmediateRotated) {
     EXPECT_EQ(cpu.R()[2], 0xFF000000u);
 }
 
+// PC+8 Pipeline offset tests for AND
+TEST_F(ARMDataProcessingTest, AND_IMM_WithPC) {
+    // Test: AND R0, PC, #0xFF00
+    // PC at instruction = 0x1000
+    // Expected: R0 = (0x1000 + 8) & 0xFF00 = 0x1008 & 0xFF00 = 0x1000
+    cpu.R()[15] = 0x00001000;
+    assemble_and_write("and r0, pc, #0xFF00", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00001000u) << "AND R0, PC, #0xFF00 should use PC+8";
+    EXPECT_EQ(cpu.R()[15], 0x00001004u) << "PC should advance by 4";
+}
+
+TEST_F(ARMDataProcessingTest, AND_REG_WithPC_AsRn) {
+    // Test: AND R0, PC, R1
+    // PC at instruction = 0x2000, R1 = 0xFF0F
+    // Expected: R0 = (0x2000 + 8) & 0xFF0F = 0x2008 & 0xFF0F = 0x2008
+    cpu.R()[15] = 0x00002000;
+    cpu.R()[1] = 0x0000FF0F;
+    assemble_and_write("and r0, pc, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00002008u) << "AND R0, PC, R1 should use PC+8 for Rn";
+}
+
+TEST_F(ARMDataProcessingTest, AND_REG_WithPC_AsRm) {
+    // Test: AND R0, R1, PC
+    // PC at instruction = 0x3000, R1 = 0xFF0F
+    // Expected: R0 = 0xFF0F & (0x3000 + 8) = 0xFF0F & 0x3008 = 0x3008
+    cpu.R()[15] = 0x00003000;
+    cpu.R()[1] = 0x0000FF0F;
+    assemble_and_write("and r0, r1, pc", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00003008u) << "AND R0, R1, PC should use PC+8 for Rm";
+}
+
 // ===================== EOR Tests =====================
 // EOR: Rd = Rn ^ Operand2
 TEST_F(ARMDataProcessingTest, EOR_Basic) {
@@ -466,6 +500,40 @@ TEST_F(ARMDataProcessingTest, EOR_ImmediateRotated) {
     arm_cpu.execute(1);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], 0x00FFFFFFu);
+}
+
+// PC+8 Pipeline offset tests for EOR
+TEST_F(ARMDataProcessingTest, EOR_IMM_WithPC) {
+    // Test: EOR R0, PC, #0xF
+    // PC at instruction = 0x1000
+    // Expected: R0 = (0x1000 + 8) ^ 0xF = 0x1008 ^ 0xF = 0x1007
+    cpu.R()[15] = 0x00001000;
+    assemble_and_write("eor r0, pc, #0xF", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x00001007u) << "EOR R0, PC, #0xF should use PC+8";
+    EXPECT_EQ(cpu.R()[15], 0x00001004u) << "PC should advance by 4";
+}
+
+TEST_F(ARMDataProcessingTest, EOR_REG_WithPC_AsRn) {
+    // Test: EOR R0, PC, R1
+    // PC at instruction = 0x2000, R1 = 0xFF
+    // Expected: R0 = (0x2000 + 8) ^ 0xFF = 0x2008 ^ 0xFF = 0x20F7
+    cpu.R()[15] = 0x00002000;
+    cpu.R()[1] = 0x000000FF;
+    assemble_and_write("eor r0, pc, r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x000020F7u) << "EOR R0, PC, R1 should use PC+8 for Rn";
+}
+
+TEST_F(ARMDataProcessingTest, EOR_REG_WithPC_AsRm) {
+    // Test: EOR R0, R1, PC
+    // PC at instruction = 0x3000, R1 = 0xFF
+    // Expected: R0 = 0xFF ^ (0x3000 + 8) = 0xFF ^ 0x3008 = 0x30F7
+    cpu.R()[15] = 0x00003000;
+    cpu.R()[1] = 0x000000FF;
+    assemble_and_write("eor r0, r1, pc", cpu.R()[15]);
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[0], 0x000030F7u) << "EOR R0, R1, PC should use PC+8 for Rm";
 }
 
 // ===================== SUB Tests =====================

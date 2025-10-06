@@ -8,7 +8,7 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 - ⏳ Todo
 - 🧪 Test written, awaiting fix
 
-## Progress: 6/32 Complete (18.75%)
+## Progress: 10/32 Complete (31.25%)
 
 ---
 
@@ -20,8 +20,8 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 | exec_arm_add_reg | ✅ | ✅ | ✅ | ✅ | Already fixed - BIOS boot fix |
 | exec_arm_sub_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_rsb_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
-| exec_arm_and_reg | ⏳ | ⏳ | ⏳ | ⏳ | |
-| exec_arm_eor_reg | ⏳ | ⏳ | ⏳ | ⏳ | Exclusive OR |
+| exec_arm_and_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_eor_reg | ✅ | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_orr_reg | ⏳ | ⏳ | ⏳ | ⏳ | Logical OR |
 | exec_arm_bic_reg | ⏳ | ⏳ | ⏳ | ⏳ | Bit clear |
 | exec_arm_adc_reg | ⏳ | ⏳ | ⏳ | ⏳ | Add with carry |
@@ -38,8 +38,8 @@ ARM7TDMI has a 3-stage pipeline (fetch/decode/execute). When R15 (PC) is used as
 | exec_arm_add_imm | ✅ | ✅ | ✅ | Already fixed - BIOS boot fix (ADR instruction) |
 | exec_arm_sub_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_rsb_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
-| exec_arm_and_imm | ⏳ | ⏳ | ⏳ | |
-| exec_arm_eor_imm | ⏳ | ⏳ | ⏳ | Exclusive OR |
+| exec_arm_and_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
+| exec_arm_eor_imm | ✅ | ✅ | ✅ | Fixed - tests passing |
 | exec_arm_orr_imm | ⏳ | ⏳ | ⏳ | Logical OR |
 | exec_arm_bic_imm | ⏳ | ⏳ | ⏳ | Bit clear |
 | exec_arm_adc_imm | ⏳ | ⏳ | ⏳ | Add with carry |

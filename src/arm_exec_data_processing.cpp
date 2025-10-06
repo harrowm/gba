@@ -9,7 +9,9 @@ void ARMCPU::exec_arm_eor_imm(uint32_t instruction) {
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
-    parentCPU.R()[rd] = parentCPU.R()[rn] ^ value;
+    // When PC is used as operand (Rn), apply +8 pipeline offset
+    uint32_t op1 = readOperand(rn);
+    parentCPU.R()[rd] = op1 ^ value;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
@@ -25,8 +27,9 @@ void ARMCPU::exec_arm_eor_reg(uint32_t instruction) {
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    uint32_t op1 = parentCPU.R()[rn];
-    uint32_t op2 = parentCPU.R()[rm];
+    // When PC is used as operand (Rm or Rn), apply +8 pipeline offset
+    uint32_t op1 = readOperand(rn);
+    uint32_t op2 = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
 
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
@@ -47,7 +50,9 @@ void ARMCPU::exec_arm_and_imm(uint32_t instruction) {
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
-    parentCPU.R()[rd] = parentCPU.R()[rn] & value;
+    // When PC is used as operand (Rn), apply +8 pipeline offset
+    uint32_t op1 = readOperand(rn);
+    parentCPU.R()[rd] = op1 & value;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
@@ -63,11 +68,13 @@ void ARMCPU::exec_arm_and_reg(uint32_t instruction) {
     uint8_t shift_type = bits<6,5>(instruction);
     uint8_t reg_shift = bits<4,4>(instruction);
     uint8_t rm = bits<3,0>(instruction);
-    uint32_t value = parentCPU.R()[rm];
+    // When PC is used as operand (Rm or Rn), apply +8 pipeline offset
+    uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
-    parentCPU.R()[rd] = parentCPU.R()[rn] & shifted.value;
+    uint32_t op1 = readOperand(rn);
+    parentCPU.R()[rd] = op1 & shifted.value;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
