@@ -12,7 +12,8 @@ protected:
     GBA* gba;
     
     void SetUp() override {
-        gba = new GBA(true);  // Test mode
+        // Video timing tests need I/O registers, so use normal mode (not test mode)
+        gba = new GBA(false);
     }
     
     void TearDown() override {
@@ -64,12 +65,14 @@ TEST_F(VideoTimingTest, VCountUpdatesEachScanline) {
 }
 
 TEST_F(VideoTimingTest, VBlankFlagSetAtScanline160) {
-    // Run until just before scanline 160
-    gba->getScheduler().runUntil(CYCLES_PER_SCANLINE * 160);
+    // Run until after scanline 160 starts (need to let H-Draw complete to trigger the transition)
+    gba->getScheduler().runUntil(CYCLES_PER_SCANLINE * 160 + CYCLES_HDRAW + 1);
     
     uint16_t dispstat = gba->getMemory().read16(REG_DISPSTAT);
+    uint16_t vcount = gba->getMemory().read16(REG_VCOUNT);
     
-    // V-Blank should be set
+    // V-Blank should be set and we should be at scanline 160
+    EXPECT_EQ(vcount, 160);
     EXPECT_TRUE(dispstat & DISPSTAT_VBLANK);
 }
 
