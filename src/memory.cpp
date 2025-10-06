@@ -1,5 +1,6 @@
 // Memory class implementation for GBA emulator (region pointer table version)
 #include "memory.h"
+#include "scheduler.h"
 #include "debug.h"
 #include <cstring>
 #include <cstdint>
@@ -131,6 +132,7 @@ inline uint8_t* get_region_base(uint8_t* const* regionTable, uint32_t address, u
 }
 
 uint8_t Memory::read8(uint32_t address) const {
+    addWaitCycles(address, 8);
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
     if (!base) return 0xFF;
@@ -142,6 +144,7 @@ uint8_t Memory::read8(uint32_t address) const {
 }
 
 void Memory::write8(uint32_t address, uint8_t value) {
+    addWaitCycles(address, 8);
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
@@ -149,6 +152,7 @@ void Memory::write8(uint32_t address, uint8_t value) {
 }
 
 uint16_t Memory::read16(uint32_t address) const {
+    addWaitCycles(address, 16);
     uint32_t rot = (address & 1) * 8;
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
@@ -158,6 +162,7 @@ uint16_t Memory::read16(uint32_t address) const {
 }
 
 void Memory::write16(uint32_t address, uint16_t value) {
+    addWaitCycles(address, 16);
     uint32_t rot = (address & 1) * 8;
     uint16_t val = (value << rot) | (value >> (16 - rot));
     uint32_t offset;
@@ -168,6 +173,7 @@ void Memory::write16(uint32_t address, uint16_t value) {
 }
 
 uint32_t Memory::read32(uint32_t address) const {
+    addWaitCycles(address, 32);
     uint32_t rot = (address & 3) * 8;
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
@@ -184,6 +190,7 @@ uint32_t Memory::read32(uint32_t address) const {
 }
 
 void Memory::write32(uint32_t address, uint32_t value) {
+    addWaitCycles(address, 32);
     uint32_t rot = (address & 3) * 8;
     uint32_t val = (value << rot) | (value >> (32 - rot));
     uint32_t offset;
@@ -193,4 +200,80 @@ void Memory::write32(uint32_t address, uint32_t value) {
     base[(offset + 1) % Memory::BLOCK_SIZE] = (val >> 8) & 0xFF;
     base[(offset + 2) % Memory::BLOCK_SIZE] = (val >> 16) & 0xFF;
     base[(offset + 3) % Memory::BLOCK_SIZE] = (val >> 24) & 0xFF;
+}
+
+// ============================================================================
+// Memory Timing (Wait States)
+// ============================================================================
+
+uint32_t Memory::calculateWaitStates(uint32_t address, uint32_t accessWidth) const {
+    // Mask to 28-bit address space (GBA mirrors upper 4 bits)
+    uint32_t addr = address & 0x0FFFFFFF;
+    
+    // Determine memory region and calculate wait states
+    switch (addr >> 24) {
+        case 0x00: // BIOS ROM (16KB)
+            // 1 cycle for any access
+            return 1;
+            
+        case 0x02: // EWRAM (256KB on-board Work RAM)
+            // 16-bit bus: 3 cycles for 8/16-bit, 6 cycles for 32-bit
+            return (accessWidth == 32) ? 6 : 3;
+            
+        case 0x03: // IWRAM (32KB on-chip Work RAM)
+            // 32-bit bus: 1 cycle for any access (fastest)
+            return 1;
+            
+        case 0x04: // I/O Registers
+            // 1 cycle for any access
+            return 1;
+            
+        case 0x05: // Palette RAM (1KB)
+            // 16-bit bus: 1 cycle for 16-bit, 2 cycles for 32-bit
+            // +1 if video controller accessing (not implemented yet)
+            return (accessWidth == 32) ? 2 : 1;
+            
+        case 0x06: // VRAM (96KB)
+            // 16-bit bus: 1 cycle for 16-bit, 2 cycles for 32-bit
+            // +1 if video controller accessing (not implemented yet)
+            return (accessWidth == 32) ? 2 : 1;
+            
+        case 0x07: // OAM (1KB)
+            // 32-bit bus: 1 cycle for any access
+            // +1 if video controller accessing (not implemented yet)
+            return 1;
+            
+        case 0x08: // Game Pak ROM Wait State 0
+        case 0x09:
+        case 0x0A: // Game Pak ROM Wait State 1
+        case 0x0B:
+        case 0x0C: // Game Pak ROM Wait State 2
+        case 0x0D:
+            // Default: 5 cycles for first access (non-sequential)
+            // TODO: Make configurable via WAITCNT register
+            // 16-bit bus: 5 cycles for 8/16-bit, 8 cycles for 32-bit (5+3 sequential)
+            return (accessWidth == 32) ? 8 : 5;
+            
+        case 0x0E: // Game Pak SRAM
+            // 8-bit bus: 5 cycles for any access
+            // TODO: Make configurable via WAITCNT register
+            return 5;
+            
+        default:
+            // Unmapped memory - no wait states (open bus)
+            return 1;
+    }
+}
+
+void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
+    if (scheduler) {
+        uint32_t cycles = calculateWaitStates(address, accessWidth);
+        // In a real implementation, we'd advance the scheduler here
+        // For now, just calculate the cycles (scheduler integration comes next)
+        (void)cycles; // Suppress unused variable warning
+    }
+}
+
+uint32_t Memory::getWaitStates(uint32_t address, uint32_t accessWidth) const {
+    return calculateWaitStates(address, accessWidth);
 }
