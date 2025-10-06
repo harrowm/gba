@@ -34,6 +34,9 @@ public:
     void runFrame();  // Run one frame (280,896 cycles)
     void stop() { running = false; }
     
+    // ROM loading
+    bool loadROM(const char* filepath) { return memory.loadROM(filepath); }
+    
     // Legacy sync
     void syncScanline();
     

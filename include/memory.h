@@ -31,10 +31,14 @@ public:
     // Get wait states for an address (for testing/debugging)
     uint32_t getWaitStates(uint32_t address, uint32_t accessWidth) const;
     
+    // ROM loading
+    bool loadROM(const char* filepath);
+    
     // Direct access to memory regions (for GPU, DMA, etc.)
     uint8_t* getVRAM() { return vram; }
     uint8_t* getOAM() { return oam; }
     uint8_t* getPaletteRAM() { return palette; }
+    uint8_t* getROM() { return rom; }
 
 private:
     // Region pointer table: each entry points to the start of a mapped region or nullptr

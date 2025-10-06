@@ -73,23 +73,9 @@ Memory::Memory(bool testMode) {
 
         // --- Game Pak ROM: up to 32MB at 0x08000000 ---
         rom = (uint8_t*)std::malloc(32 * 1024 * 1024);
+        memset(rom, 0, 32 * 1024 * 1024);  // Initialize with zeros
         for (uint32_t addr = 0x08000000; addr < 0x0A000000; addr += BLOCK_SIZE)
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = rom + (addr - 0x08000000);
-        // Load GamePak file
-        {
-            FILE* romFile = fopen("/Users/malcolm/gba/assets/roms/gamepak.bin", "rb");
-            if (romFile) {
-                size_t read = fread(rom, 1, 32 * 1024 * 1024, romFile);
-                fclose(romFile);
-                if (read < 32 * 1024 * 1024) {
-                    DEBUG_ERROR("GamePak file too small, padding with zeros");
-                    memset(rom + read, 0, 32 * 1024 * 1024 - read);
-                }
-            } else {
-                DEBUG_ERROR("Failed to open GamePak file: assets/roms/gamepak.bin");
-                memset(rom, 0, 32 * 1024 * 1024);
-            }
-        }
 
         // --- Game Pak SRAM: 64KB at 0x0E000000 ---
         sram = (uint8_t*)std::malloc(64 * 1024);
@@ -276,4 +262,62 @@ void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
 
 uint32_t Memory::getWaitStates(uint32_t address, uint32_t accessWidth) const {
     return calculateWaitStates(address, accessWidth);
+}
+
+bool Memory::loadROM(const char* filepath) {
+    FILE* romFile = fopen(filepath, "rb");
+    if (!romFile) {
+        fprintf(stderr, "Error: Failed to open ROM file: %s\n", filepath);
+        return false;
+    }
+    
+    // Get file size
+    fseek(romFile, 0, SEEK_END);
+    long fileSize = ftell(romFile);
+    fseek(romFile, 0, SEEK_SET);
+    
+    if (fileSize < 0) {
+        fprintf(stderr, "Error: Failed to determine ROM file size\n");
+        fclose(romFile);
+        return false;
+    }
+    
+    // Validate ROM size (typical GBA ROMs are up to 32MB)
+    if (fileSize > 32 * 1024 * 1024) {
+        fprintf(stderr, "Warning: ROM file larger than 32MB (%ld bytes), truncating\n", fileSize);
+        fileSize = 32 * 1024 * 1024;
+    }
+    
+    // Minimum valid GBA ROM size (must have header)
+    if (fileSize < 192) {
+        fprintf(stderr, "Error: ROM file too small to be valid GBA ROM (%ld bytes)\n", fileSize);
+        fclose(romFile);
+        return false;
+    }
+    
+    // Read ROM into buffer
+    size_t read = fread(rom, 1, fileSize, romFile);
+    fclose(romFile);
+    
+    if (read != (size_t)fileSize) {
+        fprintf(stderr, "Error: Failed to read complete ROM file (read %zu of %ld bytes)\n", read, fileSize);
+        return false;
+    }
+    
+    // Zero-fill remaining ROM space
+    if (read < 32 * 1024 * 1024) {
+        memset(rom + read, 0, 32 * 1024 * 1024 - read);
+    }
+    
+    printf("ROM loaded: %zu bytes from %s\n", read, filepath);
+    
+    // Display ROM header info
+    char title[13];
+    memcpy(title, rom + 0xA0, 12);
+    title[12] = '\0';
+    printf("ROM Title: %s\n", title);
+    printf("Game Code: %.4s\n", rom + 0xAC);
+    printf("Maker Code: %.2s\n", rom + 0xB0);
+    
+    return true;
 }
