@@ -93,6 +93,17 @@ void Display::renderFrame(const uint16_t* framebuffer) {
         return;
     }
     
+    // Debug: Print first few pixels to verify VRAM contents
+    static int debugCount = 0;
+    if (debugCount < 5) {
+        printf("[Display #%d] framebuffer=%p, First 10 pixels: ", debugCount, (void*)framebuffer);
+        for (int i = 0; i < 10; i++) {
+            printf("0x%04X ", framebuffer[i]);
+        }
+        printf("\n");
+        debugCount++;
+    }
+    
     // Lock texture for pixel updates
     void* pixels;
     int pitch;
@@ -101,18 +112,18 @@ void Display::renderFrame(const uint16_t* framebuffer) {
         return;
     }
     
-    // Convert RGB555 (GBA format) to ARGB8888 (SDL format)
+    // Convert BGR555 (GBA format) to ARGB8888 (SDL format)
     uint32_t* pixelData = static_cast<uint32_t*>(pixels);
     
     for (int y = 0; y < GBA_HEIGHT; y++) {
         for (int x = 0; x < GBA_WIDTH; x++) {
-            // Read RGB555 pixel from GBA framebuffer
-            uint16_t rgb555 = framebuffer[y * GBA_WIDTH + x];
+            // Read BGR555 pixel from GBA framebuffer
+            uint16_t bgr555 = framebuffer[y * GBA_WIDTH + x];
             
-            // Extract RGB555 components (5 bits each)
-            uint8_t r5 = (rgb555 >> 0) & 0x1F;
-            uint8_t g5 = (rgb555 >> 5) & 0x1F;
-            uint8_t b5 = (rgb555 >> 10) & 0x1F;
+            // Extract BGR555 components (5 bits each) - GBA uses BGR order!
+            uint8_t r5 = (bgr555 >> 0) & 0x1F;
+            uint8_t g5 = (bgr555 >> 5) & 0x1F;
+            uint8_t b5 = (bgr555 >> 10) & 0x1F;
             
             // Convert 5-bit to 8-bit (multiply by 255/31 ≈ 8.23)
             uint8_t r8 = (r5 << 3) | (r5 >> 2);

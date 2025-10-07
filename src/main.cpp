@@ -127,9 +127,8 @@ int main(int argc, char* argv[]) {
             printf("ROM will set its own display mode\n");
         }
         
-        // Get VRAM pointer for rendering
+        // Get GPU reference for rendering
         GPU& gpu = gba.getGPU();
-        uint16_t* vram = gpu.getFrameBuffer();
         
         printf("\nStarting main loop...\n");
         printf("Press ESC or close window to quit\n\n");
@@ -144,8 +143,11 @@ int main(int argc, char* argv[]) {
             gba.runFrame();
             printf("[main loop] Returned from runFrame()\n");
             
+            // Get framebuffer pointer each frame (mode can change during execution)
+            uint16_t* framebuffer = gpu.getFrameBuffer();
+            
             // Render the frame to display
-            display.renderFrame(vram);
+            display.renderFrame(framebuffer);
             
             // Handle SDL events (keyboard, window close)
             display.handleEvents();

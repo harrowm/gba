@@ -1319,14 +1319,17 @@ void ThumbCPU::thumb_swi(uint16_t instruction) {
 }
 
 void ThumbCPU::thumb_b(uint16_t instruction) {
+    uint32_t pc_before = parentCPU.R()[15];
     int16_t offset = instruction & 0x7FF; // Signed 11-bit offset (bits 0-10)
     if (offset & 0x400) { // Sign-extend the offset
         offset |= 0xF800;
     }
 
     // Perform the branch operation
-    parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
-    DEBUG_INFO("Executing Thumb B: Branch to 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
+    int32_t branch_offset = (offset << 1) + 4;
+    printf("[THUMB_B @0x%08X] offset=%d, branch_offset=%d\n", pc_before, offset, branch_offset);
+    parentCPU.R()[15] += branch_offset; // Branch to target address (PC+4 base)
+    printf("[THUMB_B] pc_after=0x%08X\n", parentCPU.R()[15]);
 }
 
 void ThumbCPU::thumb_bl(uint16_t instruction) {

@@ -146,7 +146,13 @@ uint16_t* GPU::getFrameBuffer() {
     
     if (mode >= 3) {
         // Bitmap modes (3, 4, 5): VRAM is the framebuffer
-        return reinterpret_cast<uint16_t*>(memory.getVRAM());
+        uint8_t* vram_ptr = memory.getVRAM();
+        static int debugCount = 0;
+        if (debugCount < 3) {
+            printf("[GPU::getFrameBuffer] Mode %d, returning VRAM=%p\n", mode, (void*)vram_ptr);
+            debugCount++;
+        }
+        return reinterpret_cast<uint16_t*>(vram_ptr);
     } else {
         // Tiled modes (0, 1, 2): use internal framebuffer
         return tiledFramebuffer;

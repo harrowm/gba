@@ -137,14 +137,13 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
 }
 
 void ARMCPU::exec_arm_b(uint32_t instruction) {
-    uint32_t pc_before = parentCPU.R()[15]; UNUSED(pc_before);
+    uint32_t pc_before = parentCPU.R()[15];
     int32_t offset = bits<23,0>(instruction);
-    DEBUG_LOG(std::string("[B] pc_before=0x") + DEBUG_TO_HEX_STRING(pc_before, 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
     int32_t branch_offset = (offset << 2) + 8;
-    DEBUG_LOG(std::string("[B] offset=") + std::to_string(offset) + ", branch_offset=" + std::to_string(branch_offset));
+    printf("[B @0x%08X] offset=%d, branch_offset=%d\n", pc_before, offset, branch_offset);
     parentCPU.R()[15] += branch_offset;
-    DEBUG_LOG(std::string("[B] pc_after=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
+    printf("[B] pc_after=0x%08X\n", parentCPU.R()[15]);
 }
 
 void ARMCPU::exec_arm_bl(uint32_t instruction) {

@@ -73,8 +73,10 @@ Memory::Memory(bool testMode) {
 
         // --- VRAM: 96KB at 0x06000000, mirrored in 128KB ---
         vram = (uint8_t*)std::malloc(96 * 1024);
+        // Map first 64KB block (0x06000000-0x0600FFFF)
         regionTable[0x06000000 / BLOCK_SIZE] = vram;
-        regionTable[0x06010000 / BLOCK_SIZE] = vram;  // Both blocks point to base, mirroring handled by offset calc
+        // Map second 64KB block (0x06010000-0x0601FFFF) - only first 32KB is real VRAM
+        regionTable[0x06010000 / BLOCK_SIZE] = vram + 64 * 1024;  // Points to second half of VRAM
 
         // --- OAM: 1KB at 0x07000000, mirrored in 8KB ---
         oam = (uint8_t*)std::malloc(1 * 1024);
@@ -116,10 +118,8 @@ inline uint8_t* get_region_base(uint8_t* const* regionTable, uint32_t address, u
     uint32_t block = (address & 0x0FFFFFFF) / Memory::BLOCK_SIZE;
     uint8_t* base = regionTable[block];
     offset = address % Memory::BLOCK_SIZE;
-    // VRAM mirroring: 0x06000000–0x0601FFFF, 96KB mirrored in 128KB
-    if (address >= 0x06000000 && address < 0x06020000 && base) {
-        offset = (address - 0x06000000) % (96 * 1024);
-    }
+    // VRAM mirroring is handled by the base pointer mapping in the regionTable
+    // Don't remap offset here - it causes out-of-bounds access
     // OAM mirroring: 0x07000000–0x07001FFF, 1KB mirrored in 8KB
     if (address >= 0x07000000 && address < 0x07002000 && base) {
         offset = (address - 0x07000000) % 1024;
@@ -343,10 +343,15 @@ void Memory::write32(uint32_t address, uint32_t value) {
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
     
-    // Debug: Track VRAM writes (commented out - verified working)
-    // if (address >= 0x06000000 && address < 0x06018000) {
-    //     printf("[VRAM Write32] Address: 0x%08X, Value: 0x%08X (2 pixels)\n", address, value);
-    // }
+    // Debug: Track VRAM writes
+    if (address >= 0x06000000 && address < 0x06018000) {
+        static int vramWriteCount = 0;
+        if (vramWriteCount < 10) {
+            printf("[VRAM Write32] Address: 0x%08X, Value: 0x%08X, base=%p, vram=%p, offset=%u\n", 
+                   address, value, (void*)base, (void*)vram, offset);
+            vramWriteCount++;
+        }
+    }
     
     base[offset] = val & 0xFF;
     base[(offset + 1) % Memory::BLOCK_SIZE] = (val >> 8) & 0xFF;
