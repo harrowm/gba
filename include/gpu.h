@@ -205,6 +205,16 @@ struct OBJAttributes {
     bool visible;               // Whether sprite should be rendered
 };
 
+// Affine transformation parameters
+// Stored in OAM at offsets 0x06, 0x0E, 0x16, 0x1E... (every 32 bytes)
+// Fixed-point 8.8 format (1 sign bit + 7 integer bits + 8 fractional bits)
+struct AffineParams {
+    int16_t pa;  // [0][0] - Horizontal scaling / rotation
+    int16_t pb;  // [0][1] - Horizontal rotation / shearing
+    int16_t pc;  // [1][0] - Vertical rotation / shearing
+    int16_t pd;  // [1][1] - Vertical scaling / rotation
+};
+
 class Scheduler;  // Forward declaration
 
 class GPU {
@@ -361,6 +371,13 @@ public:
     void renderSpriteScanline(uint16_t scanline);               // Render all sprites for scanline
     bool isSpriteOnScanline(const OBJAttributes& obj, uint16_t scanline);
     void renderSingleSprite(const OBJAttributes& obj, uint16_t scanline);
+    
+    // Affine sprite functions
+    AffineParams readAffineParams(uint8_t paramIndex);          // Read affine params (0-31) from OAM
+    void renderAffineSprite(const OBJAttributes& obj, uint16_t scanline, const AffineParams& params);
+    void applyAffineTransform(const AffineParams& params, 
+                               int screenX, int screenY,        // Screen coords relative to sprite center
+                               int& textureX, int& textureY);   // Output: texture coords
 };
 
 #endif

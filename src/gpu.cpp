@@ -928,6 +928,11 @@ bool GPU::isSpriteOnScanline(const OBJAttributes& obj, uint16_t scanline) {
     int spriteY = obj.y;
     int spriteHeight = obj.height;
     
+    // For affine sprites with double-size mode, rendering bounds are doubled
+    if (obj.rotScaleFlag && obj.doubleSize) {
+        spriteHeight *= 2;
+    }
+    
     // Check if scanline is within sprite's Y range
     // Note: Y coordinates can wrap around the 256-pixel vertical space
     if (scanline >= spriteY && scanline < (spriteY + spriteHeight)) {
@@ -1061,7 +1066,177 @@ void GPU::renderSpriteScanline(uint16_t scanline) {
         OBJAttributes obj = readOBJAttributes(objNum);
         
         if (isSpriteOnScanline(obj, scanline)) {
-            renderSingleSprite(obj, scanline);
+            // Check if this is an affine sprite
+            if (obj.rotScaleFlag) {
+                // Affine sprite - read transformation parameters and render
+                AffineParams params = readAffineParams(obj.rotScaleParam);
+                renderAffineSprite(obj, scanline, params);
+            } else {
+                // Normal sprite
+                renderSingleSprite(obj, scanline);
+            }
         }
+    }
+}
+
+/**
+ * Read affine transformation parameters from OAM
+ * Params are stored at OAM offsets 0x06, 0x0E, 0x16, 0x1E... (every 32 bytes)
+ * There are 32 parameter sets total (0-31)
+ * Each set contains 4 words: PA, PB, PC, PD in fixed-point 8.8 format
+ */
+AffineParams GPU::readAffineParams(uint8_t paramIndex) {
+    AffineParams params;
+    
+    // Each affine parameter set is 32 bytes apart in OAM
+    uint32_t baseAddr = OAM_BASE + (paramIndex * 32);
+    
+    // Read the 4 transformation matrix values
+    // They're at offsets +0x06, +0x0E, +0x16, +0x1E within each 32-byte block
+    params.pa = static_cast<int16_t>(memory.read16(baseAddr + 0x06));
+    params.pb = static_cast<int16_t>(memory.read16(baseAddr + 0x0E));
+    params.pc = static_cast<int16_t>(memory.read16(baseAddr + 0x16));
+    params.pd = static_cast<int16_t>(memory.read16(baseAddr + 0x1E));
+    
+    return params;
+}
+
+/**
+ * Apply affine transformation to convert screen coordinates to texture coordinates
+ * Matrix transformation: [textureX] = [pa pb] * [screenX]
+ *                        [textureY]   [pc pd]   [screenY]
+ * 
+ * Fixed-point math: All matrix values and coords are in 8.8 format
+ */
+void GPU::applyAffineTransform(const AffineParams& params,
+                                int screenX, int screenY,
+                                int& textureX, int& textureY) {
+    // Apply transformation matrix
+    // Use 32-bit for intermediate calculation to avoid overflow
+    int32_t tx = (params.pa * screenX + params.pb * screenY) >> 8;
+    int32_t ty = (params.pc * screenX + params.pd * screenY) >> 8;
+    
+    textureX = tx;
+    textureY = ty;
+}
+
+/**
+ * Render an affine sprite (with rotation/scaling)
+ * 
+ * Affine sprites work by transforming screen coordinates back to texture coordinates:
+ * 1. For each pixel on screen within sprite bounds
+ * 2. Calculate position relative to sprite center
+ * 3. Apply inverse transformation to get texture coordinate
+ * 4. Sample texture at that coordinate
+ * 5. Draw pixel if texture coordinate is valid and not transparent
+ */
+void GPU::renderAffineSprite(const OBJAttributes& obj, uint16_t scanline, const AffineParams& params) {
+    if (!obj.visible || obj.objMode == OBJ_MODE_PROHIBITED) {
+        return;
+    }
+    
+    // Get display control for mapping mode
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    bool mapping1D = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
+    
+    // Determine sprite dimensions
+    int spriteWidth = obj.width;
+    int spriteHeight = obj.height;
+    
+    // Double-size mode: rendering bounds are double the sprite size
+    int renderWidth = spriteWidth;
+    int renderHeight = spriteHeight;
+    if (obj.doubleSize) {
+        renderWidth *= 2;
+        renderHeight *= 2;
+    }
+    
+    // Calculate texture center (in texture space)
+    int texCenterX = spriteWidth / 2;
+    int texCenterY = spriteHeight / 2;
+    
+    // Calculate which part of the sprite intersects this scanline
+    int spriteY = scanline - obj.y;
+    if (spriteY < 0 || spriteY >= renderHeight) {
+        return;  // Scanline doesn't intersect sprite
+    }
+    
+    // Process each pixel on this scanline within sprite bounds
+    for (int spriteX = 0; spriteX < renderWidth; spriteX++) {
+        int screenX = obj.x + spriteX;
+        
+        // Clip to screen bounds
+        if (screenX < 0 || screenX >= 240) {
+            continue;
+        }
+        
+        // Calculate position relative to sprite center
+        int relX = spriteX - renderWidth / 2;
+        int relY = spriteY - renderHeight / 2;
+        
+        // Apply affine transformation to get texture coordinates
+        int textureX, textureY;
+        applyAffineTransform(params, relX, relY, textureX, textureY);
+        
+        // Add texture center offset
+        textureX += texCenterX;
+        textureY += texCenterY;
+        
+        // Check if texture coordinates are within bounds
+        if (textureX < 0 || textureX >= spriteWidth || 
+            textureY < 0 || textureY >= spriteHeight) {
+            continue;  // Outside texture bounds - transparent
+        }
+        
+        // Calculate which tile and pixel within tile
+        int tileX = textureX / 8;
+        int tileY = textureY / 8;
+        int pixelX = textureX % 8;
+        int pixelY = textureY % 8;
+        
+        // Get tile address
+        uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
+        
+        // Read pixel color index
+        uint8_t colorIndex;
+        uint8_t* vram = memory.getVRAM();
+        uint32_t vramOffset = tileAddr - VRAM_BASE;
+        
+        if (obj.paletteMode) {
+            // 8bpp: 1 byte per pixel
+            int pixelIndex = pixelY * 8 + pixelX;
+            colorIndex = vram[vramOffset + pixelIndex];
+        } else {
+            // 4bpp: 4 bits per pixel (2 pixels per byte)
+            int pixelIndex = pixelY * 4 + pixelX / 2;
+            uint8_t byte = vram[vramOffset + pixelIndex];
+            if (pixelX & 1) {
+                colorIndex = (byte >> 4) & 0x0F;
+            } else {
+                colorIndex = byte & 0x0F;
+            }
+        }
+        
+        // Transparent pixel?
+        if (colorIndex == 0) {
+            continue;
+        }
+        
+        // Get color from palette
+        uint16_t paletteIndex;
+        if (obj.paletteMode) {
+            // 8bpp: single 256-color palette
+            paletteIndex = colorIndex;
+        } else {
+            // 4bpp: 16 palettes of 16 colors
+            paletteIndex = (obj.paletteNum * 16) + colorIndex;
+        }
+        
+        // Read color from OBJ palette (starts at 0x05000200)
+        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        
+        // Write to framebuffer (RGB555 format)
+        int fbOffset = scanline * 240 + screenX;
+        tiledFramebuffer[fbOffset] = rgb555;
     }
 }
