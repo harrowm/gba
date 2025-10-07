@@ -194,30 +194,7 @@ uint16_t GPU::readOBJPaletteRaw(int paletteNum, int colorIndex) {
     return paletteRAM[offset] | (paletteRAM[offset + 1] << 8);
 }
 
-uint32_t GPU::convertRGB555toARGB8888(uint16_t rgb555) {
-    // RGB555 format: 0BBBBBGGGGGRRRRR (5 bits per channel)
-    // Extract 5-bit components
-    uint8_t r5 = (rgb555 & 0x001F);
-    uint8_t g5 = (rgb555 & 0x03E0) >> 5;
-    uint8_t b5 = (rgb555 & 0x7C00) >> 10;
-    
-    // Convert to 8-bit by scaling: (value * 255) / 31
-    // Optimized: (value << 3) | (value >> 2) gives similar result
-    uint8_t r8 = (r5 << 3) | (r5 >> 2);
-    uint8_t g8 = (g5 << 3) | (g5 >> 2);
-    uint8_t b8 = (b5 << 3) | (b5 >> 2);
-    
-    // Return ARGB8888 format (0xAARRGGBB)
-    return 0xFF000000 | (r8 << 16) | (g8 << 8) | b8;
-}
-
-uint32_t GPU::getBGColor(int paletteNum, int colorIndex) {
-    // Read raw RGB555 color from BG palette
-    uint16_t rgb555 = readBGPaletteRaw(paletteNum, colorIndex);
-    
-    // Convert to ARGB8888 for display
-    return convertRGB555toARGB8888(rgb555);
-}
+// convertRGB555toARGB8888 and getBGColor are now inline in gpu.h for performance
 
 uint32_t GPU::getOBJColor(int paletteNum, int colorIndex) {
     // Read raw RGB555 color from OBJ palette
@@ -264,50 +241,7 @@ void GPU::decodeTile8bpp(uint32_t tileAddr, uint8_t* output) {
     }
 }
 
-uint8_t GPU::getTilePixel4bpp(uint32_t tileAddr, int pixelX, int pixelY) {
-    // Get a single pixel from a 4bpp tile
-    // pixelX, pixelY are in range [0, 7]
-    
-    if (pixelX < 0 || pixelX >= 8 || pixelY < 0 || pixelY >= 8) {
-        return 0;
-    }
-    
-    uint8_t* vram = memory.getVRAM();
-    uint32_t offset = tileAddr - 0x06000000;
-    
-    // Calculate byte offset and pixel position within byte
-    // Tiles are stored row by row
-    int pixelIndex = pixelY * 8 + pixelX;
-    int byteOffset = pixelIndex / 2;  // 2 pixels per byte
-    int pixelInByte = pixelIndex % 2;  // 0 = low nibble, 1 = high nibble
-    
-    uint8_t byte = vram[offset + byteOffset];
-    
-    if (pixelInByte == 0) {
-        // Low nibble
-        return byte & 0x0F;
-    } else {
-        // High nibble
-        return (byte >> 4) & 0x0F;
-    }
-}
-
-uint8_t GPU::getTilePixel8bpp(uint32_t tileAddr, int pixelX, int pixelY) {
-    // Get a single pixel from an 8bpp tile
-    // pixelX, pixelY are in range [0, 7]
-    
-    if (pixelX < 0 || pixelX >= 8 || pixelY < 0 || pixelY >= 8) {
-        return 0;
-    }
-    
-    uint8_t* vram = memory.getVRAM();
-    uint32_t offset = tileAddr - 0x06000000;
-    
-    // Calculate byte offset (1 pixel per byte)
-    int pixelIndex = pixelY * 8 + pixelX;
-    
-    return vram[offset + pixelIndex];
-}
+// getTilePixel4bpp and getTilePixel8bpp are now inline in gpu.h for performance
 
 // DISPCNT Register Parsing
 
@@ -805,4 +739,122 @@ void GPU::renderBlankScanline(uint16_t scanline) {
     for (int x = 0; x < 240; x++) {
         tiledFramebuffer[fbOffset + x] = 0x7FFF;
     }
+}
+
+// ============================================================================
+// OAM (Sprite) Functions
+// ============================================================================
+
+void GPU::getOBJDimensions(uint8_t shape, uint8_t size, int& width, int& height) {
+    // Sprite dimensions based on shape and size codes
+    // Shape: 0=Square, 1=Horizontal, 2=Vertical
+    // Size: 0-3 (different meanings per shape)
+    
+    if (shape == OBJ_SHAPE_SQUARE) {
+        // Square sprites
+        switch (size) {
+            case 0: width = 8;  height = 8;  break;
+            case 1: width = 16; height = 16; break;
+            case 2: width = 32; height = 32; break;
+            case 3: width = 64; height = 64; break;
+        }
+    } else if (shape == OBJ_SHAPE_HORIZONTAL) {
+        // Wide sprites
+        switch (size) {
+            case 0: width = 16; height = 8;  break;
+            case 1: width = 32; height = 8;  break;
+            case 2: width = 32; height = 16; break;
+            case 3: width = 64; height = 32; break;
+        }
+    } else if (shape == OBJ_SHAPE_VERTICAL) {
+        // Tall sprites
+        switch (size) {
+            case 0: width = 8;  height = 16; break;
+            case 1: width = 8;  height = 32; break;
+            case 2: width = 16; height = 32; break;
+            case 3: width = 32; height = 64; break;
+        }
+    } else {
+        // Prohibited shape
+        width = 0;
+        height = 0;
+    }
+}
+
+OBJAttributes GPU::parseOBJAttributes(uint16_t attr0, uint16_t attr1, uint16_t attr2) {
+    OBJAttributes obj;
+    
+    // Parse Attribute 0 (Y position, rotation, mode, shape)
+    obj.y = attr0 & OBJ_ATTR0_Y_MASK;
+    obj.rotScaleFlag = (attr0 & OBJ_ATTR0_ROT_SCALE_FLAG) != 0;
+    
+    if (obj.rotScaleFlag) {
+        obj.doubleSize = (attr0 & OBJ_ATTR0_DOUBLE_SIZE) != 0;
+    } else {
+        // When not rotating, bit 9 is "OBJ disable"
+        bool disabled = (attr0 & OBJ_ATTR0_OBJ_DISABLE) != 0;
+        obj.doubleSize = false;
+        if (disabled) {
+            obj.visible = false;
+            obj.width = 0;
+            obj.height = 0;
+            return obj;  // Early exit for disabled sprites
+        }
+    }
+    
+    obj.objMode = (attr0 & OBJ_ATTR0_MODE_MASK) >> 10;
+    obj.mosaicEnable = (attr0 & OBJ_ATTR0_MOSAIC) != 0;
+    obj.paletteMode = (attr0 & OBJ_ATTR0_PALETTE_MODE) != 0;
+    obj.shape = (attr0 & OBJ_ATTR0_SHAPE_MASK) >> 14;
+    
+    // Parse Attribute 1 (X position, flip/rotation, size)
+    obj.x = attr1 & OBJ_ATTR1_X_MASK;
+    
+    if (obj.rotScaleFlag) {
+        obj.rotScaleParam = (attr1 & OBJ_ATTR1_ROT_PARAM_MASK) >> 9;
+        obj.hFlip = false;
+        obj.vFlip = false;
+    } else {
+        obj.rotScaleParam = 0;
+        obj.hFlip = (attr1 & OBJ_ATTR1_HFLIP) != 0;
+        obj.vFlip = (attr1 & OBJ_ATTR1_VFLIP) != 0;
+    }
+    
+    obj.size = (attr1 & OBJ_ATTR1_SIZE_MASK) >> 14;
+    
+    // Parse Attribute 2 (tile number, priority, palette)
+    obj.tileNumber = attr2 & OBJ_ATTR2_TILE_MASK;
+    obj.priority = (attr2 & OBJ_ATTR2_PRIORITY_MASK) >> 10;
+    obj.paletteNum = (attr2 & OBJ_ATTR2_PALETTE_MASK) >> 12;
+    
+    // Compute sprite dimensions
+    getOBJDimensions(obj.shape, obj.size, obj.width, obj.height);
+    
+    // Check if sprite is visible
+    obj.visible = (obj.shape != OBJ_SHAPE_PROHIBITED) && 
+                  (obj.objMode != OBJ_MODE_PROHIBITED) &&
+                  (obj.width > 0) && (obj.height > 0);
+    
+    return obj;
+}
+
+OBJAttributes GPU::readOBJAttributes(int objNum) {
+    // Read OAM attributes for sprite objNum (0-127)
+    if (objNum < 0 || objNum >= 128) {
+        // Return invalid sprite
+        OBJAttributes invalid;
+        invalid.visible = false;
+        invalid.width = 0;
+        invalid.height = 0;
+        return invalid;
+    }
+    
+    // Each OBJ entry is 8 bytes (4 × 16-bit attributes, but we only use first 3)
+    uint32_t oamAddr = OAM_BASE + (objNum * 8);
+    
+    uint16_t attr0 = memory.read16(oamAddr + 0);
+    uint16_t attr1 = memory.read16(oamAddr + 2);
+    uint16_t attr2 = memory.read16(oamAddr + 4);
+    
+    return parseOBJAttributes(attr0, attr1, attr2);
 }

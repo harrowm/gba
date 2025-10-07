@@ -137,6 +137,74 @@ constexpr uint32_t PALETTE_BG_START = 0x05000000;
 constexpr uint32_t PALETTE_OBJ_START = 0x05000200;
 constexpr uint32_t PALETTE_SIZE = 512;  // 512 bytes for BG, 512 for OBJ
 
+// OAM (Object Attribute Memory) addresses
+constexpr uint32_t OAM_BASE = 0x07000000;
+constexpr uint32_t OAM_SIZE = 0x400;        // 1KB (128 objects × 8 bytes)
+constexpr uint32_t OBJ_TILES_BASE = 0x06010000;  // Sprite tiles start at 64KB into VRAM
+
+// OAM Attribute 0 bits (Y position, size, mode)
+constexpr uint16_t OBJ_ATTR0_Y_MASK = 0x00FF;           // Bits 0-7: Y coordinate (0-255)
+constexpr uint16_t OBJ_ATTR0_ROT_SCALE_FLAG = 0x0100;   // Bit 8: Rotation/Scaling flag
+constexpr uint16_t OBJ_ATTR0_DOUBLE_SIZE = 0x0200;      // Bit 9: Double size (when rot/scale on)
+constexpr uint16_t OBJ_ATTR0_OBJ_DISABLE = 0x0200;      // Bit 9: OBJ disable (when rot/scale off)
+constexpr uint16_t OBJ_ATTR0_MODE_MASK = 0x0C00;        // Bits 10-11: OBJ mode
+constexpr uint16_t OBJ_ATTR0_MOSAIC = 0x1000;           // Bit 12: Mosaic
+constexpr uint16_t OBJ_ATTR0_PALETTE_MODE = 0x2000;     // Bit 13: 0=16/16 (4bpp), 1=256/1 (8bpp)
+constexpr uint16_t OBJ_ATTR0_SHAPE_MASK = 0xC000;       // Bits 14-15: OBJ shape
+
+// OAM Attribute 1 bits (X position, size, flip)
+constexpr uint16_t OBJ_ATTR1_X_MASK = 0x01FF;           // Bits 0-8: X coordinate (0-511)
+constexpr uint16_t OBJ_ATTR1_ROT_PARAM_MASK = 0x3E00;   // Bits 9-13: Rotation parameter (when rot/scale on)
+constexpr uint16_t OBJ_ATTR1_HFLIP = 0x1000;            // Bit 12: H flip (when rot/scale off)
+constexpr uint16_t OBJ_ATTR1_VFLIP = 0x2000;            // Bit 13: V flip (when rot/scale off)
+constexpr uint16_t OBJ_ATTR1_SIZE_MASK = 0xC000;        // Bits 14-15: OBJ size
+
+// OAM Attribute 2 bits (tile, priority, palette)
+constexpr uint16_t OBJ_ATTR2_TILE_MASK = 0x03FF;        // Bits 0-9: Tile number (0-1023)
+constexpr uint16_t OBJ_ATTR2_PRIORITY_MASK = 0x0C00;    // Bits 10-11: Priority (0-3)
+constexpr uint16_t OBJ_ATTR2_PALETTE_MASK = 0xF000;     // Bits 12-15: Palette number (4bpp only)
+
+// OBJ modes (Attribute 0, bits 10-11)
+constexpr uint8_t OBJ_MODE_NORMAL = 0;      // Normal rendering
+constexpr uint8_t OBJ_MODE_SEMI_TRANSPARENT = 1;  // Alpha blending
+constexpr uint8_t OBJ_MODE_OBJ_WINDOW = 2;  // OBJ window
+constexpr uint8_t OBJ_MODE_PROHIBITED = 3;  // Prohibited (don't render)
+
+// OBJ shapes (Attribute 0, bits 14-15)
+constexpr uint8_t OBJ_SHAPE_SQUARE = 0;     // Square (8×8, 16×16, 32×32, 64×64)
+constexpr uint8_t OBJ_SHAPE_HORIZONTAL = 1; // Wide (16×8, 32×8, 32×16, 64×32)
+constexpr uint8_t OBJ_SHAPE_VERTICAL = 2;   // Tall (8×16, 8×32, 16×32, 32×64)
+constexpr uint8_t OBJ_SHAPE_PROHIBITED = 3; // Prohibited
+
+// Structure to hold parsed OAM attributes
+struct OBJAttributes {
+    // Attribute 0
+    uint8_t y;                  // Y coordinate (0-255)
+    bool rotScaleFlag;          // Rotation/scaling enabled
+    bool doubleSize;            // Double size when rotating (or disabled when not rotating)
+    uint8_t objMode;            // 0=Normal, 1=Semi-transparent, 2=OBJ Window, 3=Prohibited
+    bool mosaicEnable;          // Mosaic effect
+    bool paletteMode;           // 0=16/16 (4bpp), 1=256/1 (8bpp)
+    uint8_t shape;              // 0=Square, 1=Horizontal, 2=Vertical, 3=Prohibited
+    
+    // Attribute 1
+    uint16_t x;                 // X coordinate (0-511, treated as signed -256 to 255)
+    bool hFlip;                 // Horizontal flip (only when rotScaleFlag=false)
+    bool vFlip;                 // Vertical flip (only when rotScaleFlag=false)
+    uint8_t rotScaleParam;      // Rotation/scaling parameter select (only when rotScaleFlag=true)
+    uint8_t size;               // Size code (0-3), combined with shape
+    
+    // Attribute 2
+    uint16_t tileNumber;        // Base tile number (0-1023)
+    uint8_t priority;           // Priority (0-3, 0=highest)
+    uint8_t paletteNum;         // Palette bank (4bpp only, 0-15)
+    
+    // Computed values
+    int width;                  // Sprite width in pixels
+    int height;                 // Sprite height in pixels
+    bool visible;               // Whether sprite should be rendered
+};
+
 class Scheduler;  // Forward declaration
 
 class GPU {
@@ -187,15 +255,66 @@ public:
     // Palette functions
     uint16_t readBGPaletteRaw(int paletteNum, int colorIndex);
     uint16_t readOBJPaletteRaw(int paletteNum, int colorIndex);
-    uint32_t convertRGB555toARGB8888(uint16_t rgb555);
-    uint32_t getBGColor(int paletteNum, int colorIndex);
     uint32_t getOBJColor(int paletteNum, int colorIndex);
+    
+    // Hot-path inline color conversion functions
+    inline uint32_t convertRGB555toARGB8888(uint16_t rgb555) {
+        // RGB555 format: 0BBBBBGGGGGRRRRR (5 bits per channel)
+        uint8_t r5 = (rgb555 & 0x001Fu);
+        uint8_t g5 = (rgb555 & 0x03E0u) >> 5;
+        uint8_t b5 = (rgb555 & 0x7C00u) >> 10;
+        
+        // Convert to 8-bit: (value << 3) | (value >> 2)
+        uint8_t r8 = (r5 << 3) | (r5 >> 2);
+        uint8_t g8 = (g5 << 3) | (g5 >> 2);
+        uint8_t b8 = (b5 << 3) | (b5 >> 2);
+        
+        // Return ARGB8888 format (0xAARRGGBB)
+        return 0xFF000000u | (r8 << 16) | (g8 << 8) | b8;
+    }
+    
+    inline uint32_t getBGColor(int paletteNum, int colorIndex) {
+        // Read raw RGB555 color from BG palette and convert to ARGB8888
+        uint16_t rgb555 = readBGPaletteRaw(paletteNum, colorIndex);
+        return convertRGB555toARGB8888(rgb555);
+    }
     
     // Tile decoding functions
     void decodeTile4bpp(uint32_t tileAddr, uint8_t* output);
     void decodeTile8bpp(uint32_t tileAddr, uint8_t* output);
-    uint8_t getTilePixel4bpp(uint32_t tileAddr, int pixelX, int pixelY);
-    uint8_t getTilePixel8bpp(uint32_t tileAddr, int pixelX, int pixelY);
+    
+    // Hot-path inline functions for tile pixel access
+    inline uint8_t getTilePixel4bpp(uint32_t tileAddr, int pixelX, int pixelY) {
+        // Get a single pixel from a 4bpp tile (pixelX, pixelY in range [0, 7])
+        if (pixelX < 0 || pixelX >= 8 || pixelY < 0 || pixelY >= 8) {
+            return 0;
+        }
+        
+        uint8_t* vram = memory.getVRAM();
+        uint32_t offset = tileAddr - 0x06000000;
+        
+        // Calculate byte offset (2 pixels per byte)
+        int pixelIndex = pixelY * 8 + pixelX;
+        int byteOffset = pixelIndex / 2;
+        int pixelInByte = pixelIndex % 2;  // 0 = low nibble, 1 = high nibble
+        
+        uint8_t byte = vram[offset + byteOffset];
+        return (pixelInByte == 0) ? (byte & 0x0F) : ((byte >> 4) & 0x0F);
+    }
+    
+    inline uint8_t getTilePixel8bpp(uint32_t tileAddr, int pixelX, int pixelY) {
+        // Get a single pixel from an 8bpp tile (pixelX, pixelY in range [0, 7])
+        if (pixelX < 0 || pixelX >= 8 || pixelY < 0 || pixelY >= 8) {
+            return 0;
+        }
+        
+        uint8_t* vram = memory.getVRAM();
+        uint32_t offset = tileAddr - 0x06000000;
+        
+        // Calculate byte offset (1 pixel per byte)
+        int pixelIndex = pixelY * 8 + pixelX;
+        return vram[offset + pixelIndex];
+    }
     
     // DISPCNT register parsing
     DisplayControl parseDISPCNT(uint16_t dispcnt);
@@ -231,6 +350,11 @@ public:
                      int screenX, int screenY, int& bgX, int& bgY);  // Apply scroll to coords
     void getTileCoords(int pixelX, int pixelY, int& tileX, int& tileY, 
                        int& pixelInTileX, int& pixelInTileY);       // Convert pixel to tile coords
+    
+    // OAM (sprite) functions
+    OBJAttributes parseOBJAttributes(uint16_t attr0, uint16_t attr1, uint16_t attr2);
+    OBJAttributes readOBJAttributes(int objNum);                // Read OBJ attributes (objNum: 0-127)
+    void getOBJDimensions(uint8_t shape, uint8_t size, int& width, int& height);
 };
 
 #endif
