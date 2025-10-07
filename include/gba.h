@@ -7,6 +7,7 @@
 #include "interrupt.h"
 #include "scheduler.h"
 #include "timer_controller.h"
+#include "dma.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -20,6 +21,7 @@ private:
     GPU gpu;
     InterruptController interruptController;
     TimerController timerController;
+    DMAController dmaController;
 
     std::mutex syncMutex;
     std::condition_variable syncCondition;

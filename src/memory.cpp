@@ -2,6 +2,7 @@
 #include "memory.h"
 #include "scheduler.h"
 #include "timer_controller.h"
+#include "dma.h"
 #include "debug.h"
 #include <cstring>
 #include <cstdint>
@@ -161,6 +162,20 @@ void Memory::write8(uint32_t address, uint8_t value) {
 uint16_t Memory::read16(uint32_t address) const {
     addWaitCycles(address, 16);
     
+    // Handle DMA register reads (word count and control only)
+    if (dmaController) {
+        if (address >= 0x040000B0 && address <= 0x040000DE) {
+            int channelID = (address - 0x040000B0) / 12;
+            int regOffset = (address - 0x040000B0) % 12;
+            
+            if (regOffset == 8) {  // Word count (DMAxCNT_L)
+                return dmaController->readWordCount(channelID);
+            } else if (regOffset == 10) {  // Control (DMAxCNT_H)
+                return dmaController->readControl(channelID);
+            }
+        }
+    }
+    
     // Handle timer register reads
     if (timerController) {
         if (address >= 0x04000100 && address <= 0x0400010E) {
@@ -185,6 +200,22 @@ uint16_t Memory::read16(uint32_t address) const {
 
 void Memory::write16(uint32_t address, uint16_t value) {
     addWaitCycles(address, 16);
+    
+    // Handle DMA register writes (word count and control only)
+    if (dmaController) {
+        if (address >= 0x040000B0 && address <= 0x040000DE) {
+            int channelID = (address - 0x040000B0) / 12;
+            int regOffset = (address - 0x040000B0) % 12;
+            
+            if (regOffset == 8) {  // Word count (DMAxCNT_L)
+                dmaController->writeWordCount(channelID, value);
+                return;  // Don't write to memory
+            } else if (regOffset == 10) {  // Control (DMAxCNT_H)
+                dmaController->writeControl(channelID, value);
+                return;  // Don't write to memory
+            }
+        }
+    }
     
     // Handle timer register writes
     if (timerController) {
@@ -254,6 +285,21 @@ void Memory::writeDirectIO(uint32_t address, uint16_t value) {
 
 uint32_t Memory::read32(uint32_t address) const {
     addWaitCycles(address, 32);
+    
+    // Handle DMA register reads (source and dest addresses)
+    if (dmaController) {
+        if (address >= 0x040000B0 && address <= 0x040000DE) {
+            int channelID = (address - 0x040000B0) / 12;
+            int regOffset = (address - 0x040000B0) % 12;
+            
+            if (regOffset == 0) {  // Source address (DMAxSAD)
+                return dmaController->readSourceAddress(channelID);
+            } else if (regOffset == 4) {  // Dest address (DMAxDAD)
+                return dmaController->readDestAddress(channelID);
+            }
+        }
+    }
+    
     uint32_t rot = (address & 3) * 8;
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
@@ -271,6 +317,23 @@ uint32_t Memory::read32(uint32_t address) const {
 
 void Memory::write32(uint32_t address, uint32_t value) {
     addWaitCycles(address, 32);
+    
+    // Handle DMA register writes (source and dest addresses)
+    if (dmaController) {
+        if (address >= 0x040000B0 && address <= 0x040000DE) {
+            int channelID = (address - 0x040000B0) / 12;
+            int regOffset = (address - 0x040000B0) % 12;
+            
+            if (regOffset == 0) {  // Source address (DMAxSAD)
+                dmaController->writeSourceAddress(channelID, value);
+                return;  // Don't write to memory
+            } else if (regOffset == 4) {  // Dest address (DMAxDAD)
+                dmaController->writeDestAddress(channelID, value);
+                return;  // Don't write to memory
+            }
+        }
+    }
+    
     uint32_t rot = (address & 3) * 8;
     uint32_t val = (value << rot) | (value >> (32 - rot));
     uint32_t offset;

@@ -9,6 +9,7 @@
 // Forward declaration to avoid circular dependency
 class Scheduler;
 class TimerController;
+class DMAController;
 
 class Memory {
 public:
@@ -21,6 +22,7 @@ public:
     // Scheduler integration
     void setScheduler(Scheduler* sched) { scheduler = sched; }
     void setTimerController(TimerController* tc) { timerController = tc; }
+    void setDMAController(DMAController* dma) { dmaController = dma; }
 
     // Accessors (now with cycle-accurate timing)
     uint8_t read8(uint32_t address) const;
@@ -67,6 +69,9 @@ private:
     
     // Timer controller for timer register handling
     TimerController* timerController = nullptr;
+    
+    // DMA controller for DMA register handling
+    DMAController* dmaController = nullptr;
     
     // Helper to add wait state cycles
     void addWaitCycles(uint32_t address, uint32_t accessWidth) const;

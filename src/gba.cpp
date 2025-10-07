@@ -11,7 +11,7 @@
 
 GBA::GBA(bool testMode) 
     : memory(testMode), scheduler(), gpu(memory), interruptController(), 
-      timerController(), running(false), frameCount(0) {
+      timerController(), dmaController(), running(false), frameCount(0) {
     
     // Create CPU
     cpu = new CPU(memory, interruptController);
@@ -32,10 +32,12 @@ GBA::GBA(bool testMode)
     // Setup GPU callbacks
     gpu.setVBlankCallback([this]() {
         interruptController.triggerVBlank();
+        dmaController.triggerVBlank();
     });
     
     gpu.setHBlankCallback([this]() {
         interruptController.triggerHBlank();
+        dmaController.triggerHBlank();
     });
     
     // Initialize video timing
@@ -46,10 +48,16 @@ GBA::GBA(bool testMode)
     timerController.setInterruptController(&interruptController);
     memory.setTimerController(&timerController);
     
+    // Wire up DMA controller
+    dmaController.setMemory(&memory);
+    dmaController.setScheduler(&scheduler);
+    dmaController.setInterruptController(&interruptController);
+    memory.setDMAController(&dmaController);
+    
     // Reset CPU to initial state (PC starts at 0x00000000 - BIOS entry point)
     cpu->reset();
     
-    DEBUG_INFO("GBA initialized with scheduler, CPU, GPU, timers, and interrupts wired");
+    DEBUG_INFO("GBA initialized with scheduler, CPU, GPU, timers, DMA, and interrupts wired");
     DEBUG_INFO("CPU will boot from BIOS at 0x00000000");
 }
 

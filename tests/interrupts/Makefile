@@ -19,6 +19,7 @@ CPP_SRCS = \
 	$(SRC_DIR)/interrupt.cpp \
 	$(SRC_DIR)/scheduler.cpp \
 	$(SRC_DIR)/timer_controller.cpp \
+	$(SRC_DIR)/dma.cpp \
 	$(SRC_DIR)/debug.cpp \
 	$(SRC_DIR)/arm_timing.c \
 	$(SRC_DIR)/thumb_timing.c \
