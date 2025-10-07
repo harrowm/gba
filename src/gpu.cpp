@@ -1287,15 +1287,22 @@ void GPU::renderScanline(uint16_t scanline) {
         return;
     }
     
+    // Read blend and window control once per scanline (optimization)
+    BlendControl blend = readBlendControl();
+    WindowControl winCtrl = readWindowControl();
+    bool windowsEnabled = (dispcnt & (DISPCNT_WIN0_ENABLE | DISPCNT_WIN1_ENABLE)) != 0;
+    
     // Create line buffers for priority-based compositing
     uint16_t lineBuffer[240];
     uint8_t priorityBuffer[240];
+    uint8_t layerTypeBuffer[240];  // Track which layer type each pixel came from
     
     // 1. Fill line buffers with backdrop color (lowest priority)
     uint16_t backdrop = memory.read16(0x05000000);  // Palette 0, color 0
     for (int i = 0; i < 240; i++) {
         lineBuffer[i] = backdrop;
         priorityBuffer[i] = 255;  // Lowest possible priority
+        layerTypeBuffer[i] = 5;   // 5 = Backdrop
     }
     
     // 2. Render each priority level (back to front: 3 → 0)
@@ -1308,15 +1315,55 @@ void GPU::renderScanline(uint16_t scanline) {
                 uint8_t bgPriority = bgcnt & BGCNT_PRIORITY_MASK;
                 
                 if (bgPriority == priority) {
-                    renderBGScanlineWithPriority(bg, scanline, lineBuffer, priorityBuffer);
+                    // Track which pixels existed before rendering this layer
+                    uint16_t oldLineBuffer[240];
+                    for (int x = 0; x < 240; x++) {
+                        oldLineBuffer[x] = lineBuffer[x];
+                    }
+                    
+                    // Render with window checking if windows are enabled
+                    if (windowsEnabled) {
+                        renderBGScanlineWithPriorityAndWindow(bg, scanline, lineBuffer, 
+                                                               priorityBuffer, layerTypeBuffer, winCtrl);
+                    } else {
+                        renderBGScanlineWithPriority(bg, scanline, lineBuffer, priorityBuffer);
+                        // Update layer type buffer for pixels that changed
+                        for (int x = 0; x < 240; x++) {
+                            if (lineBuffer[x] != oldLineBuffer[x]) {
+                                layerTypeBuffer[x] = bg;
+                            }
+                        }
+                    }
                 }
             }
         }
         
         // Render sprites with this priority
         if (dispcnt & DISPCNT_OBJ_ENABLE) {
-            renderSpritesWithPriority(priority, scanline, lineBuffer, priorityBuffer);
+            // Track which pixels existed before rendering sprites
+            uint16_t oldLineBuffer[240];
+            for (int x = 0; x < 240; x++) {
+                oldLineBuffer[x] = lineBuffer[x];
+            }
+            
+            if (windowsEnabled) {
+                renderSpritesWithPriorityAndWindow(priority, scanline, lineBuffer, 
+                                                    priorityBuffer, layerTypeBuffer, winCtrl);
+            } else {
+                renderSpritesWithPriority(priority, scanline, lineBuffer, priorityBuffer);
+                // Update layer type buffer for pixels that changed
+                for (int x = 0; x < 240; x++) {
+                    if (lineBuffer[x] != oldLineBuffer[x]) {
+                        layerTypeBuffer[x] = 4;  // 4 = OBJ
+                    }
+                }
+            }
         }
+    }
+    
+    // 3. Apply blend effects if enabled
+    if (blend.mode != BLEND_MODE_OFF) {
+        applyBlendToScanline(lineBuffer, layerTypeBuffer, scanline, blend);
     }
     
     // 4. Copy line buffer to framebuffer
@@ -1899,5 +1946,352 @@ uint16_t GPU::applyBlend(uint16_t color1, uint16_t color2, const BlendControl& b
         
         default:
             return color1;
+    }
+}
+
+// ============================================================================
+// Session 3 Integration: Blend and Window Integration with Rendering
+// ============================================================================
+
+void GPU::renderBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, uint16_t* lineBuffer,
+                                                  uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                                                  const WindowControl& winCtrl) {
+    // Get BG configuration
+    uint16_t bgcnt = memory.read16(REG_BG0CNT + (bgNum * 2));
+    BGConfig bgConfig = parseBGCNT(bgcnt);
+    
+    // Get scroll values
+    BGScroll scroll = readBGScroll(bgNum);
+    
+    // Calculate priority value for this layer
+    uint8_t layerPriority = (bgConfig.priority * 4) + bgNum;
+    
+    // For each pixel on this scanline
+    for (int screenX = 0; screenX < 240; screenX++) {
+        // Check window visibility first
+        uint8_t control = getWindowControlForPixel(screenX, scanline, winCtrl);
+        bool layerVisible = (control & (1 << bgNum)) != 0;
+        
+        if (!layerVisible) {
+            continue;  // Skip this pixel - layer masked by window
+        }
+        
+        // Apply scrolling
+        int bgX, bgY;
+        applyScroll(bgConfig, scroll, screenX, scanline, bgX, bgY);
+        
+        // Get tile coordinates
+        int tileX, tileY, pixelInTileX, pixelInTileY;
+        getTileCoords(bgX, bgY, tileX, tileY, pixelInTileX, pixelInTileY);
+        
+        // Wrap coordinates for screen size
+        tileX = tileX % bgConfig.screenWidthTiles;
+        tileY = tileY % bgConfig.screenHeightTiles;
+        if (tileX < 0) tileX += bgConfig.screenWidthTiles;
+        if (tileY < 0) tileY += bgConfig.screenHeightTiles;
+        
+        // Read screen entry
+        ScreenEntry entry = readScreenEntry(bgConfig, tileX, tileY);
+        
+        // Get tile address
+        uint32_t tileAddr = getTileAddress(bgConfig, entry);
+        
+        // Apply horizontal/vertical flip
+        int finalPixelX = entry.hFlip ? (7 - pixelInTileX) : pixelInTileX;
+        int finalPixelY = entry.vFlip ? (7 - pixelInTileY) : pixelInTileY;
+        
+        // Read pixel color index
+        uint8_t colorIndex;
+        if (bgConfig.paletteMode) {
+            colorIndex = getTilePixel8bpp(tileAddr, finalPixelX, finalPixelY);
+        } else {
+            colorIndex = getTilePixel4bpp(tileAddr, finalPixelX, finalPixelY);
+        }
+        
+        // Transparent pixel?
+        if (colorIndex == 0) {
+            continue;
+        }
+        
+        // Only draw if this pixel has higher or equal priority
+        if (layerPriority <= priorityBuffer[screenX]) {
+            // Get color from palette
+            uint16_t rgb555;
+            if (bgConfig.paletteMode) {
+                rgb555 = memory.read16(0x05000000 + colorIndex * 2);
+            } else {
+                uint16_t paletteIndex = (entry.paletteNum * 16) + colorIndex;
+                rgb555 = memory.read16(0x05000000 + paletteIndex * 2);
+            }
+            
+            // Update buffers
+            lineBuffer[screenX] = rgb555;
+            priorityBuffer[screenX] = layerPriority;
+            layerTypeBuffer[screenX] = bgNum;  // 0-3 for BG0-BG3
+        }
+    }
+}
+
+void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer,
+                                               uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                                               const WindowControl& winCtrl) {
+    // Get sprite mapping mode
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    bool mapping1D = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
+    
+    // Render each OBJ in reverse order (OBJ 127 → 0)
+    // Higher numbered OBJs have lower priority within same priority level
+    for (int objNum = 127; objNum >= 0; objNum--) {
+        OBJAttributes obj = readOBJAttributes(objNum);
+        
+        // Skip if not visible or wrong priority
+        if (!obj.visible || obj.priority != priority) {
+            continue;
+        }
+        
+        // Skip prohibited mode
+        if (obj.objMode == OBJ_MODE_PROHIBITED) {
+            continue;
+        }
+        
+        // Check if sprite is on this scanline
+        if (!isSpriteOnScanline(obj, scanline)) {
+            continue;
+        }
+        
+        // Calculate layer priority value
+        uint8_t layerPriority = (priority * 4) + 3;  // Sprites drawn after BGs at same priority
+        
+        // Handle affine sprites differently
+        if (obj.rotScaleFlag) {
+            AffineParams params = readAffineParams(obj.rotScaleParam);
+            renderAffineSpriteWithPriorityAndWindow(obj, scanline, params, lineBuffer,
+                                                     priorityBuffer, layerTypeBuffer, 
+                                                     layerPriority, mapping1D, winCtrl);
+        } else {
+            renderNormalSpriteWithPriorityAndWindow(obj, scanline, lineBuffer, 
+                                                     priorityBuffer, layerTypeBuffer,
+                                                     layerPriority, mapping1D, winCtrl);
+        }
+    }
+}
+
+void GPU::renderNormalSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
+                                                    uint16_t* lineBuffer, uint8_t* priorityBuffer,
+                                                    uint8_t* layerTypeBuffer, uint8_t layerPriority,
+                                                    bool mapping1D, const WindowControl& winCtrl) {
+    // Existing implementation from renderNormalSpriteWithPriority, but add window check
+    int spriteY = (obj.y < 160) ? obj.y : (obj.y - 256);
+    int rowInSprite = scanline - spriteY;
+    
+    if (obj.vFlip) {
+        rowInSprite = obj.height - 1 - rowInSprite;
+    }
+    
+    int tileY = rowInSprite / 8;
+    int pixelY = rowInSprite % 8;
+    
+    int spriteX = (obj.x < 240) ? obj.x : (obj.x - 512);
+    
+    for (int spritePixelX = 0; spritePixelX < obj.width; spritePixelX++) {
+        int screenX = spriteX + spritePixelX;
+        
+        if (screenX < 0 || screenX >= 240) {
+            continue;
+        }
+        
+        // **NEW: Check window visibility**
+        uint8_t control = getWindowControlForPixel(screenX, scanline, winCtrl);
+        bool objVisible = (control & WIN_OBJ_ENABLE) != 0;
+        
+        if (!objVisible) {
+            continue;  // OBJ masked by window
+        }
+        
+        if (layerPriority >= priorityBuffer[screenX]) {
+            continue;
+        }
+        
+        int pixelX = obj.hFlip ? (obj.width - 1 - spritePixelX) : spritePixelX;
+        int tileX = pixelX / 8;
+        int pixelInTileX = pixelX % 8;
+        
+        uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
+        
+        uint8_t colorIndex;
+        uint8_t* vram = memory.getVRAM();
+        uint32_t vramOffset = tileAddr - VRAM_BASE;
+        
+        if (obj.paletteMode) {
+            int pixelIndex = pixelY * 8 + pixelInTileX;
+            colorIndex = vram[vramOffset + pixelIndex];
+        } else {
+            int pixelIndex = pixelY * 4 + pixelInTileX / 2;
+            uint8_t byte = vram[vramOffset + pixelIndex];
+            colorIndex = (pixelInTileX & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+        }
+        
+        if (colorIndex == 0) {
+            continue;
+        }
+        
+        uint16_t paletteIndex;
+        if (obj.paletteMode) {
+            paletteIndex = colorIndex;
+        } else {
+            paletteIndex = (obj.paletteNum * 16) + colorIndex;
+        }
+        
+        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        
+        lineBuffer[screenX] = rgb555;
+        priorityBuffer[screenX] = layerPriority;
+        layerTypeBuffer[screenX] = 4;  // 4 = OBJ
+    }
+}
+
+void GPU::renderAffineSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
+                                                    const AffineParams& params, uint16_t* lineBuffer,
+                                                    uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                                                    uint8_t layerPriority, bool mapping1D,
+                                                    const WindowControl& winCtrl) {
+    // Similar to renderAffineSpriteWithPriority but with window checking
+    int renderWidth = obj.width;
+    int renderHeight = obj.height;
+    
+    if (obj.doubleSize) {
+        renderWidth *= 2;
+        renderHeight *= 2;
+    }
+    
+    int spriteY = (obj.y < 160) ? obj.y : (obj.y - 256);
+    int rowInSprite = scanline - spriteY;
+    
+    int spriteWidth = obj.width;
+    int spriteHeight = obj.height;
+    int texCenterX = spriteWidth / 2;
+    int texCenterY = spriteHeight / 2;
+    
+    int spriteX = (obj.x < 240) ? obj.x : (obj.x - 512);
+    
+    for (int spritePixelX = 0; spritePixelX < renderWidth; spritePixelX++) {
+        int screenX = spriteX + spritePixelX;
+        
+        if (screenX < 0 || screenX >= 240) {
+            continue;
+        }
+        
+        // **NEW: Check window visibility**
+        uint8_t control = getWindowControlForPixel(screenX, scanline, winCtrl);
+        bool objVisible = (control & WIN_OBJ_ENABLE) != 0;
+        
+        if (!objVisible) {
+            continue;
+        }
+        
+        if (layerPriority >= priorityBuffer[screenX]) {
+            continue;
+        }
+        
+        int relX = spritePixelX - renderWidth / 2;
+        int relY = rowInSprite - renderHeight / 2;
+        
+        int textureX, textureY;
+        applyAffineTransform(params, relX, relY, textureX, textureY);
+        
+        textureX += texCenterX;
+        textureY += texCenterY;
+        
+        if (textureX < 0 || textureX >= spriteWidth || 
+            textureY < 0 || textureY >= spriteHeight) {
+            continue;
+        }
+        
+        int tileX = textureX / 8;
+        int tileY = textureY / 8;
+        int pixelX = textureX % 8;
+        int pixelY = textureY % 8;
+        
+        uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
+        
+        uint8_t colorIndex;
+        uint8_t* vram = memory.getVRAM();
+        uint32_t vramOffset = tileAddr - VRAM_BASE;
+        
+        if (obj.paletteMode) {
+            int pixelIndex = pixelY * 8 + pixelX;
+            colorIndex = vram[vramOffset + pixelIndex];
+        } else {
+            int pixelIndex = pixelY * 4 + pixelX / 2;
+            uint8_t byte = vram[vramOffset + pixelIndex];
+            colorIndex = (pixelX & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+        }
+        
+        if (colorIndex == 0) {
+            continue;
+        }
+        
+        uint16_t paletteIndex;
+        if (obj.paletteMode) {
+            paletteIndex = colorIndex;
+        } else {
+            paletteIndex = (obj.paletteNum * 16) + colorIndex;
+        }
+        
+        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        
+        lineBuffer[screenX] = rgb555;
+        priorityBuffer[screenX] = layerPriority;
+        layerTypeBuffer[screenX] = 4;
+    }
+}
+
+void GPU::applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, 
+                                uint16_t scanline, const BlendControl& blend) {
+    // Apply blend effects based on mode
+    switch (blend.mode) {
+        case BLEND_MODE_ALPHA:
+            // For alpha blending, we need two layers
+            // In a full implementation, we'd track the second layer
+            // For now, simplified: blend with backdrop if first target
+            for (int x = 0; x < 240; x++) {
+                uint8_t layerType = layerTypeBuffer[x];
+                bool isFirstTarget = (blend.firstTargets & (1 << layerType)) != 0;
+                
+                if (isFirstTarget) {
+                    // For proper alpha blend, we'd need the second layer
+                    // For now, just mark that blending would occur
+                    // Full implementation would track second layer in rendering
+                }
+            }
+            break;
+            
+        case BLEND_MODE_BRIGHTEN:
+            // Brighten all first target pixels
+            for (int x = 0; x < 240; x++) {
+                uint8_t layerType = layerTypeBuffer[x];
+                bool isFirstTarget = (blend.firstTargets & (1 << layerType)) != 0;
+                
+                if (isFirstTarget) {
+                    lineBuffer[x] = applyBrightnessIncrease(lineBuffer[x], blend.evy);
+                }
+            }
+            break;
+            
+        case BLEND_MODE_DARKEN:
+            // Darken all first target pixels
+            for (int x = 0; x < 240; x++) {
+                uint8_t layerType = layerTypeBuffer[x];
+                bool isFirstTarget = (blend.firstTargets & (1 << layerType)) != 0;
+                
+                if (isFirstTarget) {
+                    lineBuffer[x] = applyBrightnessDecrease(lineBuffer[x], blend.evy);
+                }
+            }
+            break;
+            
+        default:
+            // BLEND_MODE_OFF - do nothing
+            break;
     }
 }
