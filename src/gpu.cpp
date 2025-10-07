@@ -9,6 +9,8 @@
 GPU::GPU(Memory& mem) 
     : memory(mem), currentScanline(0), inVBlank(false), inHBlank(false) {
     // Initialize GPU state
+    // Clear the tiled framebuffer
+    memset(tiledFramebuffer, 0, sizeof(tiledFramebuffer));
     DEBUG_INFO("GPU initialized");
 }
 
@@ -114,16 +116,44 @@ void GPU::renderMode3Scanline(uint16_t scanline) {
     // but for basic Mode 3, the framebuffer is already in the correct format
 }
 
+uint16_t* GPU::getFrameBuffer() {
+    // Return appropriate framebuffer based on video mode
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t mode = dispcnt & DISPCNT_MODE_MASK;
+    
+    if (mode >= 3) {
+        // Bitmap modes (3, 4, 5): VRAM is the framebuffer
+        return reinterpret_cast<uint16_t*>(memory.getVRAM());
+    } else {
+        // Tiled modes (0, 1, 2): use internal framebuffer
+        return tiledFramebuffer;
+    }
+}
+
 // Palette Functions
 
 uint16_t GPU::readBGPaletteRaw(int paletteNum, int colorIndex) {
-    // BG palette: 16 palettes × 16 colors
+    // BG palette can be accessed in two ways:
+    // - 4bpp mode: 16 palettes × 16 colors (paletteNum 0-15, colorIndex 0-15)
+    // - 8bpp mode: 1 palette × 256 colors (paletteNum 0, colorIndex 0-255)
     // Each color is 2 bytes (RGB555)
-    if (paletteNum < 0 || paletteNum >= 16 || colorIndex < 0 || colorIndex >= 16) {
-        return 0;
+    
+    // Calculate offset based on mode
+    uint32_t offset;
+    if (colorIndex < 16) {
+        // 4bpp mode access
+        if (paletteNum < 0 || paletteNum >= 16 || colorIndex < 0) {
+            return 0;
+        }
+        offset = (paletteNum * 16 + colorIndex) * 2;
+    } else {
+        // 8bpp mode access (colorIndex 0-255, paletteNum should be 0)
+        if (colorIndex < 0 || colorIndex >= 256) {
+            return 0;
+        }
+        offset = colorIndex * 2;
     }
     
-    uint32_t offset = (paletteNum * 16 + colorIndex) * 2;
     uint8_t* paletteRAM = memory.getPaletteRAM();
     
     // Read 16-bit color value (little endian)
@@ -541,5 +571,86 @@ void GPU::getTileCoords(int pixelX, int pixelY, int& tileX, int& tileY,
         tileY = (pixelY - 7) / 8;
         pixelInTileY = pixelY % 8;
         if (pixelInTileY < 0) pixelInTileY += 8;
+    }
+}
+
+// Background Scanline Rendering
+
+void GPU::renderBGScanline(int bgNum, uint16_t scanline) {
+    // Render a single scanline of a background layer
+    
+    // Check if background is valid and enabled
+    if (bgNum < 0 || bgNum > 3) return;
+    if (!isBGEnabled(bgNum)) return;
+    
+    // Get background configuration
+    BGConfig bgConfig = readBGCNT(bgNum);
+    BGScroll scroll = readBGScroll(bgNum);
+    
+    // Get framebuffer
+    uint16_t* framebuffer = getFrameBuffer();
+    if (!framebuffer) return;
+    
+    // Render each pixel in the scanline
+    for (int screenX = 0; screenX < 240; screenX++) {
+        // Apply scrolling to get background coordinates
+        int bgX, bgY;
+        applyScroll(bgConfig, scroll, screenX, scanline, bgX, bgY);
+        
+        // Convert to tile coordinates
+        int tileX, tileY, pixelInTileX, pixelInTileY;
+        getTileCoords(bgX, bgY, tileX, tileY, pixelInTileX, pixelInTileY);
+        
+        // Read the screen entry (tile map) for this tile
+        ScreenEntry entry = readScreenEntry(bgConfig, tileX, tileY);
+        
+        // Skip transparent tiles (tile 0 is often used as transparent)
+        if (entry.tileNumber == 0) {
+            continue;  // Leave background color
+        }
+        
+        // Get the tile address in VRAM
+        uint32_t tileAddr = getTileAddress(bgConfig, entry);
+        
+        // Handle horizontal/vertical flips
+        int actualPixelX = entry.hFlip ? (7 - pixelInTileX) : pixelInTileX;
+        int actualPixelY = entry.vFlip ? (7 - pixelInTileY) : pixelInTileY;
+        
+        // Get the palette index for this pixel
+        uint8_t paletteIndex;
+        if (bgConfig.paletteMode) {
+            // 8bpp mode - 256 colors, single palette
+            paletteIndex = getTilePixel8bpp(tileAddr, actualPixelX, actualPixelY);
+        } else {
+            // 4bpp mode - 16 colors per palette
+            paletteIndex = getTilePixel4bpp(tileAddr, actualPixelX, actualPixelY);
+        }
+        
+        // Skip transparent pixels (palette index 0)
+        if (paletteIndex == 0) {
+            continue;
+        }
+        
+        // Get the color from the palette
+        uint32_t color;
+        if (bgConfig.paletteMode) {
+            // 8bpp uses palette 0 for all 256 colors
+            color = getBGColor(0, paletteIndex);
+        } else {
+            // 4bpp uses the palette specified in the screen entry
+            color = getBGColor(entry.paletteNum, paletteIndex);
+        }
+        
+        // Convert ARGB8888 back to RGB555 for framebuffer
+        uint8_t r = (color >> 16) & 0xFF;
+        uint8_t g = (color >> 8) & 0xFF;
+        uint8_t b = color & 0xFF;
+        
+        // Convert 8-bit channels back to 5-bit
+        uint16_t rgb555 = ((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3);
+        
+        // Write to framebuffer
+        int fbOffset = scanline * 240 + screenX;
+        framebuffer[fbOffset] = rgb555;
     }
 }

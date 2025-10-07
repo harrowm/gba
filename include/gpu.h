@@ -146,6 +146,10 @@ private:
     bool inVBlank;
     bool inHBlank;
     
+    // Framebuffer for tiled modes (Mode 0-2)
+    // In Mode 3+, we use VRAM directly as framebuffer
+    uint16_t tiledFramebuffer[240 * 160];
+    
     // Callbacks for interrupts
     std::function<void()> vblankCallback;
     std::function<void()> hblankCallback;
@@ -159,6 +163,7 @@ public:
     // Rendering
     void renderScanline();
     void renderMode3Scanline(uint16_t scanline);
+    void renderBGScanline(int bgNum, uint16_t scanline);  // Render a single background scanline
     
     // VCOUNT handling
     uint16_t getCurrentScanline() const { return currentScanline; }
@@ -168,8 +173,11 @@ public:
     void setVBlankCallback(std::function<void()> callback) { vblankCallback = callback; }
     void setHBlankCallback(std::function<void()> callback) { hblankCallback = callback; }
     
-    // Get frame buffer (Mode 3: 240x160x16bpp at 0x06000000)
-    uint16_t* getFrameBuffer() { return reinterpret_cast<uint16_t*>(memory.getVRAM()); }
+    // Get frame buffer
+    // Mode 3+ (bitmap modes): returns VRAM directly
+    // Mode 0-2 (tiled modes): returns internal tiled framebuffer
+    uint16_t* getFrameBuffer();
+    uint16_t* getTiledFramebuffer() { return tiledFramebuffer; }
     
     // Palette functions
     uint16_t readBGPaletteRaw(int paletteNum, int colorIndex);
