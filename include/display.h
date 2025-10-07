@@ -31,9 +31,10 @@ public:
     Display(const Display&) = delete;
     Display& operator=(const Display&) = delete;
     
-    // Render a frame from GBA framebuffer (RGB555 format)
-    // framebuffer should be 240x160 uint16_t array
-    void renderFrame(const uint16_t* framebuffer);
+    // Render a frame from GBA framebuffer
+    // For Mode 3/5: framebuffer contains RGB555 colors
+    // For Mode 4: framebuffer contains 8-bit palette indices, palette is the 256-color palette
+    void renderFrame(const uint16_t* framebuffer, const uint16_t* palette = nullptr, int videoMode = 3);
     
     // Handle SDL events (keyboard, window close, etc.)
     void handleEvents();

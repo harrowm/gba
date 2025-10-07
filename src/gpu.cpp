@@ -175,6 +175,15 @@ uint16_t GPU::readBGPaletteRaw(int paletteNum, int colorIndex) {
             return 0;
         }
         offset = (paletteNum * 16 + colorIndex) * 2;
+        
+        // Debug: Log palette 0, color 3 reads
+        static int debugCount = 0;
+        if (paletteNum == 0 && colorIndex == 3 && debugCount < 3) {
+            uint16_t* paletteRAM = reinterpret_cast<uint16_t*>(memory.getPaletteRAM());
+            uint16_t value = paletteRAM[offset / 2];
+            printf("[Palette Debug] Reading BG palette[0][3]: offset=%d, value=0x%04X\n", offset, value);
+            debugCount++;
+        }
     } else {
         // 8bpp mode access (colorIndex 0-255, paletteNum should be 0)
         if (colorIndex < 0 || colorIndex >= 256) {

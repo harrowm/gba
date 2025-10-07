@@ -127,8 +127,9 @@ int main(int argc, char* argv[]) {
             printf("ROM will set its own display mode\n");
         }
         
-        // Get GPU reference for rendering
+        // Get GPU and Memory references for rendering
         GPU& gpu = gba.getGPU();
+        Memory& mem = gba.getMemory();
         
         printf("\nStarting main loop...\n");
         printf("Press ESC or close window to quit\n\n");
@@ -146,8 +147,13 @@ int main(int argc, char* argv[]) {
             // Get framebuffer pointer each frame (mode can change during execution)
             uint16_t* framebuffer = gpu.getFrameBuffer();
             
+            // Get video mode and palette for display rendering
+            uint16_t dispcnt = mem.read16(0x04000000);  // REG_DISPCNT
+            int videoMode = dispcnt & 0x7;
+            uint16_t* palette = reinterpret_cast<uint16_t*>(mem.getPaletteRAM());
+            
             // Render the frame to display
-            display.renderFrame(framebuffer);
+            display.renderFrame(framebuffer, palette, videoMode);
             
             // Handle SDL events (keyboard, window close)
             display.handleEvents();

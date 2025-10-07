@@ -11,7 +11,7 @@ ASFLAGS = -mthumb-interwork -mcpu=arm7tdmi
 LDFLAGS = -T linker.ld
 
 # Targets
-TARGETS = minimal_display_test simple_red_test
+TARGETS = minimal_display_test
 ROMS = $(TARGETS:=.gba)
 
 .PHONY: all clean

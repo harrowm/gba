@@ -88,7 +88,7 @@ Display::~Display() {
     DEBUG_INFO("Display shut down");
 }
 
-void Display::renderFrame(const uint16_t* framebuffer) {
+void Display::renderFrame(const uint16_t* framebuffer, const uint16_t* palette, int videoMode) {
     if (!initialized || !framebuffer) {
         return;
     }
@@ -96,9 +96,16 @@ void Display::renderFrame(const uint16_t* framebuffer) {
     // Debug: Print first few pixels to verify VRAM contents
     static int debugCount = 0;
     if (debugCount < 5) {
-        printf("[Display #%d] framebuffer=%p, First 10 pixels: ", debugCount, (void*)framebuffer);
-        for (int i = 0; i < 10; i++) {
-            printf("0x%04X ", framebuffer[i]);
+        printf("[Display #%d] Mode=%d, framebuffer=%p, First 10 pixels/bytes: ", debugCount, videoMode, (void*)framebuffer);
+        if (videoMode == 4) {
+            const uint8_t* fb8 = reinterpret_cast<const uint8_t*>(framebuffer);
+            for (int i = 0; i < 10; i++) {
+                printf("0x%02X ", fb8[i]);
+            }
+        } else {
+            for (int i = 0; i < 10; i++) {
+                printf("0x%04X ", framebuffer[i]);
+            }
         }
         printf("\n");
         debugCount++;
@@ -112,30 +119,63 @@ void Display::renderFrame(const uint16_t* framebuffer) {
         return;
     }
     
-    // Convert BGR555 (GBA format) to ARGB8888 (SDL format)
+    // Convert GBA format to ARGB8888 (SDL format)
     uint32_t* pixelData = static_cast<uint32_t*>(pixels);
     
-    for (int y = 0; y < GBA_HEIGHT; y++) {
-        for (int x = 0; x < GBA_WIDTH; x++) {
-            // Read BGR555 pixel from GBA framebuffer
-            uint16_t bgr555 = framebuffer[y * GBA_WIDTH + x];
-            
-            // Extract BGR555 components (5 bits each) - GBA uses BGR order!
-            uint8_t r5 = (bgr555 >> 0) & 0x1F;
-            uint8_t g5 = (bgr555 >> 5) & 0x1F;
-            uint8_t b5 = (bgr555 >> 10) & 0x1F;
-            
-            // Convert 5-bit to 8-bit (multiply by 255/31 ≈ 8.23)
-            uint8_t r8 = (r5 << 3) | (r5 >> 2);
-            uint8_t g8 = (g5 << 3) | (g5 >> 2);
-            uint8_t b8 = (b5 << 3) | (b5 >> 2);
-            
-            // Pack into ARGB8888 format
-            pixelData[y * (pitch / 4) + x] = 
-                (0xFF << 24) |  // Alpha (fully opaque)
-                (r8 << 16) |    // Red
-                (g8 << 8) |     // Green
-                (b8 << 0);      // Blue
+    if (videoMode == 4) {
+        // Mode 4: 8-bit palettized bitmap (240x160, palette indices)
+        const uint8_t* fb8 = reinterpret_cast<const uint8_t*>(framebuffer);
+        
+        for (int y = 0; y < GBA_HEIGHT; y++) {
+            for (int x = 0; x < GBA_WIDTH; x++) {
+                // Read 8-bit palette index
+                uint8_t paletteIndex = fb8[y * GBA_WIDTH + x];
+                
+                // Look up color in palette (default to white if no palette)
+                uint16_t bgr555 = palette ? palette[paletteIndex] : 0xFFFF;
+                
+                // Extract BGR555 components (5 bits each) - GBA uses BGR order!
+                uint8_t r5 = (bgr555 >> 0) & 0x1F;
+                uint8_t g5 = (bgr555 >> 5) & 0x1F;
+                uint8_t b5 = (bgr555 >> 10) & 0x1F;
+                
+                // Convert 5-bit to 8-bit (multiply by 255/31 ≈ 8.23)
+                uint8_t r8 = (r5 << 3) | (r5 >> 2);
+                uint8_t g8 = (g5 << 3) | (g5 >> 2);
+                uint8_t b8 = (b5 << 3) | (b5 >> 2);
+                
+                // Pack into ARGB8888 format
+                pixelData[y * (pitch / 4) + x] = 
+                    (0xFF << 24) |  // Alpha (fully opaque)
+                    (r8 << 16) |    // Red
+                    (g8 << 8) |     // Green
+                    (b8 << 0);      // Blue
+            }
+        }
+    } else {
+        // Mode 3/5: 16-bit direct color bitmap (BGR555)
+        for (int y = 0; y < GBA_HEIGHT; y++) {
+            for (int x = 0; x < GBA_WIDTH; x++) {
+                // Read BGR555 pixel from GBA framebuffer
+                uint16_t bgr555 = framebuffer[y * GBA_WIDTH + x];
+                
+                // Extract BGR555 components (5 bits each) - GBA uses BGR order!
+                uint8_t r5 = (bgr555 >> 0) & 0x1F;
+                uint8_t g5 = (bgr555 >> 5) & 0x1F;
+                uint8_t b5 = (bgr555 >> 10) & 0x1F;
+                
+                // Convert 5-bit to 8-bit (multiply by 255/31 ≈ 8.23)
+                uint8_t r8 = (r5 << 3) | (r5 >> 2);
+                uint8_t g8 = (g5 << 3) | (g5 >> 2);
+                uint8_t b8 = (b5 << 3) | (b5 >> 2);
+                
+                // Pack into ARGB8888 format
+                pixelData[y * (pitch / 4) + x] = 
+                    (0xFF << 24) |  // Alpha (fully opaque)
+                    (r8 << 16) |    // Red
+                    (g8 << 8) |     // Green
+                    (b8 << 0);      // Blue
+            }
         }
     }
     
