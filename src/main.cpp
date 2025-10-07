@@ -105,18 +105,27 @@ int main(int argc, char* argv[]) {
             }
             printf("\n");
             
-            // Skip BIOS if requested (for ROMs that don't work with current BIOS)
+            // Skip BIOS if requested via flag
             if (skipBIOS) {
                 printf("Skipping BIOS boot (--skip-bios flag)\n");
                 gba.skipBIOS();
+            } else {
+                // BIOS is loaded - boot through it
+                printf("Booting through BIOS (PC will start at 0x00000000)\n");
+                // Don't call skipBIOS() - let it run from 0x0
             }
         }
         
-        // Set GPU to Mode 3 (bitmap mode)
-        // DISPCNT at 0x04000000, Mode 3 = bits 0-2 = 3, BG2 enable = bit 10
-        Memory& mem = gba.getMemory();
-        mem.write16(0x04000000, 0x0403);  // Mode 3 | BG2 enable
-        printf("GPU set to Mode 3\n");
+        // Only set Mode 3 for test patterns (ROMs will set their own display mode)
+        if (useTestPattern || !romPath) {
+            // Set GPU to Mode 3 (bitmap mode)
+            // DISPCNT at 0x04000000, Mode 3 = bits 0-2 = 3, BG2 enable = bit 10
+            Memory& mem = gba.getMemory();
+            mem.write16(0x04000000, 0x0403);  // Mode 3 | BG2 enable
+            printf("GPU set to Mode 3 (test pattern mode)\n");
+        } else {
+            printf("ROM will set its own display mode\n");
+        }
         
         // Get VRAM pointer for rendering
         GPU& gpu = gba.getGPU();
@@ -143,7 +152,10 @@ int main(int argc, char* argv[]) {
             
             frameCount++;
             if (frameCount % 60 == 0) {
-                printf("Frame %d\n", frameCount);
+                // Print PC to see where execution is
+                CPU& cpu = gba.getCPU();
+                uint32_t pc = cpu.R()[15];
+                printf("Frame %d - PC: 0x%08X\n", frameCount, pc);
             }
         }
         

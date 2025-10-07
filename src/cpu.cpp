@@ -127,6 +127,9 @@ void CPU::executeOneInstruction() {
         return;
     }
     
+    // Save PC before execution for debugging
+    uint32_t pc_before = registers[15];
+    
     // Use the existing executeOneInstruction methods from ARM/Thumb CPUs
     if (getFlag(FLAG_T)) {
         // Thumb mode
@@ -135,6 +138,14 @@ void CPU::executeOneInstruction() {
         // ARM mode  
         armCPU->executeOneInstruction();
     }
+    
+    // Debug logging commented out - BIOS loop fixed!
+    // uint32_t pc_addr = pc_before & ~1; // Clear thumb bit
+    // if (pc_addr >= 0x118 && pc_addr <= 0x124) {
+    //     printf("[BIOS LOOP AFTER] PC was 0x%08X, now 0x%08X | r0=0x%08X r1=0x%08X r4=0x%08X CPSR=0x%08X (N=%d)\n",
+    //            pc_before, registers[15], registers[0], registers[1], registers[4], cpsr,
+    //            (cpsr >> 31) & 1);
+    // }
 }
 
 // ============================================================================

@@ -330,7 +330,7 @@ public:
                                              const WindowControl& winCtrl);
     void applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, 
                               uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
-                              uint16_t scanline, const BlendControl& blend);
+                              uint16_t /*scanline*/, const BlendControl& blend);
     
     // Helper rendering functions
     void clearScanlineToBackdrop(uint16_t scanline);

@@ -10,11 +10,12 @@
 #include <condition_variable>
 
 GBA::GBA(bool testMode) 
-    : memory(testMode), scheduler(), gpu(memory), interruptController(), 
+    : memory(testMode), scheduler(), interruptController(), 
       timerController(), dmaController(), running(false), frameCount(0) {
     
-    // Create CPU
+    // Create CPU and GPU on heap to avoid stack overflow
     cpu = new CPU(memory, interruptController);
+    gpu = new GPU(memory);
     
     // Wire up the scheduler
     memory.setScheduler(&scheduler);
@@ -30,18 +31,18 @@ GBA::GBA(bool testMode)
     });
     
     // Setup GPU callbacks
-    gpu.setVBlankCallback([this]() {
+    gpu->setVBlankCallback([this]() {
         interruptController.triggerVBlank();
         dmaController.triggerVBlank();
     });
     
-    gpu.setHBlankCallback([this]() {
+    gpu->setHBlankCallback([this]() {
         interruptController.triggerHBlank();
         dmaController.triggerHBlank();
     });
     
     // Initialize video timing
-    gpu.setupTiming(&scheduler);
+    gpu->setupTiming(&scheduler);
     
     // Wire up timer controller
     timerController.setScheduler(&scheduler);
@@ -63,6 +64,7 @@ GBA::GBA(bool testMode)
 
 GBA::~GBA() {
     delete cpu;
+    delete gpu;
 }
 
 void GBA::skipBIOS() {
@@ -98,8 +100,14 @@ void GBA::runFrame() {
     uint64_t targetCycle = startCycle + CYCLES_PER_FRAME;
     printf("[GBA::runFrame #%d] Target cycle: %llu\n", frame_num, targetCycle);
     
-    // Simply advance the scheduler to process all events for this frame
-    // The CPU execution happens separately in the main loop
+    // Execute CPU instructions until we reach the target cycle
+    // The CPU will interleave with scheduler events (DMA, timers, GPU)
+    while (scheduler.getCurrentCycle() < targetCycle) {
+        cpu->executeOneInstruction();
+        // Scheduler will process any events that trigger during CPU execution
+    }
+    
+    // Process any remaining scheduler events for this frame
     scheduler.runUntil(targetCycle);
     
     frameCount++;

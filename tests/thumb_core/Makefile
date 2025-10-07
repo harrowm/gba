@@ -41,7 +41,8 @@ CPP_SRCS = test_thumb01.cpp \
 	../../src/gpu.cpp \
 	../../src/scheduler.cpp \
 	../../src/interrupt.cpp \
-	../../src/timer_controller.cpp
+	../../src/timer_controller.cpp \
+	../../src/dma.cpp
 
 
 C_SRCS = ../../src/arm_timing.c \

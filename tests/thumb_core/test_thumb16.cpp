@@ -43,8 +43,8 @@ TEST_F(ThumbCPUTest16, BEQ_CONDITIONAL_BRANCH) {
     
     execute(1);
     
-    // Branch taken: PC = 0x02 + (1*2) = 0x04
-    EXPECT_EQ(R(15), 0x00000004u);
+    // Branch taken: Target = PC + 4 + (offset * 2) = 0x00 + 4 + (1*2) = 0x06
+    EXPECT_EQ(R(15), 0x00000006u);
     EXPECT_TRUE(getFlag(CPU::FLAG_Z)); // Flags preserved
     
     // Test case 2: BEQ not taken (Z flag clear)
@@ -68,8 +68,8 @@ TEST_F(ThumbCPUTest16, BNE_CONDITIONAL_BRANCH) {
     
     execute(1);
     
-    // Branch taken: PC = 0x02 + (2*2) = 0x06
-    EXPECT_EQ(R(15), 0x00000006u);
+    // Branch taken: Target = PC + 4 + (offset * 2) = 0x00 + 4 + (2*2) = 0x08
+    EXPECT_EQ(R(15), 0x00000008u);
     
     // Test case 2: BNE not taken (Z flag set)
     setFlags(CPU::FLAG_Z); // Set Z flag
@@ -88,14 +88,14 @@ TEST_F(ThumbCPUTest16, BMI_BPL_CONDITIONAL_BRANCH) {
     setFlags(CPU::FLAG_N); // Set N flag
     R(15) = 0x00000010;
     
-    // Backward branch: D4FF means offset -1. For backwards, need negative offset
-    // Current PC 0x10, want to branch to 0x10 (same location creates loop)
-    // This is a special case - keep manual encoding for backwards branch
-    memory.write16(0x00000010, 0xD4FF); // BMI -2 (manual)
+    // Backward branch: D4FF means offset -1 (0xFF = -1 when sign-extended)
+    // Target = 0x10 + 4 + (-1*2) = 0x14 - 2 = 0x12 (but we want 0x14 for loop)
+    // For same location loop we need offset -2: 0x10 + 4 + (-2*2) = 0x10
+    memory.write16(0x00000010, 0xD4FE); // BMI with offset -2
     
     execute(1);
     
-    // Branch taken: PC = 0x12 + (-1*2) = 0x10
+    // Branch taken: Target = 0x10 + 4 + (-2*2) = 0x10
     EXPECT_EQ(R(15), 0x00000010u);
     
     // Test case 2: BPL taken (N flag clear)
@@ -106,8 +106,8 @@ TEST_F(ThumbCPUTest16, BMI_BPL_CONDITIONAL_BRANCH) {
     
     execute(1);
     
-    // Branch taken: PC = 0x02 + (3*2) = 0x08
-    EXPECT_EQ(R(15), 0x00000008u);
+    // Branch taken: Target = PC + 4 + (offset * 2) = 0x00 + 4 + (3*2) = 0x0A
+    EXPECT_EQ(R(15), 0x0000000Au);
 }
 
 TEST_F(ThumbCPUTest16, BCS_BCC_CONDITIONAL_BRANCH) {
@@ -119,8 +119,8 @@ TEST_F(ThumbCPUTest16, BCS_BCC_CONDITIONAL_BRANCH) {
     
     execute(1);
     
-    // Branch taken: PC = 0x02 + (4*2) = 0x0A
-    EXPECT_EQ(R(15), 0x0000000Au);
+    // Branch taken: Target = PC + 4 + (offset * 2) = 0x00 + 4 + (4*2) = 0x0C
+    EXPECT_EQ(R(15), 0x0000000Cu);
     
     // Test case 2: BCC taken (C flag clear)
     setFlags(0); // C flag clear
@@ -130,8 +130,8 @@ TEST_F(ThumbCPUTest16, BCS_BCC_CONDITIONAL_BRANCH) {
     
     execute(1);
     
-    // Branch taken: PC = 0x02 + (5*2) = 0x0C
-    EXPECT_EQ(R(15), 0x0000000Cu);
+    // Branch taken: Target = PC + 4 + (offset * 2) = 0x00 + 4 + (5*2) = 0x0E
+    EXPECT_EQ(R(15), 0x0000000Eu);
 }
 
 TEST_F(ThumbCPUTest16, BVS_CONDITIONAL_BRANCH) {
@@ -143,8 +143,8 @@ TEST_F(ThumbCPUTest16, BVS_CONDITIONAL_BRANCH) {
     
     execute(1);
     
-    // Branch taken: PC = 0x02 + (3*2) = 0x08
-    EXPECT_EQ(R(15), 0x00000008u);
+    // Branch taken: Target = PC + 4 + (offset * 2) = 0x00 + 4 + (3*2) = 0x0A
+    EXPECT_EQ(R(15), 0x0000000Au);
     EXPECT_TRUE(getFlag(CPU::FLAG_V)); // Flags preserved
 }
 
@@ -157,8 +157,8 @@ TEST_F(ThumbCPUTest16, BGE_CONDITIONAL_BRANCH) {
     
     execute(1);
     
-    // Branch taken: PC = 0x02 + (2*2) = 0x06
-    EXPECT_EQ(R(15), 0x00000006u);
+    // Branch taken: Target = PC + 4 + (offset * 2) = 0x00 + 4 + (2*2) = 0x08
+    EXPECT_EQ(R(15), 0x00000008u);
     
     // Test case 2: BGE not taken (N != V)
     setFlags(CPU::FLAG_N); // N=1, V=0 (N!=V)
@@ -179,8 +179,8 @@ TEST_F(ThumbCPUTest16, BGE_CONDITIONAL_BRANCH) {
     
     execute(1);
     
-    // Branch taken: PC = 0x02 + (2*2) = 0x06
-    EXPECT_EQ(R(15), 0x00000006u);
+    // Branch taken: Target = PC + 4 + (offset * 2) = 0x00 + 4 + (2*2) = 0x08
+    EXPECT_EQ(R(15), 0x00000008u);
 }
 
 TEST_F(ThumbCPUTest16, BACKWARD_BRANCH_MAXIMUM) {
@@ -188,13 +188,14 @@ TEST_F(ThumbCPUTest16, BACKWARD_BRANCH_MAXIMUM) {
     setFlags(CPU::FLAG_Z); // Set condition for BEQ
     R(15) = 0x00000200;
     
-    // BEQ with maximum backward offset (-128*2 = -256)
-    memory.write16(0x00000200, 0xD080); // BEQ -256 (max backward)
+    // BEQ with maximum backward offset (-128 * 2 = -256 bytes)
+    // Offset field 0x80 = -128 (sign-extended from 8 bits)
+    memory.write16(0x00000200, 0xD080); // BEQ with offset -128
     
     execute(1);
     
-    // PC = 0x202 + (-128*2) = 0x102
-    EXPECT_EQ(R(15), 0x00000102u);
+    // Target = 0x200 + 4 + (-128*2) = 0x204 - 256 = 0x104
+    EXPECT_EQ(R(15), 0x00000104u);
     EXPECT_TRUE(getFlag(CPU::FLAG_Z)); // Flags preserved
 }
 
@@ -236,39 +237,40 @@ TEST_F(ThumbCPUTest16, INSTRUCTION_ENCODING_VALIDATION) {
 }
 
 TEST_F(ThumbCPUTest16, EDGE_CASES_AND_BOUNDARIES) {
-    // Test case 1: Zero offset branch (branch to next instruction)
+    // Test case 1: Zero offset branch (branch to PC+4)
     setFlags(CPU::FLAG_Z);
     R(15) = 0x00000000;
     
-    // D000 = offset 0 - Keystone works for this
+    // D000 = offset 0
     assembleAndWriteThumb("beq #0x4", 0x00000000);
     execute(1);
     
-    // Branch to same location: PC = 0x02 + (0*2) = 0x02
-    EXPECT_EQ(R(15), 0x00000002u);
+    // Branch with offset 0: Target = 0x00 + 4 + (0*2) = 0x04
+    EXPECT_EQ(R(15), 0x00000004u);
     
     // Test case 2: Maximum forward branch
     setFlags(CPU::FLAG_Z);
     R(15) = 0x00000000;
     
-    // D07F = offset 127, target = 4 + 127*2 = 258 = 0x102
+    // D07F = offset 127, target = 0 + 4 + 127*2 = 4 + 254 = 258 = 0x102
     // Keystone fails for large offsets (switches to BL instruction at ~0x80+)
     // Keep manual encoding for maximum range edge cases
-    memory.write16(0x00000000, 0xD07F); // BEQ +254 (max forward)
+    memory.write16(0x00000000, 0xD07F); // BEQ with offset +127
     execute(1);
     
-    // PC = 0x02 + (127*2) = 0x100
-    EXPECT_EQ(R(15), 0x00000100u);
+    // Target = 0x00 + 4 + (127*2) = 0x04 + 254 = 0x102
+    EXPECT_EQ(R(15), 0x00000102u);
     
     // Test case 3: Branch condition evaluation with multiple flags
     setFlags(CPU::FLAG_Z | CPU::FLAG_C | CPU::FLAG_N); // Multiple flags set
     R(15) = 0x00000000;
     
-    // D001 = offset 1 - Keystone works fine for this
+    // D001 = offset 1
     assembleAndWriteThumb("beq #0x6", 0x00000000);
     execute(1);
     
-    EXPECT_EQ(R(15), 0x00000004u); // Branch taken
+    // Target = 0x00 + 4 + (1*2) = 0x06
+    EXPECT_EQ(R(15), 0x00000006u); // Branch taken
     // Verify all flags preserved
     EXPECT_TRUE(getFlag(CPU::FLAG_Z));
     EXPECT_TRUE(getFlag(CPU::FLAG_C));

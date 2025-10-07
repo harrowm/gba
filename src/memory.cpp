@@ -31,13 +31,16 @@ Memory::Memory(bool testMode) {
                 size_t read = fread(bios, 1, 16 * 1024, biosFile);
                 fclose(biosFile);
                 if (read < 16 * 1024) {
-                    DEBUG_ERROR("BIOS file too small, padding with zeros");
+                    fprintf(stderr, "WARNING: BIOS file too small (%zu bytes), padding with zeros\n", read);
                     memset(bios + read, 0, 16 * 1024 - read);
                 }
-                DEBUG_INFO("BIOS loaded successfully: " + std::to_string(read) + " bytes");
+                printf("✓ BIOS loaded successfully: %zu bytes (testMode=false)\n", read);
+                printf("✓ First BIOS instruction: 0x%02X%02X%02X%02X\n", 
+                       bios[0], bios[1], bios[2], bios[3]);
             } else {
-                DEBUG_ERROR("Failed to open BIOS file: assets/bios.bin");
-                DEBUG_ERROR("BIOS is required for proper ROM execution");
+                fprintf(stderr, "ERROR: Failed to open BIOS file: assets/bios.bin\n");
+                fprintf(stderr, "ERROR: BIOS is required for proper ROM execution\n");
+                fprintf(stderr, "       Filling BIOS area with dummy data\n");
                 memset(bios, 0x1, 16 * 1024);
             }
         }

@@ -18,7 +18,7 @@ private:
     Memory memory;
     Scheduler scheduler;
     CPU* cpu;
-    GPU gpu;
+    GPU* gpu;  // Changed to pointer to avoid stack overflow (GPU has large framebuffer)
     InterruptController interruptController;
     TimerController timerController;
     DMAController dmaController;
@@ -50,7 +50,7 @@ public:
     // Accessors
     CPU& getCPU() { return *cpu; }
     Memory& getMemory() { return memory; }
-    GPU& getGPU() { return gpu; }
+    GPU& getGPU() { return *gpu; }
     Scheduler& getScheduler() { return scheduler; }
     DMAController& getDMAController() { return dmaController; }
     uint64_t getFrameCount() const { return frameCount; }

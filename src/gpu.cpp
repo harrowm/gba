@@ -2359,7 +2359,7 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint
 
 void GPU::applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, 
                                 uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
-                                uint16_t scanline, const BlendControl& blend) {
+                                uint16_t /*scanline*/, const BlendControl& blend) {
     // Apply blend effects based on mode
     switch (blend.mode) {
         case BLEND_MODE_ALPHA:

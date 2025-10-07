@@ -1187,7 +1187,7 @@ void ThumbCPU::thumb_ldmia(uint16_t instruction) {
 void ThumbCPU::thumb_beq(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_Z) { // Check Zero flag
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BEQ: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1195,7 +1195,7 @@ void ThumbCPU::thumb_beq(uint16_t instruction) {
 void ThumbCPU::thumb_bne(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_Z)) { // Check Zero flag
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BNE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1203,7 +1203,7 @@ void ThumbCPU::thumb_bne(uint16_t instruction) {
 void ThumbCPU::thumb_bcs(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_C) { // Check Carry flag
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BCS: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1211,7 +1211,7 @@ void ThumbCPU::thumb_bcs(uint16_t instruction) {
 void ThumbCPU::thumb_bcc(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_C)) { // Check Carry flag
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BCC: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1219,7 +1219,7 @@ void ThumbCPU::thumb_bcc(uint16_t instruction) {
 void ThumbCPU::thumb_bmi(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_N) { // Check Negative flag
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BMI: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1227,7 +1227,7 @@ void ThumbCPU::thumb_bmi(uint16_t instruction) {
 void ThumbCPU::thumb_bpl(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_N)) { // Check Negative flag
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BPL: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1235,7 +1235,7 @@ void ThumbCPU::thumb_bpl(uint16_t instruction) {
 void ThumbCPU::thumb_bvs(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (parentCPU.CPSR() & CPU::FLAG_V) { // Check Overflow flag
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BVS: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1243,7 +1243,7 @@ void ThumbCPU::thumb_bvs(uint16_t instruction) {
 void ThumbCPU::thumb_bvc(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_V)) { // Check Overflow flag
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BVC: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1251,7 +1251,7 @@ void ThumbCPU::thumb_bvc(uint16_t instruction) {
 void ThumbCPU::thumb_bhi(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if ((parentCPU.CPSR() & CPU::FLAG_C) && !(parentCPU.CPSR() & CPU::FLAG_Z)) { // Check Carry and Zero flags
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BHI: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1259,7 +1259,7 @@ void ThumbCPU::thumb_bhi(uint16_t instruction) {
 void ThumbCPU::thumb_bls(uint16_t instruction) {
     int8_t offset = instruction & 0xFF; // Signed 8-bit offset
     if (!(parentCPU.CPSR() & CPU::FLAG_C) || (parentCPU.CPSR() & CPU::FLAG_Z)) { // Check Carry and Zero flags
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BLS: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1269,7 +1269,7 @@ void ThumbCPU::thumb_bge(uint16_t instruction) {
     bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
     if (n_flag == v_flag) { // Check if Negative and Overflow flags have same value
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BGE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1279,7 +1279,7 @@ void ThumbCPU::thumb_blt(uint16_t instruction) {
     bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
     if (n_flag != v_flag) { // Check if Negative and Overflow flags have different values
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BLT: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1291,7 +1291,7 @@ void ThumbCPU::thumb_bgt(uint16_t instruction) {
     bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
     if (!z_flag && (n_flag == v_flag)) { // Check Zero, Negative, and Overflow flags
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BGT: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1302,7 +1302,7 @@ void ThumbCPU::thumb_ble(uint16_t instruction) {
     bool n_flag = (parentCPU.CPSR() & CPU::FLAG_N) != 0;
     bool v_flag = (parentCPU.CPSR() & CPU::FLAG_V) != 0;
     if (z_flag || (n_flag != v_flag)) { // Check Zero, Negative, and Overflow flags
-        parentCPU.R()[15] += (offset << 1); // Branch to target address
+        parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
         DEBUG_INFO("Executing Thumb BLE: Branch to 0x" + std::to_string(parentCPU.R()[15]));
     }
 }
@@ -1325,7 +1325,7 @@ void ThumbCPU::thumb_b(uint16_t instruction) {
     }
 
     // Perform the branch operation
-    parentCPU.R()[15] += (offset << 1); // Branch to target address
+    parentCPU.R()[15] += (offset << 1) + 2; // Branch to target address (PC+4 base)
     DEBUG_INFO("Executing Thumb B: Branch to 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
 }
 
