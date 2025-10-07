@@ -33,7 +33,7 @@ CPP_SRCS = \
 	$(SRC_DIR)/arm_further_decode.cpp
 
 # Test source files
-TEST_SRCS = test_palette.cpp test_tile_decoding.cpp test_tile_render.cpp test_dispcnt.cpp test_bgcnt.cpp test_tilemap.cpp test_scroll.cpp test_bg_render.cpp test_mode0.cpp test_priority.cpp test_performance.cpp test_integration.cpp test_oam.cpp test_sprite_render.cpp test_affine_sprites.cpp test_priority_system.cpp test_blend_window.cpp test_blend_window_integration.cpp test_enhanced_blend.cpp
+TEST_SRCS = test_palette.cpp test_tile_decoding.cpp test_tile_render.cpp test_dispcnt.cpp test_bgcnt.cpp test_tilemap.cpp test_scroll.cpp test_bg_render.cpp test_mode0.cpp test_priority.cpp test_performance.cpp test_integration.cpp test_oam.cpp test_sprite_render.cpp test_affine_sprites.cpp test_priority_system.cpp test_blend_window.cpp test_blend_window_integration.cpp test_enhanced_blend.cpp test_semitransparent_sprites.cpp
 
 # Object files
 CPP_OBJS = $(CPP_SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)

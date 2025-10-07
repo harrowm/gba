@@ -1362,17 +1362,13 @@ void GPU::renderScanline(uint16_t scanline) {
                                                     priorityBuffer, layerTypeBuffer,
                                                     secondLayerBuffer, secondLayerTypeBuffer, winCtrl);
             } else {
-                renderSpritesWithPriority(priority, scanline, lineBuffer, priorityBuffer);
-                // Update layer type buffer AND second layer buffer for pixels that changed
-                for (int x = 0; x < 240; x++) {
-                    if (lineBuffer[x] != oldLineBuffer[x]) {
-                        // Save old pixel as second layer
-                        secondLayerBuffer[x] = oldLineBuffer[x];
-                        secondLayerTypeBuffer[x] = layerTypeBuffer[x];
-                        // Update first layer type
-                        layerTypeBuffer[x] = 4;  // 4 = OBJ
-                    }
-                }
+                // Use window-aware rendering even without windows for semi-transparent sprite support
+                // Pass empty window control (all pixels visible)
+                WindowControl emptyWinCtrl = {};
+                emptyWinCtrl.winOut = 0x3F;  // All layers visible outside windows
+                renderSpritesWithPriorityAndWindow(priority, scanline, lineBuffer, 
+                                                    priorityBuffer, layerTypeBuffer,
+                                                    secondLayerBuffer, secondLayerTypeBuffer, emptyWinCtrl);
             }
         }
     }
@@ -2171,12 +2167,52 @@ void GPU::renderNormalSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint
         uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
         
         // Save current pixel as second layer (for alpha blending)
-        secondLayerBuffer[screenX] = lineBuffer[screenX];
-        secondLayerTypeBuffer[screenX] = layerTypeBuffer[screenX];
+        uint16_t secondLayerColor = lineBuffer[screenX];
+        uint8_t secondLayerType = layerTypeBuffer[screenX];
+        secondLayerBuffer[screenX] = secondLayerColor;
+        secondLayerTypeBuffer[screenX] = secondLayerType;
+        
+        // Handle semi-transparent sprites (objMode == 1)
+        // These blend with the layer behind IF:
+        // 1. Blend mode is alpha blend (bits 6-7 of BLDCNT = 1)
+        // 2. OBJ is marked as first target (bit 4 of BLDCNT = 1)
+        if (obj.objMode == OBJ_MODE_SEMI_TRANSPARENT) {
+            // Read blend control
+            BlendControl blend = readBlendControl();
+            uint16_t bldcnt = memory.read16(0x04000050);
+            uint8_t blendMode = (bldcnt >> 6) & 0x3;
+            bool objIsFirstTarget = (bldcnt & (1 << 4)) != 0;
+            
+            // Only blend if alpha blend mode is enabled and OBJ is a first target
+            if (blendMode == 1 && objIsFirstTarget) {
+                // Apply alpha blend: sprite color with second layer
+                uint8_t r1 = rgb555 & 0x1F;
+            uint8_t g1 = (rgb555 >> 5) & 0x1F;
+            uint8_t b1 = (rgb555 >> 10) & 0x1F;
+            
+            uint8_t r2 = secondLayerColor & 0x1F;
+            uint8_t g2 = (secondLayerColor >> 5) & 0x1F;
+            uint8_t b2 = (secondLayerColor >> 10) & 0x1F;
+            
+                // Apply alpha blend formula
+                uint8_t r = (r1 * blend.eva + r2 * blend.evb) / 16;
+                uint8_t g = (g1 * blend.eva + g2 * blend.evb) / 16;
+                uint8_t b = (b1 * blend.eva + b2 * blend.evb) / 16;
+                
+                // Clamp to 5-bit range
+                if (r > 31) r = 31;
+                if (g > 31) g = 31;
+                if (b > 31) b = 31;
+                
+                rgb555 = r | (g << 5) | (b << 10);
+            }
+        }
         
         lineBuffer[screenX] = rgb555;
         priorityBuffer[screenX] = layerPriority;
-        layerTypeBuffer[screenX] = 4;  // 4 = OBJ
+        // Use special layer type 254 for semi-transparent sprites (already blended)
+        // Normal sprites use 4
+        layerTypeBuffer[screenX] = (obj.objMode == OBJ_MODE_SEMI_TRANSPARENT) ? 254 : 4;
     }
 }
 
@@ -2272,12 +2308,52 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint
         uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
         
         // Save current pixel as second layer (for alpha blending)
-        secondLayerBuffer[screenX] = lineBuffer[screenX];
-        secondLayerTypeBuffer[screenX] = layerTypeBuffer[screenX];
+        uint16_t secondLayerColor = lineBuffer[screenX];
+        uint8_t secondLayerType = layerTypeBuffer[screenX];
+        secondLayerBuffer[screenX] = secondLayerColor;
+        secondLayerTypeBuffer[screenX] = secondLayerType;
+        
+        // Handle semi-transparent sprites (objMode == 1)
+        // These blend with the layer behind IF:
+        // 1. Blend mode is alpha blend (bits 6-7 of BLDCNT = 1)
+        // 2. OBJ is marked as first target (bit 4 of BLDCNT = 1)
+        if (obj.objMode == OBJ_MODE_SEMI_TRANSPARENT) {
+            // Read blend control
+            BlendControl blend = readBlendControl();
+            uint16_t bldcnt = memory.read16(0x04000050);
+            uint8_t blendMode = (bldcnt >> 6) & 0x3;
+            bool objIsFirstTarget = (bldcnt & (1 << 4)) != 0;
+            
+            // Only blend if alpha blend mode is enabled and OBJ is a first target
+            if (blendMode == 1 && objIsFirstTarget) {
+                // Apply alpha blend: sprite color with second layer
+                uint8_t r1 = rgb555 & 0x1F;
+            uint8_t g1 = (rgb555 >> 5) & 0x1F;
+            uint8_t b1 = (rgb555 >> 10) & 0x1F;
+            
+            uint8_t r2 = secondLayerColor & 0x1F;
+            uint8_t g2 = (secondLayerColor >> 5) & 0x1F;
+            uint8_t b2 = (secondLayerColor >> 10) & 0x1F;
+            
+                // Apply alpha blend formula
+                uint8_t r = (r1 * blend.eva + r2 * blend.evb) / 16;
+                uint8_t g = (g1 * blend.eva + g2 * blend.evb) / 16;
+                uint8_t b = (b1 * blend.eva + b2 * blend.evb) / 16;
+                
+                // Clamp to 5-bit range
+                if (r > 31) r = 31;
+                if (g > 31) g = 31;
+                if (b > 31) b = 31;
+                
+                rgb555 = r | (g << 5) | (b << 10);
+            }
+        }
         
         lineBuffer[screenX] = rgb555;
         priorityBuffer[screenX] = layerPriority;
-        layerTypeBuffer[screenX] = 4;
+        // Use special layer type 254 for semi-transparent sprites (already blended)
+        // Normal sprites use 4
+        layerTypeBuffer[screenX] = (obj.objMode == OBJ_MODE_SEMI_TRANSPARENT) ? 254 : 4;
     }
 }
 
@@ -2291,6 +2367,13 @@ void GPU::applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer,
             for (int x = 0; x < 240; x++) {
                 uint8_t firstLayerType = layerTypeBuffer[x];
                 uint8_t secondLayerType = secondLayerTypeBuffer[x];
+                
+                // Skip ALL sprite layers (type 4 and 254)
+                // - Type 4: Normal sprites never blend via applyBlendToScanline
+                // - Type 254: Semi-transparent sprites already blended during rendering
+                if (firstLayerType == 4 || firstLayerType == 254) {
+                    continue;
+                }
                 
                 // Check if first layer is a first target
                 bool isFirstTarget = (blend.firstTargets & (1 << firstLayerType)) != 0;
