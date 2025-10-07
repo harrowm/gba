@@ -613,10 +613,19 @@ void ARMCPU::exec_arm_mrs(uint32_t instruction) {
     if (psr_source == 0) {
         value = parentCPU.CPSR();
     } else {
-        // SPSR not implemented, return 0 or log warning
-        DEBUG_LOG("MRS: SPSR read not implemented, returning 0");
-        value = 0;
+        // Read SPSR using the proper accessor
+        value = parentCPU.SPSR();
     }
+    
+    // Debug for BIOS
+    static int mrs_count = 0;
+    if (mrs_count < 10 && parentCPU.R()[15] < 0x4000) {
+        printf("[MRS #%d @0x%08X] R%d = %s (0x%08X), before: R%d=0x%08X, CPSR=0x%08X\n",
+               mrs_count++, parentCPU.R()[15], rd,
+               psr_source ? "SPSR" : "CPSR", value, rd, parentCPU.R()[rd],
+               parentCPU.CPSR());
+    }
+    
     if (rd != 15) {
         parentCPU.R()[rd] = value;
         parentCPU.R()[15] += 4; // Increment PC for next instruction

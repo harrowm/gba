@@ -40,7 +40,24 @@ void ThumbCPU::execute(uint32_t cycles) {
         
         // HACK - do we need to model the cpu pipeline?
         uint16_t instruction = parentCPU.getMemory().read16(parentCPU.R()[15]); // Fetch instruction
-        uint8_t opcode = instruction >> 8;        // Use debug macros for instruction fetch logging
+        uint8_t opcode = instruction >> 8;
+        
+        // Debug the infinite loop at 0x120-0x126
+        static uint64_t loop_trace_count = 0;
+        uint32_t pc = parentCPU.R()[15];
+        if (pc >= 0x120 && pc <= 0x126 && loop_trace_count < 20) {
+            uint32_t cpsr = parentCPU.CPSR();
+            printf("[LOOP #%llu] PC=0x%04X Instr=0x%04X | R0=%08X R1=%08X R4=%08X | CPSR=0x%08X (N=%d Z=%d C=%d V=%d)\n",
+                   loop_trace_count++, pc, instruction,
+                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[4],
+                   cpsr,
+                   (cpsr >> 31) & 1,  // N flag
+                   (cpsr >> 30) & 1,  // Z flag
+                   (cpsr >> 29) & 1,  // C flag
+                   (cpsr >> 28) & 1); // V flag
+        }
+        
+        // Use debug macros for instruction fetch logging
         DEBUG_INFO("Fetched Thumb instruction: " + debug_to_hex_string(instruction, 4) + 
                    " at PC: " + debug_to_hex_string(parentCPU.R()[15], 8));
         
@@ -1310,6 +1327,14 @@ void ThumbCPU::thumb_ble(uint16_t instruction) {
 void ThumbCPU::thumb_swi(uint16_t instruction) {
     uint8_t comment = instruction & 0xFF; // Software interrupt comment (bits 0-7)
 
+    // Track SWI calls
+    static uint64_t swi_count = 0;
+    if (swi_count < 10) {
+        printf("[SWI THUMB #%llu] PC=0x%08X, Comment=0x%02X, R0=%08X R1=%08X R2=%08X R3=%08X\n",
+               swi_count++, parentCPU.R()[15], comment,
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+    }
+    
     // Handle the software interrupt
     DEBUG_INFO("Executing Thumb SWI: Software interrupt with comment 0x" + std::to_string(comment));
     //handle_software_interrupt(comment); // Call the software interrupt handler
@@ -1375,6 +1400,66 @@ void ThumbCPU::executeOneInstruction() {
     
     uint32_t pc = parentCPU.R()[15];
     uint16_t instruction = parentCPU.getMemory().read16(pc);
+    
+    // Debug the infinite loop at 0x120-0x126 and returns
+    static uint64_t loop_trace_count = 0;
+    static uint64_t loop_entry_count = 0;
+    static uint32_t last_lr = 0;
+    
+    if (pc >= 0x120 && pc <= 0x126) {
+        if (loop_trace_count == 0) {
+            // First entry into loop
+            loop_entry_count++;
+            printf("\n[LOOP ENTRY #%llu] Called from LR=0x%08X\n", loop_entry_count, parentCPU.R()[14]);
+            last_lr = parentCPU.R()[14];
+        }
+        if (loop_trace_count < 5 || (loop_trace_count % 100 == 0)) {
+            uint32_t cpsr = parentCPU.CPSR();
+            printf("[LOOP #%llu] PC=0x%04X Instr=0x%04X | R0=%08X R1=%08X R4=%08X LR=%08X\n",
+                   loop_trace_count, pc, instruction,
+                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[4], parentCPU.R()[14]);
+        }
+        loop_trace_count++;
+    } else if (loop_trace_count > 0) {
+        printf("[LOOP EXIT #%llu] After %llu iterations, returning to LR=0x%08X, next PC=0x%08X\n\n", 
+               loop_entry_count, loop_trace_count, last_lr, pc);
+        loop_trace_count = 0;
+    }
+    
+    // Trace ROM/RAM execution (non-BIOS) to find loops
+    static uint64_t rom_trace_count = 0;
+    static uint32_t rom_last_pc = 0;
+    static int rom_repeat_count = 0;
+    static bool rom_trace_enabled = false;
+    
+    // Enable tracing when we leave BIOS
+    if (pc >= 0x4000 && !rom_trace_enabled) {
+        rom_trace_enabled = true;
+        printf("\n[THUMB TRACE] Enabled - left BIOS region\n");
+    }
+    
+    if (rom_trace_enabled && pc < 0x4000) {
+        rom_trace_enabled = false;
+        printf("[THUMB TRACE] Disabled - entered BIOS\n");
+    }
+    
+    // Log ROM/RAM execution
+    if (rom_trace_enabled && rom_trace_count < 200) {
+        if (pc == rom_last_pc) {
+            rom_repeat_count++;
+            if (rom_repeat_count == 100) {
+                printf("[THUMB LOOP!] Stuck at PC=0x%08X, instruction=0x%04X\n", pc, instruction);
+            }
+        } else {
+            rom_repeat_count = 0;
+            printf("[THUMB %llu] PC=0x%08X: I=0x%04X | R0-R3=%08X %08X %08X %08X | SP=%08X LR=%08X\n",
+                   rom_trace_count, pc, instruction,
+                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+                   parentCPU.R()[13], parentCPU.R()[14]);
+        }
+        rom_last_pc = pc;
+        rom_trace_count++;
+    }
     
     // Calculate how many cycles this instruction will take
     uint32_t instruction_cycles = calculateInstructionCycles(instruction);

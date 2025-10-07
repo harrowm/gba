@@ -20,11 +20,12 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     banked_r13_und = banked_r14_und = 0;
     banked_r13_usr = banked_r14_usr = 0;
     
-    // Initialize all SPSR registers to zero
+    // Initialize all SPSR registers
+    // SPSR_irq must be initialized to current CPSR so BIOS IRQ handler can read it
     spsr_fiq = 0;
     spsr_svc = 0;
     spsr_abt = 0;
-    spsr_irq = 0;
+    spsr_irq = cpsr;  // Initialize to current CPSR (User mode + IRQ disabled)
     spsr_und = 0;
 
     // Initialize timing system
@@ -153,6 +154,7 @@ void CPU::executeOneInstruction() {
 // ============================================================================
 
 bool CPU::checkPendingInterrupts() {
+    static int check_count = 0;
     // Check if interrupts are enabled (IME bit and I flag in CPSR)
     bool ime = interruptController.isIMESet();
     bool irqDisabled = (cpsr & 0x80) != 0; // I flag in CPSR bit 7
@@ -162,7 +164,12 @@ bool CPU::checkPendingInterrupts() {
     }
     
     // Check if any interrupts are pending
-    return interruptController.hasPendingInterrupt();
+    bool has_pending = interruptController.hasPendingInterrupt();
+    if (has_pending && check_count++ < 5) {
+        printf("[CHECK_IRQ #%d] IME=%d, IRQ_disabled=%d, pending=%d => WILL CALL handleInterrupt!\n",
+               check_count, ime, irqDisabled, has_pending);
+    }
+    return has_pending;
 }
 
 void CPU::handleInterrupt() {
@@ -170,6 +177,8 @@ void CPU::handleInterrupt() {
     
     // Save current CPSR before mode switch
     uint32_t old_cpsr = cpsr;
+    printf("[IRQ] handleInterrupt: CPSR before=0x%08X, PC=0x%08X\n", cpsr, registers[15]);
+    fflush(stdout);
     
     // Calculate return address
     // In ARM mode, PC+4 (current instruction + 8, then -4 for return)
@@ -183,20 +192,26 @@ void CPU::handleInterrupt() {
         returnAddress = registers[15] + 4;
     }
     
+    printf("[IRQ] Calculated return address=0x%08X\n", returnAddress);
+    
     // Switch to IRQ mode (this handles register banking)
     setMode(IRQ);
+    printf("[IRQ] After setMode(IRQ): CPSR=0x%08X, LR=0x%08X\n", cpsr, registers[14]);
     
     // Save old CPSR to SPSR_irq
     SPSR() = old_cpsr;
     
     // Set LR_irq to return address
     registers[14] = returnAddress;
+    printf("[IRQ] After setting LR: LR=0x%08X\n", registers[14]);
     
     // Disable further interrupts (set I flag in CPSR)
     cpsr |= 0x80; // Set I flag (bit 7)
     
     // Switch to ARM mode (clear T flag in CPSR)
     cpsr &= ~FLAG_T;
+    
+    printf("[IRQ] Final CPSR=0x%08X before jump to 0x18\n", cpsr);
     
     // Set PC to IRQ vector (0x00000018)
     registers[15] = 0x00000018;

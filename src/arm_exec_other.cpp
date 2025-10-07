@@ -80,6 +80,15 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     if (up && pre) addr = base + 4;         // IB
     else if (!up && pre) addr = base - 4;   // DB
     else addr = base;                       // IA/DA
+    
+    // Debug logging for BIOS IRQ handler
+    static int ldm_count = 0;
+    if (ldm_count < 10 && parentCPU.R()[15] < 0x4000) {
+        const char* mode = (up && pre) ? "IB" : (!up && pre) ? "DB" : up ? "IA" : "DA";
+        printf("[LDM #%d @0x%08X] Mode=%s, R%d=0x%08X, reglist=0x%04X, start_addr=0x%08X, WB=%d\n",
+               ldm_count++, parentCPU.R()[15], mode, rn, base, reg_list, addr, writeback);
+    }
+    
     bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
@@ -96,6 +105,18 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
         uint32_t new_base = up ? base + reg_count * 4 : base - reg_count * 4;
         parentCPU.R()[rn] = new_base;
     }
+    
+    // Show what was loaded
+    if (ldm_count <= 10 && parentCPU.R()[15] < 0x4000) {
+        printf("  Loaded: ");
+        for (int i = 0; i < 16; i++) {
+            if (reg_list & (1 << i)) {
+                printf("R%d=0x%08X ", i, parentCPU.R()[i]);
+            }
+        }
+        printf("\n");
+    }
+    
     if (!r15_updated) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
@@ -111,9 +132,29 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     int reg_count = std::popcount(reg_list);
     uint32_t addr;
     // ARM STM address calculation per mode
-    if (up && pre) addr = base + 4;         // IB
-    else if (!up && pre) addr = base - 4;   // DB
-    else addr = base;                       // IA/DA
+    // For DB: start at lowest address (base - reg_count*4)
+    // Registers stored in ascending order go to ascending addresses
+    if (up && pre) addr = base + 4;                    // IB
+    else if (!up && pre) addr = base - (reg_count * 4); // DB: start at lowest address
+    else addr = base;                                  // IA/DA
+    
+    // Debug logging for BIOS IRQ handler
+    static int stm_count = 0;
+    if (stm_count < 10 && parentCPU.R()[15] < 0x4000) {
+        const char* mode = (up && pre) ? "IB" : (!up && pre) ? "DB" : up ? "IA" : "DA";
+        printf("[STM #%d @0x%08X] Mode=%s, R%d=0x%08X, reglist=0x%04X, start_addr=0x%08X, WB=%d\n",
+               stm_count++, parentCPU.R()[15], mode, rn, base, reg_list, addr, writeback);
+        
+        // Show which registers will be stored
+        printf("  Storing: ");
+        for (int i = 0; i < 16; i++) {
+            if (reg_list & (1 << i)) {
+                printf("R%d=0x%08X ", i, parentCPU.R()[i]);
+            }
+        }
+        printf("\n");
+    }
+    
     bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
@@ -122,8 +163,8 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
             parentCPU.getMemory().write32(addr, value);
             // For DA, decrement after each write
             if (!up && !pre) addr -= 4; // DA
-            // For DB, decrement after each write
-            else if (!up && pre) addr -= 4; // DB
+            // For DB, INCREMENT after each write (we started at lowest address)
+            else if (!up && pre) addr += 4; // DB
             // For IB/IA, increment after each write
             else addr += 4;
             if (i == 15) r15_updated = true;

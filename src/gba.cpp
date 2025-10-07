@@ -100,9 +100,112 @@ void GBA::runFrame() {
     uint64_t targetCycle = startCycle + CYCLES_PER_FRAME;
     printf("[GBA::runFrame #%d] Target cycle: %llu\n", frame_num, targetCycle);
     
+    // Auto-set POSTFLG after memory clear loop completes (BIOS doesn't do this itself)
+    // The BIOS checks POSTFLG at 0x74, then if 0, does initialization including
+    // memory clear at 0x120, then eventually jumps to ROM. We set POSTFLG=1
+    // immediately after the first memory clear completes so on next BIOS entry
+    // it will skip re-initialization.
+    static bool postflg_set = false;
+    static bool in_bios_loop = false;
+    static bool rom_entered = false;
+    static bool in_rom = false;
+    
     // Execute CPU instructions until we reach the target cycle
     // The CPU will interleave with scheduler events (DMA, timers, GPU)
     while (scheduler.getCurrentCycle() < targetCycle) {
+        uint32_t pc = cpu->R()[15];
+        
+        // DEBUG: Check for CPSR corruption (bits 8-27 should always be 0)
+        uint32_t cpsr = cpu->CPSR();
+        uint32_t suspicious_bits = cpsr & 0x0FFFFF00; // Bits 8-27 (NOT including flags 28-31)
+        static bool cpsr_corruption_detected = false;
+        if (!cpsr_corruption_detected && suspicious_bits != 0 && suspicious_bits != 0x00000080) {
+            printf("\n[CPSR CORRUPTION!] PC=0x%08X, CPSR=0x%08X (suspicious bits 8-27: 0x%08X)\n",
+                   pc, cpsr, suspicious_bits);
+            printf("  Mode: 0x%02X, I:%d F:%d T:%d, Flags: N:%d Z:%d C:%d V:%d\n",
+                   cpsr & 0x1F, (cpsr >> 7) & 1, (cpsr >> 6) & 1, (cpsr >> 5) & 1,
+                   (cpsr >> 31) & 1, (cpsr >> 30) & 1, (cpsr >> 29) & 1, (cpsr >> 28) & 1);
+            fflush(stdout);
+            cpsr_corruption_detected = true;
+        }
+        
+        // Track execution patterns to find loops
+        static uint32_t last_pc = 0;
+        static const char* last_region = nullptr;
+        static uint32_t pc_counts[256] = {0}; // Track hot spots by PC high byte
+        static uint64_t total_instructions = 0;
+        static uint64_t last_report_cycle = 0;
+        
+        const char* region = "UNKNOWN";
+        
+        if (pc < 0x00004000) {
+            region = "BIOS";
+        } else if (pc >= 0x02000000 && pc < 0x02040000) {
+            region = "EWRAM";
+        } else if (pc >= 0x03000000 && pc < 0x03008000) {
+            region = "IWRAM";
+        } else if (pc >= 0x08000000 && pc < 0x0E000000) {
+            region = "ROM";
+        } else if (pc >= 0x04000000 && pc < 0x04000400) {
+            region = "IO";
+        }
+        
+        // Track execution counts by region (every 256 bytes)
+        uint8_t pc_bucket = (pc >> 16) & 0xFF;
+        pc_counts[pc_bucket]++;
+        total_instructions++;
+        
+        // Log region transitions
+        if (region != last_region && last_region != nullptr) {
+            printf("[PC REGION] %s -> %s at PC=0x%08X (frame %d)\n", 
+                   last_region, region, pc, frame_num);
+        }
+        last_region = region;
+        
+        // Periodic execution report (every 50k instructions)
+        if (total_instructions - last_report_cycle >= 50000) {
+            printf("\n[EXEC REPORT Frame %d] After %llu instructions:\n", frame_num, total_instructions);
+            // Show top execution regions
+            for (int i = 0; i < 256; i++) {
+                if (pc_counts[i] > 1000) {
+                    printf("  Region 0x%02X____: %u instructions\n", i, pc_counts[i]);
+                }
+            }
+            last_report_cycle = total_instructions;
+        }
+        
+        // Track ROM entry specifically  
+        bool pc_in_rom = (pc >= 0x08000000 && pc < 0x0E000000);
+        if (pc_in_rom && !in_rom) {
+            // Just entered ROM
+            if (!rom_entered) {
+                printf("[ROM ENTRY] First entry into ROM at PC=0x%08X (frame %d)\n", pc, frame_num);
+                rom_entered = true;
+            }
+            in_rom = true;
+        } else if (!pc_in_rom && in_rom) {
+            // Just left ROM back to BIOS
+            printf("[ROM EXIT] Returned to BIOS at PC=0x%08X\n", pc);
+            in_rom = false;
+        }
+        
+        last_pc = pc;
+        
+        // Detect entry into memory clear loop at 0x120
+        if (!postflg_set && pc >= 0x120 && pc <= 0x126) {
+            in_bios_loop = true;
+        }
+        
+        // Detect exit from memory clear loop (exits to address in LR=0x000000A0)
+        // When PC leaves the loop range and we were in the loop
+        if (!postflg_set && in_bios_loop && (pc < 0x120 || pc > 0x126)) {
+            // Memory clear completed - set POSTFLG so next BIOS reset won't re-initialize
+            memory.write8(0x04000300, 0x01);
+            postflg_set = true;
+            in_bios_loop = false;
+            printf("[POSTFLG] Auto-set to 0x01 after memory clear loop completion\n");
+        }
+        
         cpu->executeOneInstruction();
         // Scheduler will process any events that trigger during CPU execution
     }

@@ -154,8 +154,10 @@ public:
             case IRQ: return spsr_irq;
             case UND: return spsr_und;
             default:
-                DEBUG_ERROR("SPSR accessed in User/System mode");
-                return spsr_svc; // Return something to avoid crash
+                // In User/System mode, SPSR is unpredictable
+                // On GBA, it appears to return CPSR
+                DEBUG_ERROR("SPSR accessed in User/System mode - returning CPSR");
+                return cpsr;
         }
     }
     
