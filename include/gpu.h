@@ -240,9 +240,14 @@ public:
     
     // Rendering
     void renderScanline();
+    void renderScanline(uint16_t scanline);  // New priority-aware renderer
     void renderMode3Scanline(uint16_t scanline);
     void renderMode0Scanline(uint16_t scanline);  // Mode 0: 4 tiled backgrounds
     void renderBGScanline(int bgNum, uint16_t scanline);  // Render a single background scanline
+    
+    // Priority-aware rendering (new)
+    void renderBGScanlineWithPriority(int bgNum, uint16_t scanline, uint16_t* lineBuffer, uint8_t* priorityBuffer);
+    void renderSpritesWithPriority(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer, uint8_t* priorityBuffer);
     
     // Helper rendering functions
     void clearScanlineToBackdrop(uint16_t scanline);
@@ -378,6 +383,15 @@ public:
     void applyAffineTransform(const AffineParams& params, 
                                int screenX, int screenY,        // Screen coords relative to sprite center
                                int& textureX, int& textureY);   // Output: texture coords
+    
+    // Helper functions for priority rendering
+    void renderNormalSpriteWithPriority(const OBJAttributes& obj, uint16_t scanline,
+                                         uint16_t* lineBuffer, uint8_t* priorityBuffer,
+                                         uint8_t layerPriority, bool mapping1D);
+    void renderAffineSpriteWithPriority(const OBJAttributes& obj, uint16_t scanline,
+                                         const AffineParams& params, uint16_t* lineBuffer,
+                                         uint8_t* priorityBuffer, uint8_t layerPriority,
+                                         bool mapping1D);
 };
 
 #endif

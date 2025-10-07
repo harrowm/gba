@@ -1240,3 +1240,423 @@ void GPU::renderAffineSprite(const OBJAttributes& obj, uint16_t scanline, const 
         tiledFramebuffer[fbOffset] = rgb555;
     }
 }
+
+/**
+ * Priority-aware scanline rendering
+ * Combines backgrounds and sprites with correct priority layering
+ * 
+ * Priority rules:
+ * - Lower priority number = rendered on top (0 = front, 3 = back)
+ * - Within same priority: BG0 > BG1 > BG2 > BG3 > Sprites
+ * - Backdrop (palette 0,0) is behind everything
+ */
+void GPU::renderScanline(uint16_t scanline) {
+    // Skip rendering during VBlank
+    if (scanline >= SCANLINES_VISIBLE) {
+        return;
+    }
+    
+    // Check for forced blank
+    if (isForcedBlank()) {
+        renderBlankScanline(scanline);
+        return;
+    }
+    
+    // Get DISPCNT to check which layers are enabled
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t mode = dispcnt & DISPCNT_MODE_MASK;
+    
+    // Mode 3 doesn't use priority system (direct bitmap)
+    if (mode == 3) {
+        renderMode3Scanline(scanline);
+        return;
+    }
+    
+    // Mode 0: Tiled backgrounds with priority system
+    if (mode != 0) {
+        // Other modes not implemented yet
+        clearScanlineToBackdrop(scanline);
+        return;
+    }
+    
+    // Create line buffers for priority-based compositing
+    uint16_t lineBuffer[240];
+    uint8_t priorityBuffer[240];
+    
+    // 1. Fill with backdrop color (lowest priority)
+    uint16_t backdrop = memory.read16(0x05000000);  // Palette 0, color 0
+    for (int i = 0; i < 240; i++) {
+        lineBuffer[i] = backdrop;
+        priorityBuffer[i] = 255;  // Lowest possible priority
+    }
+    
+    // 2. Render each priority level (back to front: 3 → 0)
+    for (int priority = 3; priority >= 0; priority--) {
+        // Render BGs with this priority (BG3 → BG0)
+        for (int bg = 3; bg >= 0; bg--) {
+            if (dispcnt & (DISPCNT_BG0_ENABLE << bg)) {
+                // Check if this BG has the current priority
+                uint16_t bgcnt = memory.read16(REG_BG0CNT + (bg * 2));
+                uint8_t bgPriority = bgcnt & BGCNT_PRIORITY_MASK;
+                
+                if (bgPriority == priority) {
+                    renderBGScanlineWithPriority(bg, scanline, lineBuffer, priorityBuffer);
+                }
+            }
+        }
+        
+        // Render sprites with this priority
+        if (dispcnt & DISPCNT_OBJ_ENABLE) {
+            renderSpritesWithPriority(priority, scanline, lineBuffer, priorityBuffer);
+        }
+    }
+    
+    // 3. Copy line buffer to framebuffer
+    int fbOffset = scanline * 240;
+    for (int x = 0; x < 240; x++) {
+        tiledFramebuffer[fbOffset + x] = lineBuffer[x];
+    }
+}
+
+/**
+ * Render a background layer to line buffer with priority checking
+ * Only draws pixels if the current priority is higher than what's already drawn
+ */
+void GPU::renderBGScanlineWithPriority(int bgNum, uint16_t scanline, 
+                                        uint16_t* lineBuffer, uint8_t* priorityBuffer) {
+    // Get BG configuration
+    uint16_t bgcnt = memory.read16(REG_BG0CNT + (bgNum * 2));
+    BGConfig bgConfig = parseBGCNT(bgcnt);
+    
+    // Get scroll values
+    BGScroll scroll = readBGScroll(bgNum);
+    
+    // Calculate priority value for this layer
+    // Lower priority number = higher priority = drawn on top
+    // Within same priority level: BG0 (0) > BG1 (1) > BG2 (2) > BG3 (3)
+    uint8_t layerPriority = (bgConfig.priority * 4) + bgNum;
+    
+    // For each pixel on this scanline
+    for (int screenX = 0; screenX < 240; screenX++) {
+        // Apply scrolling
+        int bgX, bgY;
+        applyScroll(bgConfig, scroll, screenX, scanline, bgX, bgY);
+        
+        // Get tile coordinates
+        int tileX, tileY, pixelInTileX, pixelInTileY;
+        getTileCoords(bgX, bgY, tileX, tileY, pixelInTileX, pixelInTileY);
+        
+        // Get screen entry
+        ScreenEntry entry = readScreenEntry(bgConfig, tileX, tileY);
+        
+        // Get tile address
+        uint32_t tileAddr = getTileAddress(bgConfig, entry);
+        
+        // Read pixel color index
+        uint8_t colorIndex;
+        if (bgConfig.paletteMode) {
+            // 8bpp mode
+            int pixelOffset = pixelInTileY * 8 + pixelInTileX;
+            colorIndex = memory.read8(tileAddr + pixelOffset);
+        } else {
+            // 4bpp mode
+            int byteOffset = pixelInTileY * 4 + pixelInTileX / 2;
+            uint8_t byte = memory.read8(tileAddr + byteOffset);
+            if (pixelInTileX & 1) {
+                colorIndex = (byte >> 4) & 0x0F;
+            } else {
+                colorIndex = byte & 0x0F;
+            }
+        }
+        
+        // Color 0 is transparent - skip it
+        if (colorIndex == 0) {
+            continue;
+        }
+        
+        // Only draw if this pixel has higher or equal priority
+        if (layerPriority <= priorityBuffer[screenX]) {
+            // Get actual color from palette
+            uint16_t paletteIndex;
+            if (bgConfig.paletteMode) {
+                paletteIndex = colorIndex;
+            } else {
+                paletteIndex = (entry.paletteNum * 16) + colorIndex;
+            }
+            
+            uint16_t rgb555 = memory.read16(0x05000000 + paletteIndex * 2);
+            
+            // Update line buffer and priority
+            lineBuffer[screenX] = rgb555;
+            priorityBuffer[screenX] = layerPriority;
+        }
+    }
+}
+
+/**
+ * Render all sprites with a specific priority to line buffer
+ * Only draws sprite pixels if they have higher or equal priority than what's already drawn
+ */
+void GPU::renderSpritesWithPriority(uint8_t priority, uint16_t scanline, 
+                                     uint16_t* lineBuffer, uint8_t* priorityBuffer) {
+    // Get DISPCNT for mapping mode
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    bool mapping1D = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
+    
+    // Render sprites in reverse OAM order (127 → 0)
+    // Lower OAM number = higher priority within same priority level
+    for (int objNum = 127; objNum >= 0; objNum--) {
+        OBJAttributes obj = readOBJAttributes(objNum);
+        
+        if (!isSpriteOnScanline(obj, scanline)) {
+            continue;
+        }
+        
+        // Only process sprites with matching priority
+        if (obj.priority != priority) {
+            continue;
+        }
+        
+        // Calculate priority value
+        // Priority layout: (priority * 4) + 4 (sprites are after BGs within same priority)
+        // This makes sprites render after BGs of the same priority level
+        uint8_t layerPriority = (priority * 4) + 4;
+        
+        // Handle affine vs normal sprites
+        if (obj.rotScaleFlag) {
+            // Affine sprite
+            AffineParams params = readAffineParams(obj.rotScaleParam);
+            renderAffineSpriteWithPriority(obj, scanline, params, lineBuffer, priorityBuffer, layerPriority, mapping1D);
+        } else {
+            // Normal sprite
+            renderNormalSpriteWithPriority(obj, scanline, lineBuffer, priorityBuffer, layerPriority, mapping1D);
+        }
+    }
+}
+
+/**
+ * Render a normal (non-affine) sprite with priority checking
+ */
+void GPU::renderNormalSpriteWithPriority(const OBJAttributes& obj, uint16_t scanline,
+                                          uint16_t* lineBuffer, uint8_t* priorityBuffer,
+                                          uint8_t layerPriority, bool mapping1D) {
+    if (!obj.visible || obj.objMode == OBJ_MODE_PROHIBITED) {
+        return;
+    }
+    
+    // Calculate which row of the sprite we're rendering
+    int spriteY = obj.y;
+    int rowInSprite = scanline - spriteY;
+    
+    // Handle Y wraparound (Y can be 0-255, treat 160-255 as negative)
+    if (rowInSprite < 0) {
+        rowInSprite += 256;
+    }
+    
+    // Check if still outside sprite after wraparound
+    if (rowInSprite < 0 || rowInSprite >= obj.height) {
+        return;
+    }
+    
+    // Apply vertical flip
+    if (obj.vFlip) {
+        rowInSprite = obj.height - 1 - rowInSprite;
+    }
+    
+    // For each pixel in this sprite row
+    for (int spriteX = 0; spriteX < obj.width; spriteX++) {
+        // Calculate screen X position (handle X wraparound)
+        int screenX = obj.x + spriteX;
+        if (screenX >= 511) {
+            screenX -= 512;
+        }
+        
+        // Clip to screen bounds
+        if (screenX < 0 || screenX >= 240) {
+            continue;
+        }
+        
+        // Apply horizontal flip
+        int actualSpriteX = obj.hFlip ? (obj.width - 1 - spriteX) : spriteX;
+        
+        // Calculate tile and pixel coordinates
+        int tileX = actualSpriteX / 8;
+        int tileY = rowInSprite / 8;
+        int pixelX = actualSpriteX % 8;
+        int pixelY = rowInSprite % 8;
+        
+        // Get tile address
+        uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
+        
+        // Read pixel color index
+        uint8_t colorIndex;
+        uint8_t* vram = memory.getVRAM();
+        uint32_t vramOffset = tileAddr - VRAM_BASE;
+        
+        if (obj.paletteMode) {
+            // 8bpp
+            int pixelIndex = pixelY * 8 + pixelX;
+            colorIndex = vram[vramOffset + pixelIndex];
+        } else {
+            // 4bpp
+            int pixelIndex = pixelY * 4 + pixelX / 2;
+            uint8_t byte = vram[vramOffset + pixelIndex];
+            if (pixelX & 1) {
+                colorIndex = (byte >> 4) & 0x0F;
+            } else {
+                colorIndex = byte & 0x0F;
+            }
+        }
+        
+        // Transparent pixel?
+        if (colorIndex == 0) {
+            continue;
+        }
+        
+        // Only draw if this pixel has higher or equal priority
+        if (layerPriority > priorityBuffer[screenX]) {
+            continue;
+        }
+        
+        // Get color from palette
+        uint16_t paletteIndex;
+        if (obj.paletteMode) {
+            paletteIndex = colorIndex;
+        } else {
+            paletteIndex = (obj.paletteNum * 16) + colorIndex;
+        }
+        
+        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        
+        // Update line buffer and priority
+        lineBuffer[screenX] = rgb555;
+        priorityBuffer[screenX] = layerPriority;
+    }
+}
+
+/**
+ * Render an affine sprite with priority checking
+ */
+void GPU::renderAffineSpriteWithPriority(const OBJAttributes& obj, uint16_t scanline,
+                                          const AffineParams& params, uint16_t* lineBuffer,
+                                          uint8_t* priorityBuffer, uint8_t layerPriority,
+                                          bool mapping1D) {
+    if (!obj.visible || obj.objMode == OBJ_MODE_PROHIBITED) {
+        return;
+    }
+    
+    // Determine sprite dimensions
+    int spriteWidth = obj.width;
+    int spriteHeight = obj.height;
+    
+    // Double-size mode: rendering bounds are double the sprite size
+    int renderWidth = spriteWidth;
+    int renderHeight = spriteHeight;
+    if (obj.doubleSize) {
+        renderWidth *= 2;
+        renderHeight *= 2;
+    }
+    
+    // Calculate texture center
+    int texCenterX = spriteWidth / 2;
+    int texCenterY = spriteHeight / 2;
+    
+    // Calculate which part of the sprite intersects this scanline
+    int spriteY = obj.y;
+    int rowInSprite = scanline - spriteY;
+    
+    // Handle Y wraparound
+    if (rowInSprite < 0) {
+        rowInSprite += 256;
+    }
+    
+    // Check if still outside sprite after wraparound
+    if (rowInSprite < 0 || rowInSprite >= renderHeight) {
+        return;
+    }
+    
+    // Process each pixel on this scanline within sprite bounds
+    for (int spriteX = 0; spriteX < renderWidth; spriteX++) {
+        // Calculate screen X position (handle X wraparound)
+        int screenX = obj.x + spriteX;
+        if (screenX >= 511) {
+            screenX -= 512;
+        }
+        
+        // Clip to screen bounds
+        if (screenX < 0 || screenX >= 240) {
+            continue;
+        }
+        
+        // Only draw if this pixel has higher or equal priority
+        if (layerPriority > priorityBuffer[screenX]) {
+            continue;
+        }
+        
+        // Calculate position relative to sprite center
+        int relX = spriteX - renderWidth / 2;
+        int relY = rowInSprite - renderHeight / 2;
+        
+        // Apply affine transformation
+        int textureX, textureY;
+        applyAffineTransform(params, relX, relY, textureX, textureY);
+        
+        // Add texture center offset
+        textureX += texCenterX;
+        textureY += texCenterY;
+        
+        // Check bounds
+        if (textureX < 0 || textureX >= spriteWidth || 
+            textureY < 0 || textureY >= spriteHeight) {
+            continue;
+        }
+        
+        // Calculate tile and pixel coordinates
+        int tileX = textureX / 8;
+        int tileY = textureY / 8;
+        int pixelX = textureX % 8;
+        int pixelY = textureY % 8;
+        
+        // Get tile address
+        uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
+        
+        // Read pixel color index
+        uint8_t colorIndex;
+        uint8_t* vram = memory.getVRAM();
+        uint32_t vramOffset = tileAddr - VRAM_BASE;
+        
+        if (obj.paletteMode) {
+            // 8bpp
+            int pixelIndex = pixelY * 8 + pixelX;
+            colorIndex = vram[vramOffset + pixelIndex];
+        } else {
+            // 4bpp
+            int pixelIndex = pixelY * 4 + pixelX / 2;
+            uint8_t byte = vram[vramOffset + pixelIndex];
+            if (pixelX & 1) {
+                colorIndex = (byte >> 4) & 0x0F;
+            } else {
+                colorIndex = byte & 0x0F;
+            }
+        }
+        
+        // Transparent pixel?
+        if (colorIndex == 0) {
+            continue;
+        }
+        
+        // Get color from palette
+        uint16_t paletteIndex;
+        if (obj.paletteMode) {
+            paletteIndex = colorIndex;
+        } else {
+            paletteIndex = (obj.paletteNum * 16) + colorIndex;
+        }
+        
+        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        
+        // Update line buffer and priority
+        lineBuffer[screenX] = rgb555;
+        priorityBuffer[screenX] = layerPriority;
+    }
+}

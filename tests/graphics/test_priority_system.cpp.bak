@@ -1,0 +1,411 @@
+/**
+ * Test suite for GBA priority system and layer compositing
+ * 
+ * The GBA renders backgrounds and sprites with a priority-based system:
+ * - Priority 0-3 (0 = front, 3 = back)
+ * - Within same priority: BG0 > BG1 > BG2 > BG3 > OBJ
+ * - Backdrop color is behind everything
+ */
+
+#include <gtest/gtest.h>
+#include "../../include/gpu.h"
+#include "../../include/memory.h"
+#include <cstring>
+
+class PrioritySystemTest : public ::testing::Test {
+protected:
+    Memory* memory;
+    GPU* gpu;
+
+    void SetUp() override {
+        memory = new Memory();
+        gpu = new GPU(*memory);
+        
+        // Clear all memory regions
+        for (uint32_t addr = 0x05000000; addr < 0x05000400; addr++) {
+            memory->write8(addr, 0);  // Palettes
+        }
+        for (uint32_t addr = 0x06000000; addr < 0x06018000; addr++) {
+            memory->write8(addr, 0);  // VRAM
+        }
+        for (uint32_t addr = 0x07000000; addr < 0x07000400; addr++) {
+            memory->write8(addr, 0);  // OAM
+        }
+        
+        // Set DISPCNT to Mode 0 with all layers enabled
+        memory->write16(0x04000000, 0x1F00);  // BG0-3 + OBJ enabled
+    }
+
+    void TearDown() override {
+        delete gpu;
+        delete memory;
+    }
+    
+    // Helper: Set up a simple colored tile
+    void createColoredTile4bpp(int tileNum, uint8_t colorIndex, bool isOBJ = false) {
+        uint32_t baseAddr = isOBJ ? 0x06010000 : 0x06000000;
+        uint32_t tileAddr = baseAddr + (tileNum * 32);
+        uint8_t pixelPair = (colorIndex << 4) | colorIndex;
+        for (int i = 0; i < 32; i++) {
+            memory->write8(tileAddr + i, pixelPair);
+        }
+    }
+    
+    // Helper: Set up BG palette
+    void setupBGPalette(int paletteNum, int colorIndex, uint16_t rgb555) {
+        uint32_t paletteAddr = 0x05000000 + (paletteNum * 32) + (colorIndex * 2);
+        memory->write16(paletteAddr, rgb555);
+    }
+    
+    // Helper: Set up OBJ palette
+    void setupOBJPalette(int paletteNum, int colorIndex, uint16_t rgb555) {
+        uint32_t paletteAddr = 0x05000200 + (paletteNum * 32) + (colorIndex * 2);
+        memory->write16(paletteAddr, rgb555);
+    }
+    
+    // Helper: Configure a background layer
+    void setupBG(int bgNum, uint8_t priority, uint8_t charBase, uint8_t screenBase) {
+        uint32_t bgcntAddr = 0x04000008 + (bgNum * 2);
+        uint16_t bgcnt = priority | (charBase << 2) | (screenBase << 8);
+        memory->write16(bgcntAddr, bgcnt);
+    }
+    
+    // Helper: Create a simple tile map entry
+    void writeTileMapEntry(int screenBase, int x, int y, uint16_t tileNum, uint16_t paletteNum = 0) {
+        uint32_t screenAddr = 0x06000000 + (screenBase * 0x800);
+        uint32_t entryAddr = screenAddr + ((y * 32 + x) * 2);
+        uint16_t entry = tileNum | (paletteNum << 12);
+        memory->write16(entryAddr, entry);
+    }
+    
+    // Helper: Create a sprite
+    void writeOBJ(int objNum, uint16_t y, uint16_t x, uint16_t tileNum, 
+                  uint8_t priority, uint8_t paletteNum = 0) {
+        uint32_t addr = 0x07000000 + (objNum * 8);
+        uint16_t attr0 = y;  // 8x8 sprite, normal mode
+        uint16_t attr1 = x;  // 8x8 size
+        uint16_t attr2 = tileNum | (priority << 10) | (paletteNum << 12);
+        memory->write16(addr + 0, attr0);
+        memory->write16(addr + 2, attr1);
+        memory->write16(addr + 4, attr2);
+    }
+    
+    // Helper: Disable all sprites (call before setting up specific sprites)
+    void disableAllSprites() {
+        for (int i = 0; i < 128; i++) {
+            memory->write16(0x07000000 + i * 8, 0x0200);  // Set bit 9 (OBJ disable)
+        }
+    }
+    
+    // Helper: Render a full frame
+    void renderFrame() {
+        for (uint16_t scanline = 0; scanline < 160; scanline++) {
+            gpu->setCurrentScanline(scanline);
+            gpu->renderScanline(scanline);
+        }
+    }
+    
+    // Helper: Get pixel color
+    uint16_t getPixel(int x, int y) {
+        uint16_t* fb = gpu->getTiledFramebuffer();
+        return fb[y * 240 + x];
+    }
+};
+
+// ============================================================================
+// Test 1: Backdrop color
+// ============================================================================
+TEST_F(PrioritySystemTest, BackdropColor) {
+    // Set backdrop color (palette 0, color 0)
+    setupBGPalette(0, 0, 0x7FFF);  // White
+    
+    // Don't draw anything - should see backdrop
+    renderFrame();
+    
+    // Check that we see the backdrop color
+    EXPECT_EQ(0x7FFF, getPixel(120, 80));
+}
+
+// ============================================================================
+// Test 2: Single BG layer
+// ============================================================================
+TEST_F(PrioritySystemTest, SingleBGLayer) {
+    // Setup backdrop
+    setupBGPalette(0, 0, 0x0000);  // Black backdrop
+    
+    // Create red tile
+    createColoredTile4bpp(1, 1, false);
+    setupBGPalette(0, 1, 0x001F);  // Red
+    
+    // Setup BG0 with priority 0
+    setupBG(0, 0, 0, 8);  // char base 0, screen base 8
+    
+    // Draw tile at (10, 10) on tile map
+    writeTileMapEntry(8, 10, 10, 1, 0);
+    
+    renderFrame();
+    
+    // Check pixel in the tile (10*8 = 80, 10*8 = 80)
+    EXPECT_EQ(0x001F, getPixel(80, 80));  // Red tile
+    
+    // Check pixel outside the tile
+    EXPECT_EQ(0x0000, getPixel(0, 0));  // Black backdrop
+}
+
+// ============================================================================
+// Test 3: Sprite priority over backdrop
+// ============================================================================
+TEST_F(PrioritySystemTest, SpriteOverBackdrop) {
+    setupBGPalette(0, 0, 0x0000);  // Black backdrop
+    
+    // Create green sprite
+    disableAllSprites();
+    createColoredTile4bpp(0, 1, true);
+    setupOBJPalette(0, 1, 0x03E0);  // Green
+    
+    // Sprite at (50, 50) with priority 3 (lowest)
+    writeOBJ(0, 50, 50, 0, 3, 0);
+    
+    renderFrame();
+    
+    // Sprite should be visible over backdrop
+    EXPECT_EQ(0x03E0, getPixel(50, 50));  // Green sprite
+    EXPECT_EQ(0x0000, getPixel(0, 0));    // Black backdrop
+}
+
+// ============================================================================
+// Test 4: BG priority ordering (same priority level)
+// ============================================================================
+TEST_F(PrioritySystemTest, BGPriorityOrdering) {
+    setupBGPalette(0, 0, 0x0000);  // Black backdrop
+    
+    // Create tiles with different colors
+    createColoredTile4bpp(1, 1, false);
+    createColoredTile4bpp(2, 2, false);
+    setupBGPalette(0, 1, 0x001F);  // Red
+    setupBGPalette(0, 2, 0x03E0);  // Green
+    
+    // Both BGs have priority 0, overlapping at (80, 80)
+    setupBG(0, 0, 0, 8);   // BG0: priority 0
+    setupBG(1, 0, 0, 9);   // BG1: priority 0
+    
+    // Draw tiles at same position
+    writeTileMapEntry(8, 10, 10, 1, 0);  // BG0: red
+    writeTileMapEntry(9, 10, 10, 2, 0);  // BG1: green
+    
+    renderFrame();
+    
+    // BG0 should be on top (red wins)
+    EXPECT_EQ(0x001F, getPixel(80, 80));  // Red (BG0 over BG1)
+}
+
+// ============================================================================
+// Test 5: BG priority levels (0 vs 1)
+// ============================================================================
+TEST_F(PrioritySystemTest, BGPriorityLevels) {
+    setupBGPalette(0, 0, 0x0000);  // Black backdrop
+    
+    createColoredTile4bpp(1, 1, false);
+    createColoredTile4bpp(2, 2, false);
+    setupBGPalette(0, 1, 0x001F);  // Red
+    setupBGPalette(0, 2, 0x03E0);  // Green
+    
+    // BG0 has priority 1 (back), BG1 has priority 0 (front)
+    setupBG(0, 1, 0, 8);   // BG0: priority 1 (back)
+    setupBG(1, 0, 0, 9);   // BG1: priority 0 (front)
+    
+    writeTileMapEntry(8, 10, 10, 1, 0);  // BG0: red
+    writeTileMapEntry(9, 10, 10, 2, 0);  // BG1: green
+    
+    renderFrame();
+    
+    // BG1 priority 0 should be on top (green wins)
+    EXPECT_EQ(0x03E0, getPixel(80, 80));  // Green (BG1 over BG0)
+}
+
+// ============================================================================
+// Test 6: Sprite over BG (same priority)
+// ============================================================================
+TEST_F(PrioritySystemTest, SpriteOverBGSamePriority) {
+    setupBGPalette(0, 0, 0x0000);
+    
+    // Red BG tile
+    createColoredTile4bpp(1, 1, false);
+    setupBGPalette(0, 1, 0x001F);  // Red
+    setupBG(0, 0, 0, 8);
+    writeTileMapEntry(8, 6, 6, 1, 0);  // At pixel (48, 48)
+    
+    // Blue sprite
+    createColoredTile4bpp(0, 1, true);
+    setupOBJPalette(0, 1, 0x7C00);  // Blue
+    writeOBJ(0, 50, 50, 0, 0, 0);  // Priority 0, overlaps BG
+    
+    renderFrame();
+    
+    // At overlap: BG wins (BG before OBJ within same priority)
+    EXPECT_EQ(0x001F, getPixel(50, 50));  // Red (BG0 over sprite)
+}
+
+// ============================================================================
+// Test 7: Sprite over BG (sprite higher priority)
+// ============================================================================
+TEST_F(PrioritySystemTest, SpriteOverBGHigherPriority) {
+    setupBGPalette(0, 0, 0x0000);
+    
+    // Red BG tile at priority 1
+    createColoredTile4bpp(1, 1, false);
+    setupBGPalette(0, 1, 0x001F);  // Red
+    setupBG(0, 1, 0, 8);  // Priority 1
+    writeTileMapEntry(8, 6, 6, 1, 0);  // At pixel (48, 48)
+    
+    // Blue sprite at priority 0 (higher)
+    createColoredTile4bpp(0, 1, true);
+    setupOBJPalette(0, 1, 0x7C00);  // Blue
+    writeOBJ(0, 50, 50, 0, 0, 0);  // Priority 0
+    
+    renderFrame();
+    
+    // Sprite priority 0 should be on top
+    EXPECT_EQ(0x7C00, getPixel(50, 50));  // Blue (sprite over BG)
+}
+
+// ============================================================================
+// Test 8: BG over sprite (BG higher priority)
+// ============================================================================
+TEST_F(PrioritySystemTest, BGOverSpriteHigherPriority) {
+    setupBGPalette(0, 0, 0x0000);
+    
+    // Red BG tile at priority 0 (highest)
+    createColoredTile4bpp(1, 1, false);
+    setupBGPalette(0, 1, 0x001F);  // Red
+    setupBG(0, 0, 0, 8);  // Priority 0
+    writeTileMapEntry(8, 6, 6, 1, 0);
+    
+    // Blue sprite at priority 1 (lower)
+    createColoredTile4bpp(0, 1, true);
+    setupOBJPalette(0, 1, 0x7C00);  // Blue
+    writeOBJ(0, 50, 50, 0, 1, 0);  // Priority 1
+    
+    renderFrame();
+    
+    // BG priority 0 should be on top
+    EXPECT_EQ(0x001F, getPixel(50, 50));  // Red (BG over sprite)
+}
+
+// ============================================================================
+// Test 9: Complex layering (4 priorities)
+// ============================================================================
+TEST_F(PrioritySystemTest, ComplexLayering) {
+    setupBGPalette(0, 0, 0x0000);  // Black backdrop
+    
+    // Create 4 different colored tiles
+    createColoredTile4bpp(1, 1, false);  // BG tiles
+    createColoredTile4bpp(2, 2, false);
+    createColoredTile4bpp(0, 1, true);   // Sprite tiles
+    createColoredTile4bpp(1, 2, true);
+    
+    setupBGPalette(0, 1, 0x001F);  // Red
+    setupBGPalette(0, 2, 0x03E0);  // Green
+    setupOBJPalette(0, 1, 0x7C00);  // Blue
+    setupOBJPalette(0, 2, 0x7FFF);  // White
+    
+    // Setup BGs at different priorities
+    setupBG(0, 0, 0, 8);   // BG0: priority 0 (front)
+    setupBG(1, 2, 0, 9);   // BG1: priority 2 (back)
+    
+    // Draw tiles at same position
+    writeTileMapEntry(8, 10, 10, 1, 0);  // BG0: red, priority 0
+    writeTileMapEntry(9, 10, 10, 2, 0);  // BG1: green, priority 2
+    
+    // Sprites at different priorities
+    writeOBJ(0, 80, 80, 0, 1, 0);  // Blue sprite, priority 1
+    writeOBJ(1, 80, 80, 1, 3, 0);  // White sprite, priority 3
+    
+    renderFrame();
+    
+    // At (80, 80): Priority order is 0 > 1 > 2 > 3
+    // BG0 (red, pri 0) should win
+    EXPECT_EQ(0x001F, getPixel(80, 80));  // Red (BG0 highest priority)
+}
+
+// ============================================================================
+// Test 10: Transparency in priority system
+// ============================================================================
+TEST_F(PrioritySystemTest, TransparencyInPriority) {
+    setupBGPalette(0, 0, 0x001F);  // Red backdrop
+    
+    // Green BG tile
+    createColoredTile4bpp(1, 1, false);
+    setupBGPalette(0, 1, 0x03E0);  // Green
+    setupBG(0, 1, 0, 8);  // Priority 1
+    writeTileMapEntry(8, 6, 6, 1, 0);
+    
+    // Sprite with transparent pixels (color index 0)
+    uint32_t spriteAddr = 0x06010000;
+    for (int i = 0; i < 16; i++) {
+        memory->write8(spriteAddr + i, 0x00);  // First half transparent
+    }
+    for (int i = 16; i < 32; i++) {
+        memory->write8(spriteAddr + i, 0x11);  // Second half blue
+    }
+    setupOBJPalette(0, 1, 0x7C00);  // Blue
+    writeOBJ(0, 48, 48, 0, 0, 0);  // Priority 0 (highest)
+    
+    renderFrame();
+    
+    // Top half of sprite (transparent) should show BG
+    EXPECT_EQ(0x03E0, getPixel(48, 48));  // Green (BG through transparent sprite)
+    
+    // Bottom half of sprite should show blue
+    EXPECT_EQ(0x7C00, getPixel(48, 52));  // Blue (sprite pixel)
+}
+
+// ============================================================================
+// Test 11: Multiple sprites with different priorities
+// ============================================================================
+TEST_F(PrioritySystemTest, MultipleSpritePriorities) {
+    setupBGPalette(0, 0, 0x0000);
+    
+    // Create two sprite tiles
+    createColoredTile4bpp(0, 1, true);
+    createColoredTile4bpp(1, 2, true);
+    setupOBJPalette(0, 1, 0x001F);  // Red
+    setupOBJPalette(0, 2, 0x03E0);  // Green
+    
+    // Overlapping sprites with different priorities
+    writeOBJ(0, 50, 50, 0, 1, 0);  // Red sprite, priority 1
+    writeOBJ(1, 50, 50, 1, 0, 0);  // Green sprite, priority 0 (higher)
+    
+    renderFrame();
+    
+    // Green sprite (priority 0) should be on top
+    EXPECT_EQ(0x03E0, getPixel(50, 50));  // Green
+}
+
+// ============================================================================
+// Test 12: All layers enabled
+// ============================================================================
+TEST_F(PrioritySystemTest, AllLayersEnabled) {
+    setupBGPalette(0, 0, 0x0000);  // Black backdrop
+    
+    // Setup 4 BGs with different colors
+    for (int bg = 0; bg < 4; bg++) {
+        createColoredTile4bpp(bg + 1, bg + 1, false);
+        setupBGPalette(0, bg + 1, (bg + 1) * 0x1F);  // Different colors
+        setupBG(bg, bg, 0, 8 + bg);  // Different priorities
+        writeTileMapEntry(8 + bg, 10 + bg, 10, bg + 1, 0);
+    }
+    
+    // Add sprite
+    disableAllSprites();
+    createColoredTile4bpp(0, 1, true);
+    setupOBJPalette(0, 1, 0x7FFF);  // White
+    writeOBJ(0, 80, 88, 0, 2, 0);  // Priority 2
+    
+    renderFrame();
+    
+    // Check that layers don't interfere with each other
+    EXPECT_EQ(0x1F, getPixel(80, 80));      // BG0 (priority 0)
+    EXPECT_EQ(0x7FFF, getPixel(88, 80));    // Sprite (priority 2)
+    EXPECT_EQ(0x0000, getPixel(0, 0));      // Backdrop
+}
