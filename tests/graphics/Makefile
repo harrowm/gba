@@ -33,7 +33,7 @@ CPP_SRCS = \
 	$(SRC_DIR)/arm_further_decode.cpp
 
 # Test source files
-TEST_SRCS = test_palette.cpp test_tile_decoding.cpp test_tile_render.cpp test_dispcnt.cpp
+TEST_SRCS = test_palette.cpp test_tile_decoding.cpp test_tile_render.cpp test_dispcnt.cpp test_bgcnt.cpp test_tilemap.cpp
 
 # Object files
 CPP_OBJS = $(CPP_SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)

@@ -314,3 +314,172 @@ uint8_t GPU::getVideoMode() {
     uint16_t dispcnt = memory.read16(REG_DISPCNT);
     return dispcnt & DISPCNT_MODE_MASK;
 }
+
+// BGxCNT Register Parsing
+
+void GPU::getScreenDimensions(uint8_t sizeCode, int& widthTiles, int& heightTiles) {
+    // Screen size encoding:
+    // 0: 256x256 (32x32 tiles)
+    // 1: 512x256 (64x32 tiles)
+    // 2: 256x512 (32x64 tiles)
+    // 3: 512x512 (64x64 tiles)
+    
+    switch (sizeCode) {
+        case BG_SCREEN_SIZE_256x256:
+            widthTiles = 32;
+            heightTiles = 32;
+            break;
+        case BG_SCREEN_SIZE_512x256:
+            widthTiles = 64;
+            heightTiles = 32;
+            break;
+        case BG_SCREEN_SIZE_256x512:
+            widthTiles = 32;
+            heightTiles = 64;
+            break;
+        case BG_SCREEN_SIZE_512x512:
+            widthTiles = 64;
+            heightTiles = 64;
+            break;
+        default:
+            widthTiles = 32;
+            heightTiles = 32;
+            break;
+    }
+}
+
+BGConfig GPU::parseBGCNT(uint16_t bgcnt) {
+    BGConfig config;
+    
+    // Extract bit fields
+    config.priority = bgcnt & BGCNT_PRIORITY_MASK;
+    config.charBaseBlock = (bgcnt & BGCNT_CHAR_BASE_MASK) >> 2;
+    config.mosaicEnable = (bgcnt & BGCNT_MOSAIC) != 0;
+    config.paletteMode = (bgcnt & BGCNT_PALETTE_MODE) != 0;
+    config.screenBaseBlock = (bgcnt & BGCNT_SCREEN_BASE_MASK) >> 8;
+    config.screenSize = (bgcnt & BGCNT_SCREEN_SIZE_MASK) >> 14;
+    
+    // Compute actual VRAM addresses
+    // Character base: block * 16KB
+    config.charBaseAddr = VRAM_BASE + (config.charBaseBlock * 0x4000);
+    
+    // Screen base: block * 2KB
+    config.screenBaseAddr = VRAM_BASE + (config.screenBaseBlock * 0x800);
+    
+    // Get screen dimensions
+    getScreenDimensions(config.screenSize, config.screenWidthTiles, config.screenHeightTiles);
+    
+    // Convert to pixels (each tile is 8x8)
+    config.screenWidthPixels = config.screenWidthTiles * 8;
+    config.screenHeightPixels = config.screenHeightTiles * 8;
+    
+    return config;
+}
+
+BGConfig GPU::readBGCNT(int bgNum) {
+    // Read BGxCNT from memory and parse it
+    if (bgNum < 0 || bgNum > 3) {
+        // Return default config for invalid BG number
+        return parseBGCNT(0);
+    }
+    
+    uint32_t bgcntAddr = REG_BG0CNT + (bgNum * 2);
+    uint16_t bgcnt = memory.read16(bgcntAddr);
+    
+    return parseBGCNT(bgcnt);
+}
+
+// Tile Map (Screen Entry) Functions
+
+ScreenEntry GPU::parseScreenEntry(uint16_t entry) {
+    ScreenEntry se;
+    
+    // Extract bit fields from screen entry
+    se.tileNumber = entry & SE_TILE_NUM_MASK;
+    se.hFlip = (entry & SE_HFLIP) != 0;
+    se.vFlip = (entry & SE_VFLIP) != 0;
+    se.paletteNum = (entry & SE_PALETTE_MASK) >> 12;
+    
+    return se;
+}
+
+uint32_t GPU::getScreenBlockOffset(const BGConfig& bgConfig, int tileX, int tileY) {
+    // For screens larger than 32x32, they are divided into 32x32 screen blocks
+    // Layout for different sizes:
+    // 256x256 (32x32): [0]
+    // 512x256 (64x32): [0][1]
+    // 256x512 (32x64): [0]
+    //                  [1]
+    // 512x512 (64x64): [0][1]
+    //                  [2][3]
+    
+    int screenBlockX = tileX / 32;
+    int screenBlockY = tileY / 32;
+    
+    uint32_t offset = 0;
+    
+    switch (bgConfig.screenSize) {
+        case BG_SCREEN_SIZE_256x256:
+            // Single 32x32 block, no offset needed
+            offset = 0;
+            break;
+            
+        case BG_SCREEN_SIZE_512x256:
+            // Two 32x32 blocks horizontally: [0][1]
+            offset = screenBlockX * 0x800;  // Each block is 2KB
+            break;
+            
+        case BG_SCREEN_SIZE_256x512:
+            // Two 32x32 blocks vertically: [0]
+            //                               [1]
+            offset = screenBlockY * 0x800;
+            break;
+            
+        case BG_SCREEN_SIZE_512x512:
+            // Four 32x32 blocks: [0][1]
+            //                    [2][3]
+            offset = (screenBlockY * 2 + screenBlockX) * 0x800;
+            break;
+    }
+    
+    return offset;
+}
+
+uint16_t GPU::readScreenEntryRaw(const BGConfig& bgConfig, int tileX, int tileY) {
+    // Bounds check
+    if (tileX < 0 || tileX >= bgConfig.screenWidthTiles ||
+        tileY < 0 || tileY >= bgConfig.screenHeightTiles) {
+        return 0;
+    }
+    
+    // Get the screen block offset for large screens
+    uint32_t screenBlockOffset = getScreenBlockOffset(bgConfig, tileX, tileY);
+    
+    // Calculate position within the 32x32 block
+    int localX = tileX % 32;
+    int localY = tileY % 32;
+    
+    // Each screen entry is 2 bytes, laid out in row-major order within the block
+    uint32_t entryOffset = (localY * 32 + localX) * 2;
+    
+    // Final address
+    uint32_t addr = bgConfig.screenBaseAddr + screenBlockOffset + entryOffset;
+    
+    return memory.read16(addr);
+}
+
+ScreenEntry GPU::readScreenEntry(const BGConfig& bgConfig, int tileX, int tileY) {
+    uint16_t entry = readScreenEntryRaw(bgConfig, tileX, tileY);
+    return parseScreenEntry(entry);
+}
+
+uint32_t GPU::getTileAddress(const BGConfig& bgConfig, const ScreenEntry& entry) {
+    // Calculate tile address from character base and tile number
+    // 4bpp: 32 bytes per tile
+    // 8bpp: 64 bytes per tile
+    
+    uint32_t bytesPerTile = bgConfig.paletteMode ? 64 : 32;
+    uint32_t tileOffset = entry.tileNumber * bytesPerTile;
+    
+    return bgConfig.charBaseAddr + tileOffset;
+}

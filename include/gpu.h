@@ -19,6 +19,26 @@ constexpr uint32_t REG_DISPCNT = 0x04000000;
 constexpr uint32_t REG_DISPSTAT = 0x04000004;
 constexpr uint32_t REG_VCOUNT = 0x04000006;
 
+// Background control registers
+constexpr uint32_t REG_BG0CNT = 0x04000008;
+constexpr uint32_t REG_BG1CNT = 0x0400000A;
+constexpr uint32_t REG_BG2CNT = 0x0400000C;
+constexpr uint32_t REG_BG3CNT = 0x0400000E;
+
+// Background scroll registers
+constexpr uint32_t REG_BG0HOFS = 0x04000010;
+constexpr uint32_t REG_BG0VOFS = 0x04000012;
+constexpr uint32_t REG_BG1HOFS = 0x04000014;
+constexpr uint32_t REG_BG1VOFS = 0x04000016;
+constexpr uint32_t REG_BG2HOFS = 0x04000018;
+constexpr uint32_t REG_BG2VOFS = 0x0400001A;
+constexpr uint32_t REG_BG3HOFS = 0x0400001C;
+constexpr uint32_t REG_BG3VOFS = 0x0400001E;
+
+// VRAM addresses
+constexpr uint32_t VRAM_BASE = 0x06000000;
+constexpr uint32_t VRAM_SIZE = 0x18000;  // 96KB
+
 // DISPCNT bits
 constexpr uint16_t DISPCNT_MODE_MASK = 0x0007;
 constexpr uint16_t DISPCNT_MODE_3 = 0x0003;
@@ -50,6 +70,52 @@ struct DisplayControl {
     bool win0Enable;        // Bit 13: Window 0 display
     bool win1Enable;        // Bit 14: Window 1 display
     bool winObjEnable;      // Bit 15: OBJ Window display
+};
+
+// BGxCNT bits
+constexpr uint16_t BGCNT_PRIORITY_MASK = 0x0003;       // Bits 0-1: Priority (0-3)
+constexpr uint16_t BGCNT_CHAR_BASE_MASK = 0x000C;      // Bits 2-3: Character base block (0-3)
+constexpr uint16_t BGCNT_MOSAIC = 0x0040;              // Bit 6: Mosaic enable
+constexpr uint16_t BGCNT_PALETTE_MODE = 0x0080;        // Bit 7: Palette mode (0=16/16, 1=256/1)
+constexpr uint16_t BGCNT_SCREEN_BASE_MASK = 0x1F00;    // Bits 8-12: Screen base block (0-31)
+constexpr uint16_t BGCNT_SCREEN_SIZE_MASK = 0xC000;    // Bits 14-15: Screen size
+
+// Screen size constants (in tiles)
+constexpr int BG_SCREEN_SIZE_256x256 = 0;   // 32x32 tiles
+constexpr int BG_SCREEN_SIZE_512x256 = 1;   // 64x32 tiles
+constexpr int BG_SCREEN_SIZE_256x512 = 2;   // 32x64 tiles
+constexpr int BG_SCREEN_SIZE_512x512 = 3;   // 64x64 tiles
+
+// Structure to hold parsed BGxCNT values
+struct BGConfig {
+    uint8_t priority;           // Bits 0-1: Priority (0-3, 0=highest)
+    uint8_t charBaseBlock;      // Bits 2-3: Character base block (0-3)
+    bool mosaicEnable;          // Bit 6: Mosaic effect enable
+    bool paletteMode;           // Bit 7: 0=16/16 (4bpp), 1=256/1 (8bpp)
+    uint8_t screenBaseBlock;    // Bits 8-12: Screen base block (0-31)
+    uint8_t screenSize;         // Bits 14-15: Screen size (0-3)
+    
+    // Computed values for convenience
+    uint32_t charBaseAddr;      // Actual VRAM address for character data
+    uint32_t screenBaseAddr;    // Actual VRAM address for screen data
+    int screenWidthTiles;       // Screen width in tiles
+    int screenHeightTiles;      // Screen height in tiles
+    int screenWidthPixels;      // Screen width in pixels
+    int screenHeightPixels;     // Screen height in pixels
+};
+
+// Screen Entry (Tile Map Entry) bits - each entry is 16 bits
+constexpr uint16_t SE_TILE_NUM_MASK = 0x03FF;      // Bits 0-9: Tile number (0-1023)
+constexpr uint16_t SE_HFLIP = 0x0400;              // Bit 10: Horizontal flip
+constexpr uint16_t SE_VFLIP = 0x0800;              // Bit 11: Vertical flip
+constexpr uint16_t SE_PALETTE_MASK = 0xF000;       // Bits 12-15: Palette number (4bpp only)
+
+// Structure to hold parsed Screen Entry (tile map entry)
+struct ScreenEntry {
+    uint16_t tileNumber;        // Bits 0-9: Which tile to use (0-1023)
+    bool hFlip;                 // Bit 10: Flip tile horizontally
+    bool vFlip;                 // Bit 11: Flip tile vertically
+    uint8_t paletteNum;         // Bits 12-15: Palette bank (4bpp only, 0-15)
 };
 
 // DISPSTAT bits
@@ -121,6 +187,24 @@ public:
     bool isOBJEnabled();              // Check if sprites are enabled
     bool isForcedBlank();             // Check if display is blanked
     uint8_t getVideoMode();           // Get current video mode (0-5)
+    
+    // BGxCNT register parsing
+    BGConfig parseBGCNT(uint16_t bgcnt);
+    BGConfig readBGCNT(int bgNum);    // Read and parse BGxCNT (bgNum: 0-3)
+    
+    // Helper to get screen dimensions from size code
+    void getScreenDimensions(uint8_t sizeCode, int& widthTiles, int& heightTiles);
+    
+    // Tile map (screen entry) functions
+    ScreenEntry parseScreenEntry(uint16_t entry);
+    ScreenEntry readScreenEntry(const BGConfig& bgConfig, int tileX, int tileY);
+    uint16_t readScreenEntryRaw(const BGConfig& bgConfig, int tileX, int tileY);
+    
+    // Get tile address from screen entry
+    uint32_t getTileAddress(const BGConfig& bgConfig, const ScreenEntry& entry);
+    
+    // Helper to get screen block offset for large screens
+    uint32_t getScreenBlockOffset(const BGConfig& bgConfig, int tileX, int tileY);
 };
 
 #endif
