@@ -35,6 +35,19 @@ constexpr uint32_t REG_BG2VOFS = 0x0400001A;
 constexpr uint32_t REG_BG3HOFS = 0x0400001C;
 constexpr uint32_t REG_BG3VOFS = 0x0400001E;
 
+// Window registers
+constexpr uint32_t REG_WIN0H = 0x04000040;
+constexpr uint32_t REG_WIN1H = 0x04000042;
+constexpr uint32_t REG_WIN0V = 0x04000044;
+constexpr uint32_t REG_WIN1V = 0x04000046;
+constexpr uint32_t REG_WININ = 0x04000048;
+constexpr uint32_t REG_WINOUT = 0x0400004A;
+
+// Blend registers
+constexpr uint32_t REG_BLDCNT = 0x04000050;
+constexpr uint32_t REG_BLDALPHA = 0x04000052;
+constexpr uint32_t REG_BLDY = 0x04000054;
+
 // VRAM addresses
 constexpr uint32_t VRAM_BASE = 0x06000000;
 constexpr uint32_t VRAM_SIZE = 0x18000;  // 96KB
@@ -124,6 +137,34 @@ struct BGScroll {
     uint16_t vofs;              // Vertical offset (0-511 for normal BGs)
 };
 
+// Structure to hold blend control settings
+struct BlendControl {
+    uint8_t firstTargets;       // Bitmask: which layers are 1st targets (bits 0-5)
+    uint8_t mode;               // Blend mode (0-3)
+    uint8_t secondTargets;      // Bitmask: which layers are 2nd targets (bits 0-5)
+    uint8_t eva;                // Alpha coefficient for 1st target (0-16)
+    uint8_t evb;                // Alpha coefficient for 2nd target (0-16)
+    uint8_t evy;                // Brightness coefficient (0-16)
+};
+
+// Structure to hold window dimensions
+struct Window {
+    uint8_t left;               // Left edge (0-240)
+    uint8_t right;              // Right edge (0-240)
+    uint8_t top;                // Top edge (0-160)
+    uint8_t bottom;             // Bottom edge (0-160)
+    uint8_t control;            // Control flags (which layers visible)
+    bool enabled;               // Whether window is enabled in DISPCNT
+};
+
+// Structure to hold window control settings
+struct WindowControl {
+    Window win0;                // Window 0
+    Window win1;                // Window 1
+    uint8_t winOut;             // Control for outside windows
+    uint8_t winObj;             // Control for OBJ window
+};
+
 // DISPSTAT bits
 constexpr uint16_t DISPSTAT_VBLANK = 0x0001;
 constexpr uint16_t DISPSTAT_HBLANK = 0x0002;
@@ -131,6 +172,35 @@ constexpr uint16_t DISPSTAT_VCOUNT_MATCH = 0x0004;
 constexpr uint16_t DISPSTAT_VBLANK_IRQ_ENABLE = 0x0008;
 constexpr uint16_t DISPSTAT_HBLANK_IRQ_ENABLE = 0x0010;
 constexpr uint16_t DISPSTAT_VCOUNT_IRQ_ENABLE = 0x0020;
+
+// BLDCNT (Blend Control) bits
+constexpr uint16_t BLDCNT_BG0_1ST = 0x0001;    // Bit 0: BG0 1st target
+constexpr uint16_t BLDCNT_BG1_1ST = 0x0002;    // Bit 1: BG1 1st target
+constexpr uint16_t BLDCNT_BG2_1ST = 0x0004;    // Bit 2: BG2 1st target
+constexpr uint16_t BLDCNT_BG3_1ST = 0x0008;    // Bit 3: BG3 1st target
+constexpr uint16_t BLDCNT_OBJ_1ST = 0x0010;    // Bit 4: OBJ 1st target
+constexpr uint16_t BLDCNT_BD_1ST = 0x0020;     // Bit 5: Backdrop 1st target
+constexpr uint16_t BLDCNT_MODE_MASK = 0x00C0;  // Bits 6-7: Blend mode
+constexpr uint16_t BLDCNT_BG0_2ND = 0x0100;    // Bit 8: BG0 2nd target
+constexpr uint16_t BLDCNT_BG1_2ND = 0x0200;    // Bit 9: BG1 2nd target
+constexpr uint16_t BLDCNT_BG2_2ND = 0x0400;    // Bit 10: BG2 2nd target
+constexpr uint16_t BLDCNT_BG3_2ND = 0x0800;    // Bit 11: BG3 2nd target
+constexpr uint16_t BLDCNT_OBJ_2ND = 0x1000;    // Bit 12: OBJ 2nd target
+constexpr uint16_t BLDCNT_BD_2ND = 0x2000;     // Bit 13: Backdrop 2nd target
+
+// Blend modes
+constexpr uint8_t BLEND_MODE_OFF = 0;          // No blending
+constexpr uint8_t BLEND_MODE_ALPHA = 1;        // Alpha blend (1st + 2nd)
+constexpr uint8_t BLEND_MODE_BRIGHTEN = 2;     // Brighten 1st target
+constexpr uint8_t BLEND_MODE_DARKEN = 3;       // Darken 1st target
+
+// WININ/WINOUT bits (8 bits per window)
+constexpr uint8_t WIN_BG0_ENABLE = 0x01;       // Bit 0: Enable BG0
+constexpr uint8_t WIN_BG1_ENABLE = 0x02;       // Bit 1: Enable BG1
+constexpr uint8_t WIN_BG2_ENABLE = 0x04;       // Bit 2: Enable BG2
+constexpr uint8_t WIN_BG3_ENABLE = 0x08;       // Bit 3: Enable BG3
+constexpr uint8_t WIN_OBJ_ENABLE = 0x10;       // Bit 4: Enable OBJ
+constexpr uint8_t WIN_BLEND_ENABLE = 0x20;     // Bit 5: Enable blend
 
 // Palette RAM addresses
 constexpr uint32_t PALETTE_BG_START = 0x05000000;
@@ -392,6 +462,17 @@ public:
                                          const AffineParams& params, uint16_t* lineBuffer,
                                          uint8_t* priorityBuffer, uint8_t layerPriority,
                                          bool mapping1D);
+    
+    // Blend and window functions (Session 3: Advanced Features)
+    BlendControl readBlendControl();                            // Read and parse blend registers
+    WindowControl readWindowControl();                          // Read and parse window registers
+    bool isPixelInWindow(int x, int y, const Window& win);     // Check if pixel is in window
+    uint8_t getWindowControlForPixel(int x, int y, const WindowControl& winCtrl);  // Get control flags
+    bool isLayerVisibleAtPixel(int layerType, int x, int y);   // Check if layer visible (window check)
+    uint16_t applyBlend(uint16_t color1, uint16_t color2, const BlendControl& blend, 
+                       int layerType1, int layerType2);         // Apply blend effect
+    uint16_t applyBrightnessIncrease(uint16_t color, uint8_t evy);  // Brighten color
+    uint16_t applyBrightnessDecrease(uint16_t color, uint8_t evy);  // Darken color
 };
 
 #endif

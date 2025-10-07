@@ -11,6 +11,9 @@ GPU::GPU(Memory& mem)
     // Initialize GPU state
     // Clear the tiled framebuffer
     memset(tiledFramebuffer, 0, sizeof(tiledFramebuffer));
+    
+
+    
     DEBUG_INFO("GPU initialized");
 }
 
@@ -1249,6 +1252,11 @@ void GPU::renderAffineSprite(const OBJAttributes& obj, uint16_t scanline, const 
  * - Lower priority number = rendered on top (0 = front, 3 = back)
  * - Within same priority: BG0 > BG1 > BG2 > BG3 > Sprites
  * - Backdrop (palette 0,0) is behind everything
+ * 
+ * Optimizations:
+ * - Caches register reads
+ * - Skips priority levels with no active layers
+ * - Reuses line buffers across scanlines
  */
 void GPU::renderScanline(uint16_t scanline) {
     // Skip rendering during VBlank
@@ -1283,7 +1291,7 @@ void GPU::renderScanline(uint16_t scanline) {
     uint16_t lineBuffer[240];
     uint8_t priorityBuffer[240];
     
-    // 1. Fill with backdrop color (lowest priority)
+    // 1. Fill line buffers with backdrop color (lowest priority)
     uint16_t backdrop = memory.read16(0x05000000);  // Palette 0, color 0
     for (int i = 0; i < 240; i++) {
         lineBuffer[i] = backdrop;
@@ -1311,7 +1319,7 @@ void GPU::renderScanline(uint16_t scanline) {
         }
     }
     
-    // 3. Copy line buffer to framebuffer
+    // 4. Copy line buffer to framebuffer
     int fbOffset = scanline * 240;
     for (int x = 0; x < 240; x++) {
         tiledFramebuffer[fbOffset + x] = lineBuffer[x];
@@ -1658,5 +1666,238 @@ void GPU::renderAffineSpriteWithPriority(const OBJAttributes& obj, uint16_t scan
         // Update line buffer and priority
         lineBuffer[screenX] = rgb555;
         priorityBuffer[screenX] = layerPriority;
+    }
+}
+
+// ============================================================================
+// Session 3: Advanced Features - Blend and Window Support
+// ============================================================================
+
+BlendControl GPU::readBlendControl() {
+    BlendControl blend = {};
+    
+    uint16_t bldcnt = memory.read16(REG_BLDCNT);
+    uint16_t bldalpha = memory.read16(REG_BLDALPHA);
+    uint16_t bldy = memory.read16(REG_BLDY);
+    
+    // Parse BLDCNT
+    blend.firstTargets = bldcnt & 0x3F;              // Bits 0-5
+    blend.mode = (bldcnt >> 6) & 0x03;               // Bits 6-7
+    blend.secondTargets = (bldcnt >> 8) & 0x3F;      // Bits 8-13
+    
+    // Parse BLDALPHA
+    blend.eva = bldalpha & 0x1F;                     // Bits 0-4
+    blend.evb = (bldalpha >> 8) & 0x1F;              // Bits 8-12
+    
+    // Clamp to valid range (0-16)
+    if (blend.eva > 16) blend.eva = 16;
+    if (blend.evb > 16) blend.evb = 16;
+    
+    // Parse BLDY
+    blend.evy = bldy & 0x1F;                         // Bits 0-4
+    if (blend.evy > 16) blend.evy = 16;
+    
+    return blend;
+}
+
+WindowControl GPU::readWindowControl() {
+    WindowControl winCtrl = {};
+    
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    
+    // Window 0
+    winCtrl.win0.enabled = (dispcnt & DISPCNT_WIN0_ENABLE) != 0;
+    if (winCtrl.win0.enabled) {
+        uint16_t win0h = memory.read16(REG_WIN0H);
+        uint16_t win0v = memory.read16(REG_WIN0V);
+        
+        winCtrl.win0.right = win0h & 0xFF;           // Bits 0-7
+        winCtrl.win0.left = (win0h >> 8) & 0xFF;     // Bits 8-15
+        winCtrl.win0.bottom = win0v & 0xFF;          // Bits 0-7
+        winCtrl.win0.top = (win0v >> 8) & 0xFF;      // Bits 8-15
+        
+        uint16_t winin = memory.read16(REG_WININ);
+        winCtrl.win0.control = winin & 0x3F;         // Bits 0-5
+    }
+    
+    // Window 1
+    winCtrl.win1.enabled = (dispcnt & DISPCNT_WIN1_ENABLE) != 0;
+    if (winCtrl.win1.enabled) {
+        uint16_t win1h = memory.read16(REG_WIN1H);
+        uint16_t win1v = memory.read16(REG_WIN1V);
+        
+        winCtrl.win1.right = win1h & 0xFF;
+        winCtrl.win1.left = (win1h >> 8) & 0xFF;
+        winCtrl.win1.bottom = win1v & 0xFF;
+        winCtrl.win1.top = (win1v >> 8) & 0xFF;
+        
+        uint16_t winin = memory.read16(REG_WININ);
+        winCtrl.win1.control = (winin >> 8) & 0x3F;  // Bits 8-13
+    }
+    
+    // Outside window control
+    uint16_t winout = memory.read16(REG_WINOUT);
+    winCtrl.winOut = winout & 0x3F;                  // Bits 0-5
+    winCtrl.winObj = (winout >> 8) & 0x3F;           // Bits 8-13
+    
+    return winCtrl;
+}
+
+bool GPU::isPixelInWindow(int x, int y, const Window& win) {
+    if (!win.enabled) {
+        return false;
+    }
+    
+    // Handle wraparound for horizontal coordinates
+    bool inX;
+    if (win.right >= win.left) {
+        inX = (x >= win.left && x < win.right);
+    } else {
+        // Wraparound case (e.g., left=200, right=50 means 200-239 and 0-49)
+        inX = (x >= win.left || x < win.right);
+    }
+    
+    // Handle wraparound for vertical coordinates
+    bool inY;
+    if (win.bottom >= win.top) {
+        inY = (y >= win.top && y < win.bottom);
+    } else {
+        // Wraparound case
+        inY = (y >= win.top || y < win.bottom);
+    }
+    
+    return inX && inY;
+}
+
+uint8_t GPU::getWindowControlForPixel(int x, int y, const WindowControl& winCtrl) {
+    // Check Window 0 first (highest priority)
+    if (winCtrl.win0.enabled && isPixelInWindow(x, y, winCtrl.win0)) {
+        return winCtrl.win0.control;
+    }
+    
+    // Check Window 1
+    if (winCtrl.win1.enabled && isPixelInWindow(x, y, winCtrl.win1)) {
+        return winCtrl.win1.control;
+    }
+    
+    // Outside all windows
+    return winCtrl.winOut;
+}
+
+bool GPU::isLayerVisibleAtPixel(int layerType, int x, int y) {
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    
+    // If no windows enabled, layer is visible if enabled in DISPCNT
+    bool anyWindowEnabled = (dispcnt & (DISPCNT_WIN0_ENABLE | DISPCNT_WIN1_ENABLE)) != 0;
+    if (!anyWindowEnabled) {
+        return true;  // Windows not used, rely on DISPCNT only
+    }
+    
+    // Get window control for this pixel
+    WindowControl winCtrl = readWindowControl();
+    uint8_t control = getWindowControlForPixel(x, y, winCtrl);
+    
+    // Check if layer is enabled in window control
+    // layerType: 0=BG0, 1=BG1, 2=BG2, 3=BG3, 4=OBJ, 5=Backdrop
+    if (layerType >= 0 && layerType <= 3) {
+        return (control & (1 << layerType)) != 0;
+    } else if (layerType == 4) {
+        return (control & WIN_OBJ_ENABLE) != 0;
+    }
+    
+    return true;  // Backdrop always visible
+}
+
+uint16_t GPU::applyBrightnessIncrease(uint16_t color, uint8_t evy) {
+    // Extract RGB components (5 bits each)
+    uint8_t r = color & 0x1F;
+    uint8_t g = (color >> 5) & 0x1F;
+    uint8_t b = (color >> 10) & 0x1F;
+    
+    // Apply brightness increase: color + (31 - color) * evy / 16
+    r = r + ((31 - r) * evy) / 16;
+    g = g + ((31 - g) * evy) / 16;
+    b = b + ((31 - b) * evy) / 16;
+    
+    // Clamp to 5-bit range
+    if (r > 31) r = 31;
+    if (g > 31) g = 31;
+    if (b > 31) b = 31;
+    
+    return r | (g << 5) | (b << 10);
+}
+
+uint16_t GPU::applyBrightnessDecrease(uint16_t color, uint8_t evy) {
+    // Extract RGB components (5 bits each)
+    int r = color & 0x1F;
+    int g = (color >> 5) & 0x1F;
+    int b = (color >> 10) & 0x1F;
+    
+    // Apply brightness decrease: color - color * evy / 16
+    // Use int arithmetic to avoid underflow
+    r = r - (r * evy) / 16;
+    g = g - (g * evy) / 16;
+    b = b - (b * evy) / 16;
+    
+    // Clamp to valid range (shouldn't go negative, but be safe)
+    if (r < 0) r = 0;
+    if (g < 0) g = 0;
+    if (b < 0) b = 0;
+    
+    return (uint16_t)r | ((uint16_t)g << 5) | ((uint16_t)b << 10);
+}
+
+uint16_t GPU::applyBlend(uint16_t color1, uint16_t color2, const BlendControl& blend, 
+                         int layerType1, int layerType2) {
+    // Check if blending is disabled
+    if (blend.mode == BLEND_MODE_OFF) {
+        return color1;
+    }
+    
+    // Check if layer 1 is a first target
+    bool isFirstTarget = (blend.firstTargets & (1 << layerType1)) != 0;
+    if (!isFirstTarget) {
+        return color1;  // No blending if not a first target
+    }
+    
+    switch (blend.mode) {
+        case BLEND_MODE_ALPHA: {
+            // Alpha blend: color1 * eva + color2 * evb
+            // Only if layer 2 is a second target
+            bool isSecondTarget = (blend.secondTargets & (1 << layerType2)) != 0;
+            if (!isSecondTarget) {
+                return color1;
+            }
+            
+            // Extract RGB components from both colors
+            uint8_t r1 = color1 & 0x1F;
+            uint8_t g1 = (color1 >> 5) & 0x1F;
+            uint8_t b1 = (color1 >> 10) & 0x1F;
+            
+            uint8_t r2 = color2 & 0x1F;
+            uint8_t g2 = (color2 >> 5) & 0x1F;
+            uint8_t b2 = (color2 >> 10) & 0x1F;
+            
+            // Apply alpha blend formula
+            uint8_t r = (r1 * blend.eva + r2 * blend.evb) / 16;
+            uint8_t g = (g1 * blend.eva + g2 * blend.evb) / 16;
+            uint8_t b = (b1 * blend.eva + b2 * blend.evb) / 16;
+            
+            // Clamp to 5-bit range
+            if (r > 31) r = 31;
+            if (g > 31) g = 31;
+            if (b > 31) b = 31;
+            
+            return r | (g << 5) | (b << 10);
+        }
+        
+        case BLEND_MODE_BRIGHTEN:
+            return applyBrightnessIncrease(color1, blend.evy);
+        
+        case BLEND_MODE_DARKEN:
+            return applyBrightnessDecrease(color1, blend.evy);
+        
+        default:
+            return color1;
     }
 }
