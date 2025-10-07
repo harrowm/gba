@@ -355,6 +355,12 @@ public:
     OBJAttributes parseOBJAttributes(uint16_t attr0, uint16_t attr1, uint16_t attr2);
     OBJAttributes readOBJAttributes(int objNum);                // Read OBJ attributes (objNum: 0-127)
     void getOBJDimensions(uint8_t shape, uint8_t size, int& width, int& height);
+    
+    // Sprite rendering functions
+    uint32_t getOBJTileAddress(const OBJAttributes& obj, int tileX, int tileY, bool mapping1D);
+    void renderSpriteScanline(uint16_t scanline);               // Render all sprites for scanline
+    bool isSpriteOnScanline(const OBJAttributes& obj, uint16_t scanline);
+    void renderSingleSprite(const OBJAttributes& obj, uint16_t scanline);
 };
 
 #endif

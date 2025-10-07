@@ -183,11 +183,24 @@ uint16_t GPU::readBGPaletteRaw(int paletteNum, int colorIndex) {
 uint16_t GPU::readOBJPaletteRaw(int paletteNum, int colorIndex) {
     // OBJ palette: 16 palettes × 16 colors (starts at offset 0x200)
     // Each color is 2 bytes (RGB555)
-    if (paletteNum < 0 || paletteNum >= 16 || colorIndex < 0 || colorIndex >= 16) {
-        return 0;
+    // For 8bpp mode: paletteNum is ignored, colorIndex is 0-255
+    // For 4bpp mode: paletteNum is 0-15, colorIndex is 0-15
+    
+    uint32_t offset;
+    if (colorIndex >= 16) {
+        // 8bpp mode: direct 256-color palette
+        if (colorIndex < 0 || colorIndex >= 256) {
+            return 0;
+        }
+        offset = 0x200 + (colorIndex * 2);
+    } else {
+        // 4bpp mode: 16 palettes of 16 colors
+        if (paletteNum < 0 || paletteNum >= 16 || colorIndex < 0) {
+            return 0;
+        }
+        offset = 0x200 + (paletteNum * 16 + colorIndex) * 2;
     }
     
-    uint32_t offset = 0x200 + (paletteNum * 16 + colorIndex) * 2;
     uint8_t* paletteRAM = memory.getPaletteRAM();
     
     // Read 16-bit color value (little endian)
@@ -857,4 +870,197 @@ OBJAttributes GPU::readOBJAttributes(int objNum) {
     uint16_t attr2 = memory.read16(oamAddr + 4);
     
     return parseOBJAttributes(attr0, attr1, attr2);
+}
+
+// ============================================================================
+// Sprite Rendering Functions
+// ============================================================================
+
+uint32_t GPU::getOBJTileAddress(const OBJAttributes& obj, int tileX, int tileY, bool mapping1D) {
+    // Calculate tile address for sprite tile at (tileX, tileY) within sprite
+    // tileX, tileY are in tile coordinates within the sprite (0-based)
+    
+    uint32_t baseTileNum = obj.tileNumber;
+    uint32_t tileNum;
+    
+    if (mapping1D) {
+        // 1D mapping: tiles are sequential in memory
+        // For 4bpp: each tile is 32 bytes (0.5 tile blocks)
+        // For 8bpp: each tile is 64 bytes (1 tile block)
+        
+        int spriteWidthTiles = obj.width / 8;
+        int tileOffset = tileY * spriteWidthTiles + tileX;
+        
+        if (obj.paletteMode) {
+            // 8bpp: each tile takes 2 tile numbers (64 bytes each)
+            tileNum = baseTileNum + (tileOffset * 2);
+        } else {
+            // 4bpp: tiles are sequential
+            tileNum = baseTileNum + tileOffset;
+        }
+    } else {
+        // 2D mapping: tiles arranged in 32-tile-wide blocks
+        // Each row of the tile arrangement is 32 tiles wide
+        
+        if (obj.paletteMode) {
+            // 8bpp: tile numbers arranged in 16-tile-wide rows (because each takes 2 slots)
+            tileNum = baseTileNum + (tileY * 32) + (tileX * 2);
+        } else {
+            // 4bpp: tile numbers arranged in 32-tile-wide rows
+            tileNum = baseTileNum + (tileY * 32) + tileX;
+        }
+    }
+    
+    // Calculate actual VRAM address
+    // Note: For 8bpp, each tile is still addressed as 32-byte blocks in GBA,
+    // but occupies 2 blocks (64 bytes total). The tileNum calculation already
+    // accounts for this by multiplying by 2.
+    return OBJ_TILES_BASE + (tileNum * 32);
+}
+
+bool GPU::isSpriteOnScanline(const OBJAttributes& obj, uint16_t scanline) {
+    // Check if sprite intersects with the given scanline
+    if (!obj.visible) {
+        return false;
+    }
+    
+    // Handle Y coordinate wrapping (Y is 0-255, wraps around screen)
+    int spriteY = obj.y;
+    int spriteHeight = obj.height;
+    
+    // Check if scanline is within sprite's Y range
+    // Note: Y coordinates can wrap around the 256-pixel vertical space
+    if (scanline >= spriteY && scanline < (spriteY + spriteHeight)) {
+        return true;
+    }
+    
+    // Handle wraparound case (sprite starts near bottom of 256-pixel space)
+    if ((spriteY + spriteHeight) > 256) {
+        int wrapY = (spriteY + spriteHeight) - 256;
+        if (scanline < wrapY) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+void GPU::renderSingleSprite(const OBJAttributes& obj, uint16_t scanline) {
+    // Render a single sprite to the current scanline
+    if (!obj.visible) {
+        return;
+    }
+    
+    // Get DISPCNT to check 1D/2D mapping mode
+    DisplayControl dispcnt = readDISPCNT();
+    bool mapping1D = dispcnt.obj1DMapping;
+    
+    // Calculate which row of the sprite we're rendering
+    int spriteY = obj.y;
+    int rowInSprite = scanline - spriteY;
+    
+    // Handle Y wraparound
+    if (rowInSprite < 0) {
+        rowInSprite += 256;
+    }
+    
+    // Check if still outside sprite after wraparound
+    if (rowInSprite < 0 || rowInSprite >= obj.height) {
+        return;
+    }
+    
+    // Apply vertical flip
+    if (obj.vFlip) {
+        rowInSprite = obj.height - 1 - rowInSprite;
+    }
+    
+    // Calculate which tile row this corresponds to
+    int tileY = rowInSprite / 8;
+    int pixelYInTile = rowInSprite % 8;
+    
+    // Render each pixel of the sprite on this scanline
+    for (int pixelX = 0; pixelX < obj.width; pixelX++) {
+        // Calculate screen X position
+        int screenX = obj.x + pixelX;
+        
+        // Handle X coordinate (0-511, but treat > 240 as offscreen)
+        // X coordinates > 240 can wrap around, but we'll keep it simple for now
+        if (screenX >= 511) {
+            screenX -= 512;
+        }
+        
+        // Skip if offscreen
+        if (screenX < 0 || screenX >= 240) {
+            continue;
+        }
+        
+        // Apply horizontal flip
+        int spritePixelX = pixelX;
+        if (obj.hFlip) {
+            spritePixelX = obj.width - 1 - pixelX;
+        }
+        
+        // Calculate which tile column this corresponds to
+        int tileX = spritePixelX / 8;
+        int pixelXInTile = spritePixelX % 8;
+        
+        // Get tile address
+        uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
+        
+        // Get pixel color index
+        // TODO: Optimize this - currently using memory.read8() instead of getVRAM() pointer
+        // because of a pointer issue with OBJ VRAM region
+        uint8_t colorIndex;
+        if (obj.paletteMode) {
+            // 8bpp mode: 1 byte per pixel
+            int pixelIndex = pixelYInTile * 8 + pixelXInTile;
+            colorIndex = memory.read8(tileAddr + pixelIndex);
+        } else {
+            // 4bpp mode: 2 pixels per byte
+            int pixelIndex = pixelYInTile * 8 + pixelXInTile;
+            int byteOffset = pixelIndex / 2;
+            int pixelInByte = pixelIndex % 2;
+            uint8_t byte = memory.read8(tileAddr + byteOffset);
+            colorIndex = (pixelInByte == 0) ? (byte & 0x0F) : ((byte >> 4) & 0x0F);
+        }
+        
+        // Skip transparent pixels (color index 0)
+        if (colorIndex == 0) {
+            continue;
+        }
+        
+        // Get color from OBJ palette
+        uint32_t color;
+        if (obj.paletteMode) {
+            // 8bpp: single 256-color palette
+            color = getOBJColor(0, colorIndex);
+        } else {
+            // 4bpp: 16 palettes of 16 colors
+            color = getOBJColor(obj.paletteNum, colorIndex);
+        }
+        
+        // Convert ARGB8888 to RGB555 for framebuffer
+        uint8_t r = (color >> 16) & 0xFF;
+        uint8_t g = (color >> 8) & 0xFF;
+        uint8_t b = color & 0xFF;
+        uint16_t rgb555 = ((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3);
+        
+        // Write to framebuffer (TODO: will need priority handling later)
+        int fbOffset = scanline * 240 + screenX;
+        tiledFramebuffer[fbOffset] = rgb555;
+    }
+}
+
+void GPU::renderSpriteScanline(uint16_t scanline) {
+    // Render all sprites for the current scanline
+    // Note: sprites are rendered in reverse OAM order (127 to 0)
+    // Lower OAM numbers have higher priority (drawn last, appear on top)
+    
+    for (int objNum = 127; objNum >= 0; objNum--) {
+        OBJAttributes obj = readOBJAttributes(objNum);
+        
+        if (isSpriteOnScanline(obj, scanline)) {
+            renderSingleSprite(obj, scanline);
+        }
+    }
 }
