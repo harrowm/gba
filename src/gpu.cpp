@@ -676,9 +676,12 @@ void GPU::renderBGScanline(int bgNum, uint16_t scanline) {
 }
 
 void GPU::renderMode0Scanline(uint16_t scanline) {
-    // Mode 0: Tiled backgrounds (up to 4 backgrounds)
-    // For now, render each background in order BG0, BG1, BG2, BG3
-    // TODO: Implement priority system in Day 4 Session 2
+    // Mode 0: Tiled backgrounds with proper priority-based compositing
+    // Priority rules:
+    // 1. Lower priority value = higher priority (0 is highest, 3 is lowest)
+    // 2. When priorities match, lower BG number wins (BG0 > BG1 > BG2 > BG3)
+    // 3. Transparent pixels (palette index 0) don't draw
+    // 4. Backdrop color has lowest priority
     
     // First, clear the scanline to backdrop color
     clearScanlineToBackdrop(scanline);
@@ -686,21 +689,96 @@ void GPU::renderMode0Scanline(uint16_t scanline) {
     // Read DISPCNT to see which backgrounds are enabled
     uint16_t dispcnt = memory.read16(REG_DISPCNT);
     
-    // Render backgrounds in reverse priority order (BG3 -> BG2 -> BG1 -> BG0)
-    // This ensures higher priority backgrounds overwrite lower priority ones
-    // TODO: Replace with proper priority-based compositing in Session 2
+    // Read BGxCNT for all backgrounds to get priorities
+    BGConfig bgConfigs[4];
+    bool bgEnabled[4];
+    for (int i = 0; i < 4; i++) {
+        bgEnabled[i] = (dispcnt & (DISPCNT_BG0_ENABLE << i)) != 0;
+        if (bgEnabled[i]) {
+            bgConfigs[i] = readBGCNT(i);
+        }
+    }
     
-    if (dispcnt & DISPCNT_BG3_ENABLE) {
-        renderBGScanline(3, scanline);
-    }
-    if (dispcnt & DISPCNT_BG2_ENABLE) {
-        renderBGScanline(2, scanline);
-    }
-    if (dispcnt & DISPCNT_BG1_ENABLE) {
-        renderBGScanline(1, scanline);
-    }
-    if (dispcnt & DISPCNT_BG0_ENABLE) {
-        renderBGScanline(0, scanline);
+    // Render each pixel with priority compositing
+    for (int screenX = 0; screenX < 240; screenX++) {
+        // Track the best pixel so far
+        int bestBG = -1;           // -1 means backdrop
+        uint8_t bestPriority = 4;  // Start with priority worse than any BG (backdrop priority)
+        uint16_t bestColor = 0;    // Will be set when we find a pixel
+        
+        // Check each enabled background
+        for (int bgNum = 0; bgNum < 4; bgNum++) {
+            if (!bgEnabled[bgNum]) continue;
+            
+            const BGConfig& bgConfig = bgConfigs[bgNum];
+            BGScroll scroll = readBGScroll(bgNum);
+            
+            // Apply scrolling to get background coordinates
+            int bgX, bgY;
+            applyScroll(bgConfig, scroll, screenX, scanline, bgX, bgY);
+            
+            // Convert to tile coordinates
+            int tileX, tileY, pixelInTileX, pixelInTileY;
+            getTileCoords(bgX, bgY, tileX, tileY, pixelInTileX, pixelInTileY);
+            
+            // Read the screen entry for this tile
+            ScreenEntry entry = readScreenEntry(bgConfig, tileX, tileY);
+            
+            // Skip transparent tiles
+            if (entry.tileNumber == 0) {
+                continue;
+            }
+            
+            // Get the tile address
+            uint32_t tileAddr = getTileAddress(bgConfig, entry);
+            
+            // Handle flips
+            int actualPixelX = entry.hFlip ? (7 - pixelInTileX) : pixelInTileX;
+            int actualPixelY = entry.vFlip ? (7 - pixelInTileY) : pixelInTileY;
+            
+            // Get the palette index
+            uint8_t paletteIndex;
+            if (bgConfig.paletteMode) {
+                paletteIndex = getTilePixel8bpp(tileAddr, actualPixelX, actualPixelY);
+            } else {
+                paletteIndex = getTilePixel4bpp(tileAddr, actualPixelX, actualPixelY);
+            }
+            
+            // Skip transparent pixels
+            if (paletteIndex == 0) {
+                continue;
+            }
+            
+            // Get the color
+            uint32_t color;
+            if (bgConfig.paletteMode) {
+                color = getBGColor(0, paletteIndex);
+            } else {
+                color = getBGColor(entry.paletteNum, paletteIndex);
+            }
+            
+            // Convert to RGB555
+            uint8_t r = (color >> 16) & 0xFF;
+            uint8_t g = (color >> 8) & 0xFF;
+            uint8_t b = color & 0xFF;
+            uint16_t rgb555 = ((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3);
+            
+            // Check if this pixel should win based on priority
+            // Lower priority value = higher priority
+            // Tiebreaker: lower BG number wins
+            if (bgConfig.priority < bestPriority || 
+                (bgConfig.priority == bestPriority && bgNum < bestBG)) {
+                bestBG = bgNum;
+                bestPriority = bgConfig.priority;
+                bestColor = rgb555;
+            }
+        }
+        
+        // Write the winning pixel (or keep backdrop if bestBG == -1)
+        if (bestBG != -1) {
+            int fbOffset = scanline * 240 + screenX;
+            tiledFramebuffer[fbOffset] = bestColor;
+        }
     }
 }
 
