@@ -129,7 +129,7 @@ void CPU::executeOneInstruction() {
     }
     
     // Save PC before execution for debugging
-    uint32_t pc_before = registers[15];
+    uint32_t pc_before __attribute__((unused)) = registers[15];
     
     // Use the existing executeOneInstruction methods from ARM/Thumb CPUs
     if (getFlag(FLAG_T)) {

@@ -1414,7 +1414,7 @@ void ThumbCPU::executeOneInstruction() {
             last_lr = parentCPU.R()[14];
         }
         if (loop_trace_count < 5 || (loop_trace_count % 100 == 0)) {
-            uint32_t cpsr = parentCPU.CPSR();
+            uint32_t cpsr __attribute__((unused)) = parentCPU.CPSR();
             printf("[LOOP #%llu] PC=0x%04X Instr=0x%04X | R0=%08X R1=%08X R4=%08X LR=%08X\n",
                    loop_trace_count, pc, instruction,
                    parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[4], parentCPU.R()[14]);

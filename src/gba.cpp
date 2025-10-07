@@ -130,7 +130,7 @@ void GBA::runFrame() {
         }
         
         // Track execution patterns to find loops
-        static uint32_t last_pc = 0;
+        static uint32_t last_pc __attribute__((unused)) = 0;
         static const char* last_region = nullptr;
         static uint32_t pc_counts[256] = {0}; // Track hot spots by PC high byte
         static uint64_t total_instructions = 0;

@@ -9,7 +9,18 @@ void ARMCPU::exec_arm_ldrb_reg_pre_wb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
     parentCPU.R()[rn] = addr;  // Writeback
@@ -23,7 +34,18 @@ void ARMCPU::exec_arm_ldrb_reg_pre_nowb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read8(addr);
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -36,7 +58,18 @@ void ARMCPU::exec_arm_ldrb_reg_post_wb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     parentCPU.R()[rd] = parentCPU.getMemory().read8(base);
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rn] = addr;  // Writeback
@@ -88,7 +121,18 @@ void ARMCPU::exec_arm_str_reg_pre_wb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
     parentCPU.R()[rn] = addr;  // Writeback
@@ -102,7 +146,18 @@ void ARMCPU::exec_arm_str_reg_pre_nowb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.getMemory().write32(addr, parentCPU.R()[rd]);
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -115,7 +170,18 @@ void ARMCPU::exec_arm_str_reg_post_wb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     parentCPU.getMemory().write32(base, parentCPU.R()[rd]);
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rn] = addr;  // Writeback
@@ -168,7 +234,18 @@ void ARMCPU::exec_arm_ldr_reg_pre_wb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
     parentCPU.R()[rn] = addr;  // Writeback
@@ -182,7 +259,18 @@ void ARMCPU::exec_arm_ldr_reg_pre_nowb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -195,7 +283,18 @@ void ARMCPU::exec_arm_ldr_reg_post_wb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
     parentCPU.R()[rn] = addr;  // Writeback
@@ -247,7 +346,18 @@ void ARMCPU::exec_arm_strb_reg_pre_wb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
     parentCPU.R()[rn] = addr;  // Writeback
@@ -261,7 +371,18 @@ void ARMCPU::exec_arm_strb_reg_pre_nowb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.getMemory().write8(addr, parentCPU.R()[rd] & 0xFF);
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -274,7 +395,18 @@ void ARMCPU::exec_arm_strb_reg_post_wb(uint32_t instruction) {
     uint8_t rm = bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
+    
+    // Apply shift to offset register
+    uint8_t shift_amount = bits<11,7>(instruction);
+    uint8_t shift_type = bits<6,5>(instruction);
     uint32_t offset = parentCPU.R()[rm];
+    switch (shift_type) {
+        case 0: offset = offset << shift_amount; break; // LSL
+        case 1: offset = offset >> shift_amount; break; // LSR
+        case 2: offset = ((int32_t)offset) >> shift_amount; break; // ASR
+        case 3: offset = (offset >> shift_amount) | (offset << (32 - shift_amount)); break; // ROR
+    }
+    
     // Store at original base address
     parentCPU.getMemory().write8(base, parentCPU.R()[rd] & 0xFF);
     // Writeback after store

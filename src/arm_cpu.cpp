@@ -176,15 +176,15 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
                parentCPU.R()[13], parentCPU.R()[14]);
     }
     
-    // Debug BIOS execution - trace first 50 instructions
-    if (in_bios && instruction_count <= 50) {
-        printf("[%3llu] BIOS PC=0x%08X: Instr=0x%08X | R0-R3=0x%08X 0x%08X 0x%08X 0x%08X | SP=0x%08X LR=0x%08X\n",
+    // Debug BIOS execution - trace first 200 instructions or specific addresses
+    if ((in_bios && instruction_count <= 200) || (in_bios && pc >= 0x140 && pc <= 0x170)) {
+        printf("[%3llu] BIOS PC=0x%08X: Instr=0x%08X | R0-R3=0x%08X 0x%08X 0x%08X 0x%08X | SP=0x%08X LR=0x%08X R12=0x%08X\n",
                instruction_count, pc, instruction,
                parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
-               parentCPU.R()[13], parentCPU.R()[14]);
+               parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[12]);
         
         // Show specific details for critical instructions
-        if (pc == 0x00000060 || pc == 0x00000064) {
+        if (pc == 0x00000060 || pc == 0x00000064 || pc == 0x0000016C) {
             uint32_t sp = parentCPU.R()[13];
             printf("     -> Stack contents: [0x%08X]=0x%08X, [0x%08X]=0x%08X\n",
                    sp, parentCPU.getMemory().read32(sp),

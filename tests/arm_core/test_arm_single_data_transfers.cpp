@@ -351,6 +351,138 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Reg_Post_NoWB) {
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
+// ============================================================================
+// LDR/STR with SHIFTED register offsets
+// ============================================================================
+
+// LDR (register LSL #2, pre-indexed, no writeback)
+// This is the instruction that Sonic BIOS uses: LDR R12, [R11, R12, LSL #2]
+TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_LSL_Pre_NoWB) {
+    cpu.R()[1] = 0x1000;  // Base address
+    cpu.R()[3] = 0x10;    // Index register = 16
+    cpu.R()[15] = 0x00000000;
+    // With LSL #2, offset = 16 << 2 = 64 (0x40)
+    // Load from 0x1000 + 0x40 = 0x1040
+    memory.write32(0x1040, 0x12345678);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, r3, lsl #2]", cpu.R()[15]));
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], (uint32_t)0x12345678);
+    EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);  // Base unchanged
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+}
+
+// LDR (register LSL #2, matching exact Sonic BIOS scenario)
+TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_LSL2_SonicBiosCase) {
+    // Simulate BIOS jump table lookup at 0x14C
+    // LDR R12, [R11, R12, LSL #2]
+    cpu.R()[11] = 0x000001C8;  // FP = table base (BIOS 0x1C8)
+    cpu.R()[12] = 0x0000001F;  // SWI number
+    cpu.R()[15] = 0x0000014C;  // PC at instruction
+    
+    // Table entry: 0x1C8 + (0x1F << 2) = 0x1C8 + 0x7C = 0x244
+    // Should load the value at BIOS 0x244
+    memory.write32(0x244, 0x000018D9);  // Expected jump target
+    
+    ASSERT_TRUE(assemble_and_write("ldr r12, [r11, r12, lsl #2]", cpu.R()[15]));
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[12], (uint32_t)0x000018D9);  // Should load correct table entry
+    EXPECT_EQ(cpu.R()[11], (uint32_t)0x000001C8);  // Base unchanged
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000150);  // PC advanced
+}
+
+// STR (register LSL #2, pre-indexed, no writeback)
+TEST_F(ARMCPUSingleDataTransferTest, STR_Reg_LSL_Pre_NoWB) {
+    cpu.R()[1] = 0x1000;
+    cpu.R()[2] = 0xDEADBEEF;  // Value to store
+    cpu.R()[3] = 0x08;         // Index = 8
+    cpu.R()[15] = 0x00000000;
+    // With LSL #2, offset = 8 << 2 = 32 (0x20)
+    // Store to 0x1000 + 0x20 = 0x1020
+    ASSERT_TRUE(assemble_and_write("str r2, [r1, r3, lsl #2]", cpu.R()[15]));
+    arm_cpu.execute(1);
+    EXPECT_EQ(memory.read32(0x1020), (uint32_t)0xDEADBEEF);
+    EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);  // Base unchanged
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+}
+
+// LDR (register LSR #2, pre-indexed, no writeback)
+TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_LSR_Pre_NoWB) {
+    cpu.R()[1] = 0x1000;
+    cpu.R()[3] = 0x40;    // Index register = 64
+    cpu.R()[15] = 0x00000000;
+    // With LSR #2, offset = 64 >> 2 = 16 (0x10)
+    // Load from 0x1000 + 0x10 = 0x1010
+    memory.write32(0x1010, 0xCAFEBABE);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, r3, lsr #2]", cpu.R()[15]));
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], (uint32_t)0xCAFEBABE);
+    EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+}
+
+// LDR (register ASR #2, pre-indexed, no writeback)
+TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_ASR_Pre_NoWB) {
+    cpu.R()[1] = 0x1000;
+    cpu.R()[3] = 0xFFFFFF80;  // Negative value = -128
+    cpu.R()[15] = 0x00000000;
+    // With ASR #2, offset = -128 >> 2 = -32 (0xFFFFFFE0)
+    // Load from 0x1000 + (-32) = 0x0FE0
+    memory.write32(0x0FE0, 0xABCD1234);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, r3, asr #2]", cpu.R()[15]));
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], (uint32_t)0xABCD1234);
+    EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+}
+
+// LDR (register ROR #2, pre-indexed, no writeback)
+TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_ROR_Pre_NoWB) {
+    cpu.R()[1] = 0x1000;
+    cpu.R()[3] = 0x00000003;  // Will rotate right by 2
+    cpu.R()[15] = 0x00000000;
+    // With ROR #2, offset = 3 ROR 2 = 0xC0000000 (high bit set)
+    // This creates a negative offset in signed arithmetic
+    // For now, test with a simpler case
+    cpu.R()[3] = 0x000000C0;  // 192
+    // With ROR #2, offset = 0xC0 ROR 2 = 0x30 = 48
+    // Load from 0x1000 + 48 = 0x1030
+    memory.write32(0x1030, 0x87654321);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, r3, ror #2]", cpu.R()[15]));
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], (uint32_t)0x87654321);
+    EXPECT_EQ(cpu.R()[1], (uint32_t)0x1000);
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+}
+
+// LDR (register LSL #2, pre-indexed, with writeback)
+TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_LSL_Pre_WB) {
+    cpu.R()[1] = 0x1000;
+    cpu.R()[3] = 0x04;    // Index = 4
+    cpu.R()[15] = 0x00000000;
+    // With LSL #2, offset = 4 << 2 = 16 (0x10)
+    // Load from 0x1000 + 0x10 = 0x1010
+    memory.write32(0x1010, 0xBEEFCAFE);
+    ASSERT_TRUE(assemble_and_write("ldr r2, [r1, r3, lsl #2]!", cpu.R()[15]));
+    arm_cpu.execute(1);
+    EXPECT_EQ(cpu.R()[2], (uint32_t)0xBEEFCAFE);
+    EXPECT_EQ(cpu.R()[1], (uint32_t)0x1010);  // Base updated with writeback
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+}
+
+// STR (register LSL #1, post-indexed)
+TEST_F(ARMCPUSingleDataTransferTest, STR_Reg_LSL_Post) {
+    cpu.R()[1] = 0x1000;
+    cpu.R()[2] = 0x11223344;
+    cpu.R()[3] = 0x04;    // Index = 4
+    cpu.R()[15] = 0x00000000;
+    // Post-indexed: store to [r1] = 0x1000, then r1 += (r3 << 1) = r1 += 8
+    ASSERT_TRUE(assemble_and_write("str r2, [r1], r3, lsl #1", cpu.R()[15]));
+    arm_cpu.execute(1);
+    EXPECT_EQ(memory.read32(0x1000), (uint32_t)0x11223344);
+    EXPECT_EQ(cpu.R()[1], (uint32_t)0x1008);  // Base updated after store
+    EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
+}
+
 // LDRH (register offset)
 // Instruction: 0xe19130b3
 // LDRH r3, [r1, r3]
@@ -876,7 +1008,7 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Reg_OffsetDestOverlap) {
     cpu.R()[2] = 0x10;
     cpu.R()[15] = 0x00000000;
     memory.write32(0x1010, 0xDEAD1234);
-    uint32_t instr = 0xE7912202; // LDR r2, [r1, r2]
+    uint32_t instr = 0xE7912002; // LDR r2, [r1, r2] - Fixed: was 0xE7912202 (LSL #4)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[2], (uint32_t)0xDEAD1234);
@@ -888,7 +1020,7 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Reg_OffsetSrcOverlap) {
     cpu.R()[1] = 0x1000;
     cpu.R()[2] = 0x10;
     cpu.R()[15] = 0x00000000;
-    uint32_t instr = 0xE7812202; // STR r2, [r1, r2]
+    uint32_t instr = 0xE7812002; // STR r2, [r1, r2] - Fixed: was 0xE7812202 (LSL #4)
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
     EXPECT_EQ(memory.read32(0x1010), (uint32_t)0x10);
