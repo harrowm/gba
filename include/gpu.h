@@ -118,6 +118,12 @@ struct ScreenEntry {
     uint8_t paletteNum;         // Bits 12-15: Palette bank (4bpp only, 0-15)
 };
 
+// Structure to hold BG scroll offsets
+struct BGScroll {
+    uint16_t hofs;              // Horizontal offset (0-511 for normal BGs)
+    uint16_t vofs;              // Vertical offset (0-511 for normal BGs)
+};
+
 // DISPSTAT bits
 constexpr uint16_t DISPSTAT_VBLANK = 0x0001;
 constexpr uint16_t DISPSTAT_HBLANK = 0x0002;
@@ -205,6 +211,13 @@ public:
     
     // Helper to get screen block offset for large screens
     uint32_t getScreenBlockOffset(const BGConfig& bgConfig, int tileX, int tileY);
+    
+    // Scroll functions
+    BGScroll readBGScroll(int bgNum);                           // Read scroll from registers
+    void applyScroll(const BGConfig& bgConfig, const BGScroll& scroll, 
+                     int screenX, int screenY, int& bgX, int& bgY);  // Apply scroll to coords
+    void getTileCoords(int pixelX, int pixelY, int& tileX, int& tileY, 
+                       int& pixelInTileX, int& pixelInTileY);       // Convert pixel to tile coords
 };
 
 #endif

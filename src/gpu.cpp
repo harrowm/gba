@@ -483,3 +483,63 @@ uint32_t GPU::getTileAddress(const BGConfig& bgConfig, const ScreenEntry& entry)
     
     return bgConfig.charBaseAddr + tileOffset;
 }
+
+// Scrolling Functions
+
+BGScroll GPU::readBGScroll(int bgNum) {
+    BGScroll scroll;
+    
+    // Read scroll registers for the specified background
+    if (bgNum < 0 || bgNum > 3) {
+        scroll.hofs = 0;
+        scroll.vofs = 0;
+        return scroll;
+    }
+    
+    uint32_t hofsAddr = REG_BG0HOFS + (bgNum * 4);
+    uint32_t vofsAddr = REG_BG0VOFS + (bgNum * 4);
+    
+    // Scroll registers are write-only in hardware, but we read from memory
+    // Only lower 9 bits are used (0-511)
+    scroll.hofs = memory.read16(hofsAddr) & 0x01FF;
+    scroll.vofs = memory.read16(vofsAddr) & 0x01FF;
+    
+    return scroll;
+}
+
+void GPU::applyScroll(const BGConfig& bgConfig, const BGScroll& scroll, 
+                      int screenX, int screenY, int& bgX, int& bgY) {
+    // Apply scroll offsets to screen coordinates
+    // The scroll values indicate how much the background has moved
+    bgX = (screenX + scroll.hofs) % bgConfig.screenWidthPixels;
+    bgY = (screenY + scroll.vofs) % bgConfig.screenHeightPixels;
+    
+    // Handle negative wrapping (shouldn't happen with our unsigned math, but be safe)
+    if (bgX < 0) bgX += bgConfig.screenWidthPixels;
+    if (bgY < 0) bgY += bgConfig.screenHeightPixels;
+}
+
+void GPU::getTileCoords(int pixelX, int pixelY, int& tileX, int& tileY, 
+                        int& pixelInTileX, int& pixelInTileY) {
+    // Convert pixel coordinates to tile coordinates
+    // Each tile is 8x8 pixels
+    tileX = pixelX / 8;
+    tileY = pixelY / 8;
+    
+    // Get position within the tile (0-7)
+    pixelInTileX = pixelX % 8;
+    pixelInTileY = pixelY % 8;
+    
+    // Handle negative coordinates
+    if (pixelX < 0) {
+        tileX = (pixelX - 7) / 8;
+        pixelInTileX = pixelX % 8;
+        if (pixelInTileX < 0) pixelInTileX += 8;
+    }
+    
+    if (pixelY < 0) {
+        tileY = (pixelY - 7) / 8;
+        pixelInTileY = pixelY % 8;
+        if (pixelInTileY < 0) pixelInTileY += 8;
+    }
+}
