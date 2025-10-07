@@ -15,11 +15,11 @@ class InterruptController;
 #define DMA_TIMING_SHIFT    12
 #define DMA_GAME_PAK_DRQ    0x0800
 #define DMA_TYPE_32BIT      0x0400
-#define DMA_DEST_CTRL_MASK  0x0300
-#define DMA_DEST_CTRL_SHIFT 8
+#define DMA_REPEAT          0x0200
 #define DMA_SRC_CTRL_MASK   0x0180
 #define DMA_SRC_CTRL_SHIFT  7
-#define DMA_REPEAT          0x0200
+#define DMA_DEST_CTRL_MASK  0x0060
+#define DMA_DEST_CTRL_SHIFT 5
 
 // Timing modes
 enum class DMATimingMode {

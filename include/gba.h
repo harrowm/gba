@@ -52,6 +52,7 @@ public:
     Memory& getMemory() { return memory; }
     GPU& getGPU() { return gpu; }
     Scheduler& getScheduler() { return scheduler; }
+    DMAController& getDMAController() { return dmaController; }
     uint64_t getFrameCount() const { return frameCount; }
 };
 

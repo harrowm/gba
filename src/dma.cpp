@@ -211,8 +211,12 @@ void DMAController::performTransfer(int channelId) {
     
     // Check if we should repeat
     if (channel.isRepeat() && channel.getTimingMode() != DMATimingMode::IMMEDIATE) {
-        // For repeat mode, reload destination if using INCREMENT_RELOAD
+        // For repeat mode, reload both source and destination addresses
+        channel.internalSource = channel.getSourceAddress();
         if (channel.getDestControl() == DMAAddressControl::INCREMENT_RELOAD) {
+            channel.internalDest = channel.getDestAddress();
+        } else {
+            // Even without INCREMENT_RELOAD, dest should reload in repeat mode
             channel.internalDest = channel.getDestAddress();
         }
         // Word count is reloaded automatically
@@ -222,7 +226,9 @@ void DMAController::performTransfer(int channelId) {
         } else {
             channel.internalCount = channel.getWordCount();
         }
-        // Keep active for next trigger
+        // Set active=false so it can be retriggered
+        channel.active = false;
+        // Keep enabled bit set (don't disable the DMA)
     } else {
         // Transfer complete, disable DMA
         channel.active = false;
