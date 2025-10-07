@@ -137,8 +137,8 @@ TEST_F(BGCNTTest, ComplexConfiguration) {
     EXPECT_EQ(1, config.screenSize);
     
     // Verify addresses
-    EXPECT_EQ(0x06000000 + 0x4000, config.charBaseAddr);    // Block 1
-    EXPECT_EQ(0x06000000 + 0x5000, config.screenBaseAddr);  // Block 10 (10 * 0x800)
+    EXPECT_EQ(0x06000000u + 0x4000, config.charBaseAddr);    // Block 1
+    EXPECT_EQ(0x06000000u + 0x5000, config.screenBaseAddr);  // Block 10 (10 * 0x800)
     
     // Verify dimensions
     EXPECT_EQ(64, config.screenWidthTiles);
@@ -217,38 +217,38 @@ TEST_F(BGCNTTest, TypicalMode0Config) {
 TEST_F(BGCNTTest, CharacterBaseAddresses) {
     // Block 0: 0x06000000
     BGConfig config0 = gpu->parseBGCNT(0x0000);
-    EXPECT_EQ(0x06000000, config0.charBaseAddr);
+    EXPECT_EQ(0x06000000u, config0.charBaseAddr);
     
     // Block 1: 0x06004000
     BGConfig config1 = gpu->parseBGCNT(0x0004);
-    EXPECT_EQ(0x06004000, config1.charBaseAddr);
+    EXPECT_EQ(0x06004000u, config1.charBaseAddr);
     
     // Block 2: 0x06008000
     BGConfig config2 = gpu->parseBGCNT(0x0008);
-    EXPECT_EQ(0x06008000, config2.charBaseAddr);
+    EXPECT_EQ(0x06008000u, config2.charBaseAddr);
     
     // Block 3: 0x0600C000
     BGConfig config3 = gpu->parseBGCNT(0x000C);
-    EXPECT_EQ(0x0600C000, config3.charBaseAddr);
+    EXPECT_EQ(0x0600C000u, config3.charBaseAddr);
 }
 
 // Test 13: Screen base address boundaries
 TEST_F(BGCNTTest, ScreenBaseAddresses) {
     // Block 0: 0x06000000
     BGConfig config0 = gpu->parseBGCNT(0x0000);
-    EXPECT_EQ(0x06000000, config0.screenBaseAddr);
+    EXPECT_EQ(0x06000000u, config0.screenBaseAddr);
     
     // Block 8: 0x06004000
     BGConfig config8 = gpu->parseBGCNT(0x0800);
-    EXPECT_EQ(0x06004000, config8.screenBaseAddr);
+    EXPECT_EQ(0x06004000u, config8.screenBaseAddr);
     
     // Block 16: 0x06008000
     BGConfig config16 = gpu->parseBGCNT(0x1000);
-    EXPECT_EQ(0x06008000, config16.screenBaseAddr);
+    EXPECT_EQ(0x06008000u, config16.screenBaseAddr);
     
     // Block 31: 0x0600F800
     BGConfig config31 = gpu->parseBGCNT(0x1F00);
-    EXPECT_EQ(0x0600F800, config31.screenBaseAddr);
+    EXPECT_EQ(0x0600F800u, config31.screenBaseAddr);
 }
 
 // Test 14: All bits zero
@@ -261,8 +261,8 @@ TEST_F(BGCNTTest, AllBitsZero) {
     EXPECT_FALSE(config.paletteMode);
     EXPECT_EQ(0, config.screenBaseBlock);
     EXPECT_EQ(0, config.screenSize);
-    EXPECT_EQ(0x06000000, config.charBaseAddr);
-    EXPECT_EQ(0x06000000, config.screenBaseAddr);
+    EXPECT_EQ(0x06000000u, config.charBaseAddr);
+    EXPECT_EQ(0x06000000u, config.screenBaseAddr);
     EXPECT_EQ(32, config.screenWidthTiles);
     EXPECT_EQ(32, config.screenHeightTiles);
 }

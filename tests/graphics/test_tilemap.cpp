@@ -223,13 +223,13 @@ TEST_F(TileMapTest, GetTileAddress4bpp) {
     
     ScreenEntry se;
     se.tileNumber = 0;
-    EXPECT_EQ(0x06000000, gpu->getTileAddress(config, se));
+    EXPECT_EQ(0x06000000u, gpu->getTileAddress(config, se));
     
     se.tileNumber = 1;
-    EXPECT_EQ(0x06000020, gpu->getTileAddress(config, se));  // Tile 1 at +32 bytes
+    EXPECT_EQ(0x06000020u, gpu->getTileAddress(config, se));  // Tile 1 at +32 bytes
     
     se.tileNumber = 10;
-    EXPECT_EQ(0x06000140, gpu->getTileAddress(config, se));  // Tile 10 at +320 bytes
+    EXPECT_EQ(0x06000140u, gpu->getTileAddress(config, se));  // Tile 10 at +320 bytes
 }
 
 // Test 13: Get tile address from screen entry (8bpp)
@@ -240,13 +240,13 @@ TEST_F(TileMapTest, GetTileAddress8bpp) {
     
     ScreenEntry se;
     se.tileNumber = 0;
-    EXPECT_EQ(0x06000000, gpu->getTileAddress(config, se));
+    EXPECT_EQ(0x06000000u, gpu->getTileAddress(config, se));
     
     se.tileNumber = 1;
-    EXPECT_EQ(0x06000040, gpu->getTileAddress(config, se));  // Tile 1 at +64 bytes
+    EXPECT_EQ(0x06000040u, gpu->getTileAddress(config, se));  // Tile 1 at +64 bytes
     
     se.tileNumber = 10;
-    EXPECT_EQ(0x06000280, gpu->getTileAddress(config, se));  // Tile 10 at +640 bytes
+    EXPECT_EQ(0x06000280u, gpu->getTileAddress(config, se));  // Tile 10 at +640 bytes
 }
 
 // Test 14: Screen block offset calculation

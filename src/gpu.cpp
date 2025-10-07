@@ -89,14 +89,34 @@ void GPU::setupTiming(Scheduler* scheduler) {
 }
 
 void GPU::renderScanline() {
+    // Skip rendering during VBlank
+    if (currentScanline >= SCANLINES_VISIBLE) {
+        return;
+    }
+    
+    // Check for forced blank
+    if (isForcedBlank()) {
+        renderBlankScanline(currentScanline);
+        return;
+    }
+    
     // Check video mode from DISPCNT
     uint16_t dispcnt = memory.read16(REG_DISPCNT);
     uint16_t mode = dispcnt & DISPCNT_MODE_MASK;
     
-    if (mode == DISPCNT_MODE_3) {
-        renderMode3Scanline(currentScanline);
+    switch (mode) {
+        case 0:
+            renderMode0Scanline(currentScanline);
+            break;
+        case 3:
+            renderMode3Scanline(currentScanline);
+            break;
+        // Modes 1, 2, 4, 5 not yet implemented
+        default:
+            // Unknown mode - render blank
+            clearScanlineToBackdrop(currentScanline);
+            break;
     }
-    // Other modes not yet implemented
 }
 
 void GPU::renderMode3Scanline(uint16_t scanline) {
@@ -652,5 +672,59 @@ void GPU::renderBGScanline(int bgNum, uint16_t scanline) {
         // Write to framebuffer
         int fbOffset = scanline * 240 + screenX;
         framebuffer[fbOffset] = rgb555;
+    }
+}
+
+void GPU::renderMode0Scanline(uint16_t scanline) {
+    // Mode 0: Tiled backgrounds (up to 4 backgrounds)
+    // For now, render each background in order BG0, BG1, BG2, BG3
+    // TODO: Implement priority system in Day 4 Session 2
+    
+    // First, clear the scanline to backdrop color
+    clearScanlineToBackdrop(scanline);
+    
+    // Read DISPCNT to see which backgrounds are enabled
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    
+    // Render backgrounds in reverse priority order (BG3 -> BG2 -> BG1 -> BG0)
+    // This ensures higher priority backgrounds overwrite lower priority ones
+    // TODO: Replace with proper priority-based compositing in Session 2
+    
+    if (dispcnt & DISPCNT_BG3_ENABLE) {
+        renderBGScanline(3, scanline);
+    }
+    if (dispcnt & DISPCNT_BG2_ENABLE) {
+        renderBGScanline(2, scanline);
+    }
+    if (dispcnt & DISPCNT_BG1_ENABLE) {
+        renderBGScanline(1, scanline);
+    }
+    if (dispcnt & DISPCNT_BG0_ENABLE) {
+        renderBGScanline(0, scanline);
+    }
+}
+
+void GPU::clearScanlineToBackdrop(uint16_t scanline) {
+    // Backdrop color is palette entry 0 of the background palette
+    uint32_t backdropColor = getBGColor(0, 0);
+    
+    // Convert ARGB8888 to RGB555
+    uint8_t r = (backdropColor >> 16) & 0xFF;
+    uint8_t g = (backdropColor >> 8) & 0xFF;
+    uint8_t b = backdropColor & 0xFF;
+    uint16_t rgb555 = ((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3);
+    
+    // Fill the scanline
+    int fbOffset = scanline * 240;
+    for (int x = 0; x < 240; x++) {
+        tiledFramebuffer[fbOffset + x] = rgb555;
+    }
+}
+
+void GPU::renderBlankScanline(uint16_t scanline) {
+    // Forced blank renders white (0x7FFF = maximum RGB555 value)
+    int fbOffset = scanline * 240;
+    for (int x = 0; x < 240; x++) {
+        tiledFramebuffer[fbOffset + x] = 0x7FFF;
     }
 }

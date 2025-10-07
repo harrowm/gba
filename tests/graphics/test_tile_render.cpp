@@ -210,10 +210,10 @@ TEST_F(TileRenderTest, TransparentPixels) {
     uint32_t color1 = gpu->getBGColor(0, 1);  // Should be white in ARGB8888
     // White RGB555 (0x7FFF = 31,31,31) converts to (255,255,255) in 8-bit
     // Our conversion: (val5 << 3) | (val5 >> 2) gives 255 for 31
-    EXPECT_EQ(0xFF, (color1 >> 24) & 0xFF) << "Alpha should be 255";
-    EXPECT_EQ(0xFF, (color1 >> 16) & 0xFF) << "Red should be 255";
-    EXPECT_EQ(0xFF, (color1 >> 8) & 0xFF) << "Green should be 255";
-    EXPECT_EQ(0xFF, color1 & 0xFF) << "Blue should be 255";
+    EXPECT_EQ(0xFFu, (color1 >> 24) & 0xFF) << "Alpha should be 255";
+    EXPECT_EQ(0xFFu, (color1 >> 16) & 0xFF) << "Red should be 255";
+    EXPECT_EQ(0xFFu, (color1 >> 8) & 0xFF) << "Green should be 255";
+    EXPECT_EQ(0xFFu, color1 & 0xFF) << "Blue should be 255";
 }
 
 // Test 5: Integration test - tile + palette + rendering

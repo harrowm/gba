@@ -163,7 +163,12 @@ public:
     // Rendering
     void renderScanline();
     void renderMode3Scanline(uint16_t scanline);
+    void renderMode0Scanline(uint16_t scanline);  // Mode 0: 4 tiled backgrounds
     void renderBGScanline(int bgNum, uint16_t scanline);  // Render a single background scanline
+    
+    // Helper rendering functions
+    void clearScanlineToBackdrop(uint16_t scanline);
+    void renderBlankScanline(uint16_t scanline);
     
     // VCOUNT handling
     uint16_t getCurrentScanline() const { return currentScanline; }
