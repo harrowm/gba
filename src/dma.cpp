@@ -138,11 +138,9 @@ void DMAController::startTransfer(int channelId) {
     // Word count of 0 means max transfer
     if (channel.getWordCount() == 0) {
         if (channelId == 3) {
-            // DMA3: 65536 transfers (cast explicitly because 65536 doesn't fit in uint16_t
-            // and wraps to 0, which is the correct hardware behavior for max word count)
-            channel.internalCount = static_cast<uint16_t>(65536);
+            channel.internalCount = 65536;  // DMA3: 65536 transfers
         } else {
-            channel.internalCount = 16384;   // DMA0-2: 16384
+            channel.internalCount = 16384;  // DMA0-2: 16384
         }
     } else {
         channel.internalCount = channel.getWordCount();

@@ -33,7 +33,7 @@ CPP_SRCS = \
 	$(SRC_DIR)/arm_further_decode.cpp
 
 # Test source files
-TEST_SRCS = test_dma_basic.cpp test_dma_timing.cpp
+TEST_SRCS = test_dma_basic.cpp test_dma_timing.cpp test_dma_edge_cases.cpp test_dma_performance.cpp test_dma_integration.cpp
 
 # Object files
 CPP_OBJS = $(CPP_SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)

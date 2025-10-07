@@ -75,7 +75,7 @@ public:
     // Internal state for active transfers
     uint32_t internalSource;
     uint32_t internalDest;
-    uint16_t internalCount;
+    uint32_t internalCount;  // uint32_t to handle max count of 65536
     bool active;
 
 private:
