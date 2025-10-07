@@ -31,6 +31,11 @@ constexpr uint16_t DISPSTAT_VBLANK_IRQ_ENABLE = 0x0008;
 constexpr uint16_t DISPSTAT_HBLANK_IRQ_ENABLE = 0x0010;
 constexpr uint16_t DISPSTAT_VCOUNT_IRQ_ENABLE = 0x0020;
 
+// Palette RAM addresses
+constexpr uint32_t PALETTE_BG_START = 0x05000000;
+constexpr uint32_t PALETTE_OBJ_START = 0x05000200;
+constexpr uint32_t PALETTE_SIZE = 512;  // 512 bytes for BG, 512 for OBJ
+
 class Scheduler;  // Forward declaration
 
 class GPU {
@@ -64,6 +69,19 @@ public:
     
     // Get frame buffer (Mode 3: 240x160x16bpp at 0x06000000)
     uint16_t* getFrameBuffer() { return reinterpret_cast<uint16_t*>(memory.getVRAM()); }
+    
+    // Palette functions
+    uint16_t readBGPaletteRaw(int paletteNum, int colorIndex);
+    uint16_t readOBJPaletteRaw(int paletteNum, int colorIndex);
+    uint32_t convertRGB555toARGB8888(uint16_t rgb555);
+    uint32_t getBGColor(int paletteNum, int colorIndex);
+    uint32_t getOBJColor(int paletteNum, int colorIndex);
+    
+    // Tile decoding functions
+    void decodeTile4bpp(uint32_t tileAddr, uint8_t* output);
+    void decodeTile8bpp(uint32_t tileAddr, uint8_t* output);
+    uint8_t getTilePixel4bpp(uint32_t tileAddr, int pixelX, int pixelY);
+    uint8_t getTilePixel8bpp(uint32_t tileAddr, int pixelX, int pixelY);
 };
 
 #endif
