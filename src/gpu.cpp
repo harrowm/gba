@@ -258,3 +258,59 @@ uint8_t GPU::getTilePixel8bpp(uint32_t tileAddr, int pixelX, int pixelY) {
     
     return vram[offset + pixelIndex];
 }
+
+// DISPCNT Register Parsing
+
+DisplayControl GPU::parseDISPCNT(uint16_t dispcnt) {
+    DisplayControl dc;
+    
+    // Extract all fields from DISPCNT register
+    dc.videoMode = dispcnt & DISPCNT_MODE_MASK;
+    dc.frameSelect = (dispcnt & DISPCNT_FRAME_SELECT) != 0;
+    dc.oamHBlankAccess = (dispcnt & DISPCNT_OAM_HBLANK) != 0;
+    dc.obj1DMapping = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
+    dc.forcedBlank = (dispcnt & DISPCNT_FORCED_BLANK) != 0;
+    dc.bg0Enable = (dispcnt & DISPCNT_BG0_ENABLE) != 0;
+    dc.bg1Enable = (dispcnt & DISPCNT_BG1_ENABLE) != 0;
+    dc.bg2Enable = (dispcnt & DISPCNT_BG2_ENABLE) != 0;
+    dc.bg3Enable = (dispcnt & DISPCNT_BG3_ENABLE) != 0;
+    dc.objEnable = (dispcnt & DISPCNT_OBJ_ENABLE) != 0;
+    dc.win0Enable = (dispcnt & DISPCNT_WIN0_ENABLE) != 0;
+    dc.win1Enable = (dispcnt & DISPCNT_WIN1_ENABLE) != 0;
+    dc.winObjEnable = (dispcnt & DISPCNT_WINOBJ_ENABLE) != 0;
+    
+    return dc;
+}
+
+DisplayControl GPU::readDISPCNT() {
+    // Read DISPCNT from memory and parse it
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    return parseDISPCNT(dispcnt);
+}
+
+bool GPU::isBGEnabled(int bgNum) {
+    // Check if a specific background is enabled (0-3)
+    if (bgNum < 0 || bgNum > 3) {
+        return false;
+    }
+    
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t bgBit = DISPCNT_BG0_ENABLE << bgNum;  // BG0=bit 8, BG1=bit 9, etc.
+    
+    return (dispcnt & bgBit) != 0;
+}
+
+bool GPU::isOBJEnabled() {
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    return (dispcnt & DISPCNT_OBJ_ENABLE) != 0;
+}
+
+bool GPU::isForcedBlank() {
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    return (dispcnt & DISPCNT_FORCED_BLANK) != 0;
+}
+
+uint8_t GPU::getVideoMode() {
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    return dispcnt & DISPCNT_MODE_MASK;
+}
