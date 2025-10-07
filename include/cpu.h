@@ -61,6 +61,13 @@ private:
     uint32_t banked_r13_und, banked_r14_und;
     // User mode banked SP/LR for correct restoration after exceptions
     uint32_t banked_r13_usr, banked_r14_usr;
+    
+    // Saved Program Status Registers (SPSR) for privileged modes
+    uint32_t spsr_fiq;
+    uint32_t spsr_svc;
+    uint32_t spsr_abt;
+    uint32_t spsr_irq;
+    uint32_t spsr_und;
 
     ThumbCPU* thumbCPU; // Delegate for Thumb instructions
     ARMCPU* armCPU; // Delegate for ARM instructions
@@ -137,6 +144,21 @@ public:
 
     std::array<uint32_t, 16>& R() { return registers; }
     uint32_t& CPSR() { return cpsr; }
+    
+    // SPSR (Saved Program Status Register) accessors
+    uint32_t& SPSR() {
+        switch (getMode()) {
+            case FIQ: return spsr_fiq;
+            case SVC: return spsr_svc;
+            case ABT: return spsr_abt;
+            case IRQ: return spsr_irq;
+            case UND: return spsr_und;
+            default:
+                DEBUG_ERROR("SPSR accessed in User/System mode");
+                return spsr_svc; // Return something to avoid crash
+        }
+    }
+    
     // Set mode and swap banked registers as needed
     void setMode(Mode newMode) {
         DEBUG_INFO("setMode: ENTRY oldMode=" + std::to_string((int)getMode()) + ", newMode=" + std::to_string((int)newMode));

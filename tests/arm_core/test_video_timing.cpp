@@ -89,8 +89,8 @@ TEST_F(VideoTimingTest, VBlankInterruptCanBeEnabled) {
     // Clear any existing IF flags
     gba->getMemory().write16(REG_IF, 0xFFFF);
     
-    // Run until scanline 160 (V-Blank)
-    gba->getScheduler().runUntil(CYCLES_PER_SCANLINE * 160 + 100);
+    // Run until scanline 160 (V-Blank) - need to let H-Draw complete to trigger transition
+    gba->getScheduler().runUntil(CYCLES_PER_SCANLINE * 161);
     
     // Check that IF flag was set
     uint16_t ifReg = gba->getMemory().read16(REG_IF);

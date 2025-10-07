@@ -8,6 +8,7 @@
 
 // Forward declaration to avoid circular dependency
 class Scheduler;
+class TimerController;
 
 class Memory {
 public:
@@ -19,6 +20,7 @@ public:
 
     // Scheduler integration
     void setScheduler(Scheduler* sched) { scheduler = sched; }
+    void setTimerController(TimerController* tc) { timerController = tc; }
 
     // Accessors (now with cycle-accurate timing)
     uint8_t read8(uint32_t address) const;
@@ -27,6 +29,10 @@ public:
     void write16(uint32_t address, uint16_t value);
     uint32_t read32(uint32_t address) const;
     void write32(uint32_t address, uint32_t value);
+    
+    // Direct I/O write (bypasses special handling like write-to-clear)
+    // Used by hardware components to set registers
+    void writeDirectIO(uint32_t address, uint16_t value);
 
     // Get wait states for an address (for testing/debugging)
     uint32_t getWaitStates(uint32_t address, uint32_t accessWidth) const;
@@ -58,6 +64,9 @@ private:
 
     // Scheduler for cycle-accurate timing
     Scheduler* scheduler = nullptr;
+    
+    // Timer controller for timer register handling
+    TimerController* timerController = nullptr;
     
     // Helper to add wait state cycles
     void addWaitCycles(uint32_t address, uint32_t accessWidth) const;

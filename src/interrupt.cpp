@@ -13,7 +13,10 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
     
     // Set the interrupt request flag
     ifReg |= irqFlag;
-    memory->write16(REG_IF, ifReg);
+    
+    // Write directly to I/O memory (bypass write-to-clear logic)
+    // This is an internal write from hardware, not from CPU
+    memory->writeDirectIO(REG_IF, ifReg);
     
     DEBUG_INFO("Interrupt requested: 0x" + debug_to_hex_string(irqFlag, 4));
     

@@ -19,6 +19,13 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     banked_r13_irq = banked_r14_irq = 0;
     banked_r13_und = banked_r14_und = 0;
     banked_r13_usr = banked_r14_usr = 0;
+    
+    // Initialize all SPSR registers to zero
+    spsr_fiq = 0;
+    spsr_svc = 0;
+    spsr_abt = 0;
+    spsr_irq = 0;
+    spsr_und = 0;
 
     // Initialize timing system
     timing_init(&timing);
@@ -150,30 +157,41 @@ bool CPU::checkPendingInterrupts() {
 void CPU::handleInterrupt() {
     DEBUG_INFO("CPU: Handling interrupt");
     
-    // Save current PC+4 to LR_irq
-    // In ARM mode, PC is current instruction + 8
-    // In Thumb mode, PC is current instruction + 4
-    uint32_t returnAddress = registers[15] + (getFlag(FLAG_T) ? 0 : 4);
+    // Save current CPSR before mode switch
+    uint32_t old_cpsr = cpsr;
     
-    // Switch to IRQ mode
+    // Calculate return address
+    // In ARM mode, PC+4 (current instruction + 8, then -4 for return)
+    // In Thumb mode, PC+4 is sufficient (current instruction + 4)
+    uint32_t returnAddress;
+    if (getFlag(FLAG_T)) {
+        // Thumb mode: PC already points to next instruction + 2
+        returnAddress = registers[15];
+    } else {
+        // ARM mode: PC+4 to return to instruction after current one
+        returnAddress = registers[15] + 4;
+    }
+    
+    // Switch to IRQ mode (this handles register banking)
     setMode(IRQ);
     
-    // Now that we're in IRQ mode, set LR_irq
-    registers[14] = returnAddress; // LR_irq
+    // Save old CPSR to SPSR_irq
+    SPSR() = old_cpsr;
     
-    // Save old CPSR to SPSR_irq (not implemented yet, would need SPSR banking)
-    // TODO: Implement SPSR (Saved Program Status Register) banking
+    // Set LR_irq to return address
+    registers[14] = returnAddress;
     
-    // Disable further interrupts (set I flag)
+    // Disable further interrupts (set I flag in CPSR)
     cpsr |= 0x80; // Set I flag (bit 7)
     
-    // Switch to ARM mode (clear T flag)
+    // Switch to ARM mode (clear T flag in CPSR)
     cpsr &= ~FLAG_T;
     
     // Set PC to IRQ vector (0x00000018)
     registers[15] = 0x00000018;
     
-    DEBUG_INFO("CPU: Interrupt handled, jumped to 0x00000018");
+    DEBUG_INFO("CPU: Interrupt handled, jumped to IRQ vector 0x00000018, return address = 0x" + 
+               debug_to_hex_string(returnAddress, 8));
 }
 
 // ============================================================================

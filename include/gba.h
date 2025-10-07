@@ -6,6 +6,7 @@
 #include "memory.h"
 #include "interrupt.h"
 #include "scheduler.h"
+#include "timer_controller.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -18,6 +19,7 @@ private:
     CPU* cpu;
     GPU gpu;
     InterruptController interruptController;
+    TimerController timerController;
 
     std::mutex syncMutex;
     std::condition_variable syncCondition;

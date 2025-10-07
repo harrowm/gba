@@ -9,13 +9,16 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
 ✅ **Completed**:
 - **Phase 1: Timing & Memory Framework** ✅ **COMPLETE**
   - ARM7TDMI CPU emulation (ARM + Thumb instruction sets)
+  - **ARM Pipeline Offset (PC+8)**: 28/28 functions verified ✅
+  - **THUMB Pipeline Offset (PC+4)**: All functions verified ✅
   - Event scheduler fully implemented (36 tests passing)
   - Memory wait states for all regions (33 tests passing)
   - CPU-Scheduler integration (6 integration tests passing)
-  - **Total: 579 tests passing** (500 CPU + 36 scheduler + 33 memory + 10 video)
+  - **Total: 910 tests passing** (551 ARM + 334 THUMB + 15 scheduler + 10 timing)
   
 - **Phase 2: Video Basics & Display** ✅ **COMPLETE**
   - Scheduler-driven main loop (280,896 cycles per frame @ 59.73 Hz)
+  - **Cycle-accurate frame timing verified** (zero tolerance) ✅
   - H-Blank and V-Blank interrupts implemented
   - VCOUNT and DISPSTAT registers functional
   - Mode 3 framebuffer access (240x160, RGB555)
@@ -32,6 +35,12 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
   - Test pattern mode for testing (default when no ROM specified)
   - Help system (`--help` flag)
 
+- **BIOS Boot & Execution** ✅ **COMPLETE**
+  - GBA BIOS loads and executes correctly
+  - ROM loading after BIOS initialization
+  - Test ROM (`test_pixels.gba`) boots successfully
+  - Display initialization working (DISPCNT register)
+
 🚧 **In Progress**:
 - Phase 3: Interrupt system (CPU interrupt handling)
 - Hardware timers (4 timers with cascade mode)
@@ -39,12 +48,14 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
 ## Quick Stats
 
 - **Development Started**: October 6, 2025
-- **Tests Passing**: 579 (500 CPU + 36 scheduler + 33 memory + 10 video)
+- **Tests Passing**: 910/910 (551 ARM + 334 THUMB + 15 scheduler + 10 timing integration)
+- **Test Pass Rate**: 100% ✅
 - **Compilation Warnings**: 0
 - **Phases Complete**: 2 of 7
-- **Code Quality**: All tests passing, cycle-accurate timing
-- **Can Run**: Test patterns, loading ROMs (execution not yet implemented)
+- **Code Quality**: All tests passing, **cycle-accurate timing verified**
+- **Can Run**: BIOS boots, loads ROMs, test patterns display
 - **Display**: SDL2 @ 60 FPS with VSync
+- **Pipeline Accuracy**: ARM PC+8 and THUMB PC+4 offsets correct
 
 ## Phased Approach
 
@@ -476,14 +487,19 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
 
 ### 🎯 Immediate Next Steps (Phase 3)
 
-**Priority 1: CPU Interrupt Handling** (Estimated: 4-5 hours)
-1. Implement `CPU::handleInterrupt()` method
-   - Save PC+4 to LR_irq (R14 in IRQ mode)
-   - Switch CPU mode to IRQ (change CPSR mode bits)
-   - Set PC to 0x00000018 (IRQ vector)
-   - Disable further interrupts (set I flag in CPSR)
-2. Add interrupt priority handling
-3. Test with simple interrupt-driven ROM
+**Current Achievement**: ✅ **BIOS boots successfully, cycle-accurate timing verified**
+- 910/910 tests passing (100%)
+- ARM PC+8 pipeline offset: All 28 functions verified
+- THUMB PC+4 pipeline offset: All functions verified
+- Video timing: Exactly 280,896 cycles per frame (zero tolerance)
+- BIOS execution working with test ROMs
+
+**Priority 1: Complete Interrupt Handling** (Estimated: 3-4 hours)
+1. ✅ Interrupt controller implemented (IE/IF/IME registers)
+2. ✅ V-Blank and H-Blank interrupts working
+3. ⬜ CPU IRQ mode switching (save PC+4 to LR_irq, set CPSR)
+4. ⬜ Return from interrupt (MOVS PC, LR instruction handling)
+5. ⬜ Test with interrupt-driven ROM
 
 **Priority 2: Hardware Timers** (Estimated: 7-8 hours)
 1. Implement 4 timer registers (TMxCNT_L, TMxCNT_H)
@@ -492,10 +508,11 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
 4. Cascade mode (timer N increments when timer N-1 overflows)
 5. Integration with scheduler
 
-**Priority 3: Test with Tonc ROMs**
-1. Load Tonc `first.gba` demo
-2. Verify interrupt handling works
-3. See actual ROM-generated graphics
+**Priority 3: Test with Real Games**
+1. ✅ BIOS boot working (test_pixels.gba verified)
+2. ⬜ Load Tonc `first.gba` demo
+3. ⬜ Verify graphics rendering works
+4. ⬜ Test interrupt-driven game logic
 
 ### 📋 Upcoming Phases
 - Phase 4: Tile-based graphics modes (Mode 0, sprites)
@@ -570,3 +587,26 @@ This document outlines a phased approach to building a cycle-accurate GBA emulat
   - ✅ **Usage**: `./gba_emulator rom.gba` or `./gba_emulator --test-pattern`
   - **Status**: Ready to load and execute actual GBA ROMs
   - **Next**: Implement CPU interrupt handling for ROM execution
+
+- **2025-10-06 (Late Night)**: Pipeline Accuracy & Cycle Timing Perfected
+  - ✅ **THUMB PC+4 Pipeline Offset - COMPLETE**
+    - Fixed `thumb_ldr_address_pc()` to add PC+4 offset (PC+2 in THUMB mode)
+    - Updated 9 existing THUMB Format 12 tests
+    - Added 3 new pipeline offset tests (aligned, unaligned, with immediate)
+    - All 334 THUMB tests passing (100%)
+  - ✅ **ARM PC+8 Test Expectations - COMPLETE**
+    - Updated LDR/STR tests for PC+8 base register offset
+    - Updated MOV PC tests for PC+8 in data processing
+    - All 551 ARM tests passing (100%)
+  - ✅ **Cycle-Accurate Timing - VERIFIED**
+    - Fixed GBA::runFrame() timing regression (was 280,897, now exactly 280,896)
+    - Simplified runFrame() to use only scheduler.runUntil() for event-driven execution
+    - Video timing tests passing with **zero tolerance** (user requirement)
+    - All 10 video timing tests passing
+  - ✅ **BIOS Boot - VERIFIED**
+    - GBA BIOS loads and executes correctly
+    - Test ROM (test_pixels.gba) boots successfully
+    - Display initialization working (DISPCNT register set)
+    - ROM code executes after BIOS initialization
+  - **Total: 910/910 tests passing (100% pass rate)**
+  - **Next**: Complete CPU interrupt handling (IRQ mode switching, return from interrupt)

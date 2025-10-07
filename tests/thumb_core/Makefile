@@ -39,14 +39,15 @@ CPP_SRCS = test_thumb01.cpp \
 	../../src/thumb_cpu.cpp \
 	../../src/gba.cpp \
 	../../src/gpu.cpp \
-	../../src/scheduler.cpp
+	../../src/scheduler.cpp \
+	../../src/interrupt.cpp \
+	../../src/timer_controller.cpp
 
 
 C_SRCS = ../../src/arm_timing.c \
 	../../src/thumb_timing.c \
 	../../src/timer.c \
-	../../src/timing.c \
-	../../src/interrupt.c
+	../../src/timing.c
 
 BUILD_DIR = build
 CPP_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(CPP_SRCS:.cpp=.o)))

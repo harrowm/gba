@@ -1,6 +1,7 @@
 // Memory class implementation for GBA emulator (region pointer table version)
 #include "memory.h"
 #include "scheduler.h"
+#include "timer_controller.h"
 #include "debug.h"
 #include <cstring>
 #include <cstdint>
@@ -159,6 +160,21 @@ void Memory::write8(uint32_t address, uint8_t value) {
 
 uint16_t Memory::read16(uint32_t address) const {
     addWaitCycles(address, 16);
+    
+    // Handle timer register reads
+    if (timerController) {
+        if (address >= 0x04000100 && address <= 0x0400010E) {
+            int timerID = (address - 0x04000100) / 4;
+            bool isControl = ((address - 0x04000100) % 4) == 2;
+            
+            if (isControl) {
+                return timerController->readControl(timerID);
+            } else {
+                return timerController->readCounter(timerID);
+            }
+        }
+    }
+    
     uint32_t rot = (address & 1) * 8;
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
@@ -169,11 +185,37 @@ uint16_t Memory::read16(uint32_t address) const {
 
 void Memory::write16(uint32_t address, uint16_t value) {
     addWaitCycles(address, 16);
+    
+    // Handle timer register writes
+    if (timerController) {
+        if (address >= 0x04000100 && address <= 0x0400010E) {
+            int timerID = (address - 0x04000100) / 4;
+            bool isControl = ((address - 0x04000100) % 4) == 2;
+            
+            if (isControl) {
+                timerController->writeControl(timerID, value);
+            } else {
+                timerController->writeReload(timerID, value);
+            }
+            // Don't return - also write to memory for debugging
+        }
+    }
+    
     uint32_t rot = (address & 1) * 8;
     uint16_t val = (value << rot) | (value >> (16 - rot));
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
+    
+    // Special handling for IF register (write 1 to clear)
+    if (address == 0x04000202) {  // REG_IF
+        uint16_t currentIF = base[offset] | (base[(offset + 1) % Memory::BLOCK_SIZE] << 8);
+        uint16_t newIF = currentIF & ~val;  // Clear bits where value has 1
+        base[offset] = newIF & 0xFF;
+        base[(offset + 1) % Memory::BLOCK_SIZE] = (newIF >> 8) & 0xFF;
+        printf("[REG Write] IF acknowledge = 0x%04X, new IF = 0x%04X\n", val, newIF);
+        return;
+    }
     
     // Debug: Track VRAM writes (commented out - verified working)
     // if (address >= 0x06000000 && address < 0x06018000) {
@@ -197,6 +239,17 @@ void Memory::write16(uint32_t address, uint16_t value) {
     
     base[offset] = val & 0xFF;
     base[(offset + 1) % Memory::BLOCK_SIZE] = (val >> 8) & 0xFF;
+}
+
+void Memory::writeDirectIO(uint32_t address, uint16_t value) {
+    // Direct write to I/O registers (bypasses write-to-clear and other special handling)
+    // Used by hardware components to set registers
+    uint32_t offset;
+    uint8_t* base = get_region_base(this->regionTable, address, offset);
+    if (!base) return;
+    
+    base[offset] = value & 0xFF;
+    base[(offset + 1) % Memory::BLOCK_SIZE] = (value >> 8) & 0xFF;
 }
 
 uint32_t Memory::read32(uint32_t address) const {

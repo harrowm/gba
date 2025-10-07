@@ -36,6 +36,7 @@ RUN_ALL_SRCS = test_basic.cpp \
   ../../src/timer.c \
   ../../src/timing.c \
   ../../src/interrupt.cpp \
+  ../../src/timer_controller.cpp \
   ../../src/gba.cpp \
   ../../src/gpu.cpp
 

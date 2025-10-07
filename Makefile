@@ -36,6 +36,7 @@ CPP_SOURCES = \
 	$(SRC_DIR)/gpu.cpp \
 	$(SRC_DIR)/scheduler.cpp \
 	$(SRC_DIR)/interrupt.cpp \
+	$(SRC_DIR)/timer_controller.cpp \
 	$(SRC_DIR)/debug.cpp \
 	$(SRC_DIR)/display.cpp
 
