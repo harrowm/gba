@@ -71,7 +71,7 @@ Memory::Memory(bool testMode) {
         // --- VRAM: 96KB at 0x06000000, mirrored in 128KB ---
         vram = (uint8_t*)std::malloc(96 * 1024);
         regionTable[0x06000000 / BLOCK_SIZE] = vram;
-        regionTable[0x06010000 / BLOCK_SIZE] = vram + (0x010000); // 64KB offset
+        regionTable[0x06010000 / BLOCK_SIZE] = vram;  // Both blocks point to base, mirroring handled by offset calc
 
         // --- OAM: 1KB at 0x07000000, mirrored in 8KB ---
         oam = (uint8_t*)std::malloc(1 * 1024);

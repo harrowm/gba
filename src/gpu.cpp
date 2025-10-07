@@ -1007,20 +1007,21 @@ void GPU::renderSingleSprite(const OBJAttributes& obj, uint16_t scanline) {
         // Get tile address
         uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
         
-        // Get pixel color index
-        // TODO: Optimize this - currently using memory.read8() instead of getVRAM() pointer
-        // because of a pointer issue with OBJ VRAM region
+        // Get pixel color index using direct VRAM access
+        uint8_t* vram = memory.getVRAM();
+        uint32_t vramOffset = tileAddr - 0x06000000;
+        
         uint8_t colorIndex;
         if (obj.paletteMode) {
             // 8bpp mode: 1 byte per pixel
             int pixelIndex = pixelYInTile * 8 + pixelXInTile;
-            colorIndex = memory.read8(tileAddr + pixelIndex);
+            colorIndex = vram[vramOffset + pixelIndex];
         } else {
             // 4bpp mode: 2 pixels per byte
             int pixelIndex = pixelYInTile * 8 + pixelXInTile;
             int byteOffset = pixelIndex / 2;
             int pixelInByte = pixelIndex % 2;
-            uint8_t byte = memory.read8(tileAddr + byteOffset);
+            uint8_t byte = vram[vramOffset + byteOffset];
             colorIndex = (pixelInByte == 0) ? (byte & 0x0F) : ((byte >> 4) & 0x0F);
         }
         
