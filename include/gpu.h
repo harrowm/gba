@@ -321,13 +321,16 @@ public:
     
     // Priority + window rendering (Session 3 integration)
     void renderBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, uint16_t* lineBuffer, 
-                                                uint8_t* priorityBuffer, uint8_t* layerTypeBuffer, 
+                                                uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                                                uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                 const WindowControl& winCtrl);
     void renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer, 
                                              uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                                             uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                              const WindowControl& winCtrl);
-    void applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, uint16_t scanline,
-                              const BlendControl& blend);
+    void applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, 
+                              uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+                              uint16_t scanline, const BlendControl& blend);
     
     // Helper rendering functions
     void clearScanlineToBackdrop(uint16_t scanline);
@@ -477,12 +480,14 @@ public:
     void renderNormalSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
                                                   uint16_t* lineBuffer, uint8_t* priorityBuffer,
                                                   uint8_t* layerTypeBuffer, uint8_t layerPriority,
+                                                  uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                   bool mapping1D, const WindowControl& winCtrl);
     void renderAffineSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
                                                   const AffineParams& params, uint16_t* lineBuffer,
                                                   uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
-                                                  uint8_t layerPriority, bool mapping1D,
-                                                  const WindowControl& winCtrl);
+                                                  uint8_t layerPriority,
+                                                  uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+                                                  bool mapping1D, const WindowControl& winCtrl);
     
     // Blend and window functions (Session 3: Advanced Features)
     BlendControl readBlendControl();                            // Read and parse blend registers

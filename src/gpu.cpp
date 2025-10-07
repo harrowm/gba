@@ -1297,12 +1297,18 @@ void GPU::renderScanline(uint16_t scanline) {
     uint8_t priorityBuffer[240];
     uint8_t layerTypeBuffer[240];  // Track which layer type each pixel came from
     
+    // Second layer tracking for alpha blending
+    uint16_t secondLayerBuffer[240];
+    uint8_t secondLayerTypeBuffer[240];
+    
     // 1. Fill line buffers with backdrop color (lowest priority)
     uint16_t backdrop = memory.read16(0x05000000);  // Palette 0, color 0
     for (int i = 0; i < 240; i++) {
         lineBuffer[i] = backdrop;
         priorityBuffer[i] = 255;  // Lowest possible priority
         layerTypeBuffer[i] = 5;   // 5 = Backdrop
+        secondLayerBuffer[i] = backdrop;
+        secondLayerTypeBuffer[i] = 5;  // 5 = Backdrop
     }
     
     // 2. Render each priority level (back to front: 3 → 0)
@@ -1324,12 +1330,17 @@ void GPU::renderScanline(uint16_t scanline) {
                     // Render with window checking if windows are enabled
                     if (windowsEnabled) {
                         renderBGScanlineWithPriorityAndWindow(bg, scanline, lineBuffer, 
-                                                               priorityBuffer, layerTypeBuffer, winCtrl);
+                                                               priorityBuffer, layerTypeBuffer,
+                                                               secondLayerBuffer, secondLayerTypeBuffer, winCtrl);
                     } else {
                         renderBGScanlineWithPriority(bg, scanline, lineBuffer, priorityBuffer);
-                        // Update layer type buffer for pixels that changed
+                        // Update layer type buffer AND second layer buffer for pixels that changed
                         for (int x = 0; x < 240; x++) {
                             if (lineBuffer[x] != oldLineBuffer[x]) {
+                                // Save old pixel as second layer
+                                secondLayerBuffer[x] = oldLineBuffer[x];
+                                secondLayerTypeBuffer[x] = layerTypeBuffer[x];
+                                // Update first layer type
                                 layerTypeBuffer[x] = bg;
                             }
                         }
@@ -1348,12 +1359,17 @@ void GPU::renderScanline(uint16_t scanline) {
             
             if (windowsEnabled) {
                 renderSpritesWithPriorityAndWindow(priority, scanline, lineBuffer, 
-                                                    priorityBuffer, layerTypeBuffer, winCtrl);
+                                                    priorityBuffer, layerTypeBuffer,
+                                                    secondLayerBuffer, secondLayerTypeBuffer, winCtrl);
             } else {
                 renderSpritesWithPriority(priority, scanline, lineBuffer, priorityBuffer);
-                // Update layer type buffer for pixels that changed
+                // Update layer type buffer AND second layer buffer for pixels that changed
                 for (int x = 0; x < 240; x++) {
                     if (lineBuffer[x] != oldLineBuffer[x]) {
+                        // Save old pixel as second layer
+                        secondLayerBuffer[x] = oldLineBuffer[x];
+                        secondLayerTypeBuffer[x] = layerTypeBuffer[x];
+                        // Update first layer type
                         layerTypeBuffer[x] = 4;  // 4 = OBJ
                     }
                 }
@@ -1363,7 +1379,8 @@ void GPU::renderScanline(uint16_t scanline) {
     
     // 3. Apply blend effects if enabled
     if (blend.mode != BLEND_MODE_OFF) {
-        applyBlendToScanline(lineBuffer, layerTypeBuffer, scanline, blend);
+        applyBlendToScanline(lineBuffer, layerTypeBuffer, secondLayerBuffer, 
+                             secondLayerTypeBuffer, scanline, blend);
     }
     
     // 4. Copy line buffer to framebuffer
@@ -1955,6 +1972,7 @@ uint16_t GPU::applyBlend(uint16_t color1, uint16_t color2, const BlendControl& b
 
 void GPU::renderBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, uint16_t* lineBuffer,
                                                   uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                                                  uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                   const WindowControl& winCtrl) {
     // Get BG configuration
     uint16_t bgcnt = memory.read16(REG_BG0CNT + (bgNum * 2));
@@ -2024,6 +2042,10 @@ void GPU::renderBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, ui
                 rgb555 = memory.read16(0x05000000 + paletteIndex * 2);
             }
             
+            // Save current pixel as second layer (for alpha blending)
+            secondLayerBuffer[screenX] = lineBuffer[screenX];
+            secondLayerTypeBuffer[screenX] = layerTypeBuffer[screenX];
+            
             // Update buffers
             lineBuffer[screenX] = rgb555;
             priorityBuffer[screenX] = layerPriority;
@@ -2034,6 +2056,7 @@ void GPU::renderBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, ui
 
 void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer,
                                                uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                                               uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                const WindowControl& winCtrl) {
     // Get sprite mapping mode
     uint16_t dispcnt = memory.read16(REG_DISPCNT);
@@ -2067,11 +2090,13 @@ void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline
             AffineParams params = readAffineParams(obj.rotScaleParam);
             renderAffineSpriteWithPriorityAndWindow(obj, scanline, params, lineBuffer,
                                                      priorityBuffer, layerTypeBuffer, 
-                                                     layerPriority, mapping1D, winCtrl);
+                                                     layerPriority, secondLayerBuffer, 
+                                                     secondLayerTypeBuffer, mapping1D, winCtrl);
         } else {
             renderNormalSpriteWithPriorityAndWindow(obj, scanline, lineBuffer, 
                                                      priorityBuffer, layerTypeBuffer,
-                                                     layerPriority, mapping1D, winCtrl);
+                                                     layerPriority, secondLayerBuffer,
+                                                     secondLayerTypeBuffer, mapping1D, winCtrl);
         }
     }
 }
@@ -2079,6 +2104,7 @@ void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline
 void GPU::renderNormalSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
                                                     uint16_t* lineBuffer, uint8_t* priorityBuffer,
                                                     uint8_t* layerTypeBuffer, uint8_t layerPriority,
+                                                    uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                     bool mapping1D, const WindowControl& winCtrl) {
     // Existing implementation from renderNormalSpriteWithPriority, but add window check
     int spriteY = (obj.y < 160) ? obj.y : (obj.y - 256);
@@ -2144,6 +2170,10 @@ void GPU::renderNormalSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint
         
         uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
         
+        // Save current pixel as second layer (for alpha blending)
+        secondLayerBuffer[screenX] = lineBuffer[screenX];
+        secondLayerTypeBuffer[screenX] = layerTypeBuffer[screenX];
+        
         lineBuffer[screenX] = rgb555;
         priorityBuffer[screenX] = layerPriority;
         layerTypeBuffer[screenX] = 4;  // 4 = OBJ
@@ -2153,8 +2183,9 @@ void GPU::renderNormalSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint
 void GPU::renderAffineSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
                                                     const AffineParams& params, uint16_t* lineBuffer,
                                                     uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
-                                                    uint8_t layerPriority, bool mapping1D,
-                                                    const WindowControl& winCtrl) {
+                                                    uint8_t layerPriority,
+                                                    uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+                                                    bool mapping1D, const WindowControl& winCtrl) {
     // Similar to renderAffineSpriteWithPriority but with window checking
     int renderWidth = obj.width;
     int renderHeight = obj.height;
@@ -2240,6 +2271,10 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint
         
         uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
         
+        // Save current pixel as second layer (for alpha blending)
+        secondLayerBuffer[screenX] = lineBuffer[screenX];
+        secondLayerTypeBuffer[screenX] = layerTypeBuffer[screenX];
+        
         lineBuffer[screenX] = rgb555;
         priorityBuffer[screenX] = layerPriority;
         layerTypeBuffer[screenX] = 4;
@@ -2247,22 +2282,31 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint
 }
 
 void GPU::applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, 
+                                uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                 uint16_t scanline, const BlendControl& blend) {
     // Apply blend effects based on mode
     switch (blend.mode) {
         case BLEND_MODE_ALPHA:
-            // For alpha blending, we need two layers
-            // In a full implementation, we'd track the second layer
-            // For now, simplified: blend with backdrop if first target
+            // Full alpha blending with second layer tracking
             for (int x = 0; x < 240; x++) {
-                uint8_t layerType = layerTypeBuffer[x];
-                bool isFirstTarget = (blend.firstTargets & (1 << layerType)) != 0;
+                uint8_t firstLayerType = layerTypeBuffer[x];
+                uint8_t secondLayerType = secondLayerTypeBuffer[x];
                 
-                if (isFirstTarget) {
-                    // For proper alpha blend, we'd need the second layer
-                    // For now, just mark that blending would occur
-                    // Full implementation would track second layer in rendering
+                // Check if first layer is a first target
+                bool isFirstTarget = (blend.firstTargets & (1 << firstLayerType)) != 0;
+                if (!isFirstTarget) {
+                    continue;  // No blending if not a first target
                 }
+                
+                // Check if second layer is a second target
+                bool isSecondTarget = (blend.secondTargets & (1 << secondLayerType)) != 0;
+                if (!isSecondTarget) {
+                    continue;  // No blending if second layer not a second target
+                }
+                
+                // Apply alpha blend between first and second layer
+                lineBuffer[x] = applyBlend(lineBuffer[x], secondLayerBuffer[x], blend, 
+                                           firstLayerType, secondLayerType);
             }
             break;
             
