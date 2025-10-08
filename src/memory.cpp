@@ -327,13 +327,14 @@ uint32_t Memory::read32(uint32_t address) const {
     }
     
     uint32_t rot = (address & 3) * 8;
+    uint32_t aligned_address = address & ~3u;  // Align to 4-byte boundary
     uint32_t offset;
-    uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
+    uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), aligned_address, offset);
     if (!base) return 0xFFFFFFFF;
     uint32_t val = base[offset]
-        | (base[(offset + 1) % Memory::BLOCK_SIZE] << 8)
-        | (base[(offset + 2) % Memory::BLOCK_SIZE] << 16)
-        | (base[(offset + 3) % Memory::BLOCK_SIZE] << 24);
+        | (base[offset + 1] << 8)
+        | (base[offset + 2] << 16)
+        | (base[offset + 3] << 24);
     // Debug: Print reads from entry point
     if (address == 0x080000B4) {
         printf("[Memory::read32] Read from 0x%08X: 0x%08X\n", address, val);

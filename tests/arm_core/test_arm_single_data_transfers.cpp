@@ -1037,8 +1037,10 @@ TEST_F(ARMCPUSingleDataTransferTest, LDR_Imm_Unaligned) {
     uint32_t instr = 0xE5912000; // LDR r2, [r1]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    // ARM LDR from unaligned address: result is rotated
-    EXPECT_EQ(cpu.R()[2], (uint32_t)0xBE00DEAD); // implementation-defined, check for bswap for GBA
+    // ARM LDR from unaligned address: implementation-defined behavior
+    // Our emulator uses standard ARM7TDMI: read from aligned address, then rotate
+    // 0xDEADBEEF at 0x1000, read aligned -> 0xDEADBEEF, rotate right by 8 -> 0xEFDEADBE
+    EXPECT_EQ(cpu.R()[2], (uint32_t)0xEFDEADBE);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
