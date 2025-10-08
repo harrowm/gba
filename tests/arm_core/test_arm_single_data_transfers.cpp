@@ -1053,8 +1053,11 @@ TEST_F(ARMCPUSingleDataTransferTest, STR_Imm_Unaligned) {
     uint32_t instr = 0xE5812000; // STR r2, [r1]
     memory.write32(cpu.R()[15], instr);
     arm_cpu.execute(1);
-    // Only aligned portion is written, check 0x1000-0x1003
-    EXPECT_EQ(memory.read32(0x1000), (uint32_t)0xBABBCCDD); // implementation-defined, will be partial for GBA
+    // ARM7TDMI unaligned word store behavior:
+    // - Address 0x1003 aligned to 0x1000
+    // - Value 0xCAFEBABE rotated left by 24 bits = 0xBECAFEBA
+    // - Result at 0x1000: 0xBECAFEBA
+    EXPECT_EQ(memory.read32(0x1000), (uint32_t)0xBECAFEBA);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x00000004);
 }
 
