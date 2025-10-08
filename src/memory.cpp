@@ -309,6 +309,22 @@ void Memory::writeDirectIO(uint32_t address, uint16_t value) {
     base[(offset + 1) % Memory::BLOCK_SIZE] = (value >> 8) & 0xFF;
 }
 
+// ARM7TDMI Unaligned Word Access (LDR)
+// Reference: ARM7TDMI Technical Reference Manual, Section 6.3 (Memory Interface)
+// https://developer.arm.com/documentation/ddi0210/c/
+//
+// When a word load (LDR) is performed with an unaligned address:
+// 1. Address is aligned down to 4-byte boundary (address & ~3)
+// 2. Word is read from the aligned address
+// 3. Result is rotated RIGHT by (address & 3) * 8 bits
+//
+// Example: LDR from address 0x1003 (unaligned by 3 bytes)
+//   - Reads word from 0x1000 (aligned)
+//   - Rotates result right by 24 bits (3 * 8)
+//   - This effectively moves byte at 0x1003 to LSB position
+//
+// This behavior allows unaligned loads to work predictably, with the
+// byte at the requested address ending up in the LSB of the result.
 uint32_t Memory::read32(uint32_t address) const {
     addWaitCycles(address, 32);
     
@@ -342,6 +358,24 @@ uint32_t Memory::read32(uint32_t address) const {
     return (val >> rot) | (val << (32 - rot));
 }
 
+// ARM7TDMI Unaligned Word Access (STR)
+// Reference: ARM7TDMI Technical Reference Manual, Section 6.3 (Memory Interface)
+// https://developer.arm.com/documentation/ddi0210/c/
+//
+// When a word store (STR) is performed with an unaligned address:
+// 1. Address is aligned down to 4-byte boundary (address & ~3)
+// 2. Value is rotated LEFT by (address & 3) * 8 bits
+// 3. Rotated value is written to the aligned address
+//
+// Example: STR 0xAABBCCDD to address 0x1003 (unaligned by 3 bytes)
+//   - Rotates value left by 24 bits: 0xDDAABBCC
+//   - Writes to aligned address 0x1000
+//   - Memory at 0x1000: 0xCC, 0x1001: 0xBB, 0x1002: 0xAA, 0x1003: 0xDD
+//
+// This matches the read behavior: if you STR then LDR at the same
+// unaligned address, you get back the original value (rotations cancel out).
+//
+// Note: This is standard ARM7TDMI behavior, not a GBA-specific quirk.
 void Memory::write32(uint32_t address, uint32_t value) {
     addWaitCycles(address, 32);
     
@@ -363,8 +397,9 @@ void Memory::write32(uint32_t address, uint32_t value) {
     
     uint32_t rot = (address & 3) * 8;
     uint32_t val = (value << rot) | (value >> (32 - rot));
+    uint32_t aligned_address = address & ~3u;  // Align to 4-byte boundary
     uint32_t offset;
-    uint8_t* base = get_region_base(this->regionTable, address, offset);
+    uint8_t* base = get_region_base(this->regionTable, aligned_address, offset);
     if (!base) return;
     
     // Debug: Track VRAM writes

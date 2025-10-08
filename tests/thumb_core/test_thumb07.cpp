@@ -420,14 +420,19 @@ TEST_F(ThumbCPUTest7, EdgeCasesAndBoundaryConditions) {
     // The exact behavior depends on implementation, but instruction should complete
     EXPECT_EQ(cpu.R()[15], 0x00000012u);
     
-    // Test 3: Maximum offset value
+    // Test 3: Maximum offset value with unaligned address
     cpu.R()[15] = 0x00000020;
-    setup_registers({{1, 0x00001000}, {2, 0x000007FF}}); // Large offset
+    setup_registers({{1, 0x00001000}, {2, 0x000007FF}}); // Large offset (unaligned: 0x17FF)
     cpu.R()[0] = 0xDEADBEEF;
     
     ASSERT_TRUE(assembleAndWriteThumb("str r0, [r1, r2]", cpu.R()[15]));
     execute(1);
     
+    // ARM unaligned word access: reads from aligned address and rotates
+    // Address 0x17FF is unaligned, so:
+    //   - Write aligns to 0x17FC, rotates value left by 24 bits
+    //   - Read from 0x17FF aligns to 0x17FC, reads word, rotates right by 24 bits
+    // The rotations cancel out, so we should get the original value
     uint32_t large_offset_value = memory.read32(0x000017FF);
     EXPECT_EQ(large_offset_value, 0xDEADBEEFu);
     EXPECT_EQ(cpu.R()[15], 0x00000022u);
