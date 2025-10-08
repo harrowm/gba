@@ -257,27 +257,27 @@ TEST_F(TileMapTest, ScreenBlockOffset) {
     BGConfig config512x512 = createTestBGConfig(BG_SCREEN_SIZE_512x512);
     
     // 256x256: no offset needed
-    EXPECT_EQ(0, gpu->getScreenBlockOffset(config256, 0, 0));
-    EXPECT_EQ(0, gpu->getScreenBlockOffset(config256, 31, 31));
+    EXPECT_EQ(0u, gpu->getScreenBlockOffset(config256, 0, 0));
+    EXPECT_EQ(0u, gpu->getScreenBlockOffset(config256, 31, 31));
     
     // 512x256: offset 0x800 for x >= 32
-    EXPECT_EQ(0, gpu->getScreenBlockOffset(config512x256, 0, 0));
-    EXPECT_EQ(0, gpu->getScreenBlockOffset(config512x256, 31, 0));
-    EXPECT_EQ(0x800, gpu->getScreenBlockOffset(config512x256, 32, 0));
-    EXPECT_EQ(0x800, gpu->getScreenBlockOffset(config512x256, 63, 0));
+    EXPECT_EQ(0u, gpu->getScreenBlockOffset(config512x256, 0, 0));
+    EXPECT_EQ(0u, gpu->getScreenBlockOffset(config512x256, 31, 0));
+    EXPECT_EQ(0x800u, gpu->getScreenBlockOffset(config512x256, 32, 0));
+    EXPECT_EQ(0x800u, gpu->getScreenBlockOffset(config512x256, 63, 0));
     
     // 256x512: offset 0x800 for y >= 32
-    EXPECT_EQ(0, gpu->getScreenBlockOffset(config256x512, 0, 0));
-    EXPECT_EQ(0, gpu->getScreenBlockOffset(config256x512, 0, 31));
-    EXPECT_EQ(0x800, gpu->getScreenBlockOffset(config256x512, 0, 32));
-    EXPECT_EQ(0x800, gpu->getScreenBlockOffset(config256x512, 0, 63));
+    EXPECT_EQ(0u, gpu->getScreenBlockOffset(config256x512, 0, 0));
+    EXPECT_EQ(0u, gpu->getScreenBlockOffset(config256x512, 0, 31));
+    EXPECT_EQ(0x800u, gpu->getScreenBlockOffset(config256x512, 0, 32));
+    EXPECT_EQ(0x800u, gpu->getScreenBlockOffset(config256x512, 0, 63));
     
     // 512x512: [0][1]
     //          [2][3]
-    EXPECT_EQ(0x0000, gpu->getScreenBlockOffset(config512x512, 0, 0));      // Block 0
-    EXPECT_EQ(0x0800, gpu->getScreenBlockOffset(config512x512, 32, 0));     // Block 1
-    EXPECT_EQ(0x1000, gpu->getScreenBlockOffset(config512x512, 0, 32));     // Block 2
-    EXPECT_EQ(0x1800, gpu->getScreenBlockOffset(config512x512, 32, 32));    // Block 3
+    EXPECT_EQ(0x0000u, gpu->getScreenBlockOffset(config512x512, 0, 0));      // Block 0
+    EXPECT_EQ(0x0800u, gpu->getScreenBlockOffset(config512x512, 32, 0));     // Block 1
+    EXPECT_EQ(0x1000u, gpu->getScreenBlockOffset(config512x512, 0, 32));     // Block 2
+    EXPECT_EQ(0x1800u, gpu->getScreenBlockOffset(config512x512, 32, 32));    // Block 3
 }
 
 // Test 15: Read raw screen entry

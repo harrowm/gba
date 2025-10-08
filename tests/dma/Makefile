@@ -64,7 +64,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 # Compile project C sources
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -x c++ -c $< -o $@
 
 # Clean
 clean:

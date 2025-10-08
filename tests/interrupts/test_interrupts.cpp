@@ -24,7 +24,7 @@ protected:
         cpu->setScheduler(scheduler);
         
         // Set up IRQ callback
-        interruptController->setIRQCallback([this]() {
+        interruptController->setIRQCallback([]() {
             // CPU will check on next instruction
         });
         
@@ -100,16 +100,16 @@ TEST_F(InterruptTest, CPU_IRQ_ModeSwitch) {
     EXPECT_EQ(cpu->CPSR() & 0x1F, CPU::IRQ);
     
     // Verify PC jumped to IRQ vector
-    EXPECT_EQ(cpu->R()[15], 0x00000018);
+    EXPECT_EQ(cpu->R()[15], 0x00000018u);
     
     // Verify interrupts disabled (I flag set)
     EXPECT_TRUE(cpu->CPSR() & 0x80);
     
     // Verify LR_irq contains return address
-    EXPECT_EQ(cpu->R()[14], 0x08000104);  // PC + 4
+    EXPECT_EQ(cpu->R()[14], 0x08000104u);  // PC + 4
     
     // Verify SPSR_irq saved old CPSR
-    EXPECT_EQ(cpu->SPSR(), 0x10);
+    EXPECT_EQ(cpu->SPSR(), 0x10u);
 }
 
 TEST_F(InterruptTest, CPU_InterruptDisabled_By_CPSR) {

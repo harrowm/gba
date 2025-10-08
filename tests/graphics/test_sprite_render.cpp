@@ -100,10 +100,10 @@ TEST_F(SpriteRenderTest, TileAddress1D_4bpp) {
     obj.paletteMode = false;  // 4bpp
     
     // In 1D mode, tiles are sequential
-    EXPECT_EQ(0x06010140, gpu->getOBJTileAddress(obj, 0, 0, true));  // Tile 10
-    EXPECT_EQ(0x06010160, gpu->getOBJTileAddress(obj, 1, 0, true));  // Tile 11
-    EXPECT_EQ(0x06010180, gpu->getOBJTileAddress(obj, 0, 1, true));  // Tile 12
-    EXPECT_EQ(0x060101A0, gpu->getOBJTileAddress(obj, 1, 1, true));  // Tile 13
+    EXPECT_EQ(0x06010140u, gpu->getOBJTileAddress(obj, 0, 0, true));  // Tile 10
+    EXPECT_EQ(0x06010160u, gpu->getOBJTileAddress(obj, 1, 0, true));  // Tile 11
+    EXPECT_EQ(0x06010180u, gpu->getOBJTileAddress(obj, 0, 1, true));  // Tile 12
+    EXPECT_EQ(0x060101A0u, gpu->getOBJTileAddress(obj, 1, 1, true));  // Tile 13
 }
 
 TEST_F(SpriteRenderTest, TileAddress1D_8bpp) {
@@ -115,10 +115,10 @@ TEST_F(SpriteRenderTest, TileAddress1D_8bpp) {
     obj.paletteMode = true;  // 8bpp
     
     // In 8bpp 1D mode, each tile takes 2 tile numbers
-    EXPECT_EQ(0x06010140, gpu->getOBJTileAddress(obj, 0, 0, true));  // Tile 10
-    EXPECT_EQ(0x06010180, gpu->getOBJTileAddress(obj, 1, 0, true));  // Tile 12 (10 + 2)
-    EXPECT_EQ(0x060101C0, gpu->getOBJTileAddress(obj, 0, 1, true));  // Tile 14 (10 + 4)
-    EXPECT_EQ(0x06010200, gpu->getOBJTileAddress(obj, 1, 1, true));  // Tile 16 (10 + 6)
+    EXPECT_EQ(0x06010140u, gpu->getOBJTileAddress(obj, 0, 0, true));  // Tile 10
+    EXPECT_EQ(0x06010180u, gpu->getOBJTileAddress(obj, 1, 0, true));  // Tile 12 (10 + 2)
+    EXPECT_EQ(0x060101C0u, gpu->getOBJTileAddress(obj, 0, 1, true));  // Tile 14 (10 + 4)
+    EXPECT_EQ(0x06010200u, gpu->getOBJTileAddress(obj, 1, 1, true));  // Tile 16 (10 + 6)
 }
 
 TEST_F(SpriteRenderTest, TileAddress2D_4bpp) {
@@ -130,10 +130,10 @@ TEST_F(SpriteRenderTest, TileAddress2D_4bpp) {
     obj.paletteMode = false;  // 4bpp
     
     // In 2D mode, tiles arranged in 32-tile-wide blocks
-    EXPECT_EQ(0x06010140, gpu->getOBJTileAddress(obj, 0, 0, false));  // Tile 10
-    EXPECT_EQ(0x06010160, gpu->getOBJTileAddress(obj, 1, 0, false));  // Tile 11
-    EXPECT_EQ(0x06010540, gpu->getOBJTileAddress(obj, 0, 1, false));  // Tile 42 (10 + 32)
-    EXPECT_EQ(0x06010560, gpu->getOBJTileAddress(obj, 1, 1, false));  // Tile 43 (10 + 33)
+    EXPECT_EQ(0x06010140u, gpu->getOBJTileAddress(obj, 0, 0, false));  // Tile 10
+    EXPECT_EQ(0x06010160u, gpu->getOBJTileAddress(obj, 1, 0, false));  // Tile 11
+    EXPECT_EQ(0x06010540u, gpu->getOBJTileAddress(obj, 0, 1, false));  // Tile 42 (10 + 32)
+    EXPECT_EQ(0x06010560u, gpu->getOBJTileAddress(obj, 1, 1, false));  // Tile 43 (10 + 33)
 }
 
 // ============================================================================
