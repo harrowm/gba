@@ -172,6 +172,30 @@ public:
         return (reg == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[reg];
     }
    
+    // Helper function for writing to destination register with THUMB interworking
+    // When writing to R15 (PC):
+    // - If S bit is clear: Check bit 0 for THUMB mode switching (interworking)
+    // - If S bit is set: No interworking, just write PC (SPSR restore handled separately)
+    FORCE_INLINE void writeResult(uint8_t rd, uint32_t value, bool s_bit) {
+        if (rd == 15) {
+            if (!s_bit) {
+                // S bit clear: Do THUMB interworking based on bit 0
+                if (value & 1) {
+                    parentCPU.setFlag(CPU::FLAG_T);  // Switch to THUMB mode
+                } else {
+                    parentCPU.clearFlag(CPU::FLAG_T);  // Stay in ARM mode
+                }
+                parentCPU.R()[15] = value & ~1u;  // Clear bit 0 for alignment
+            } else {
+                // S bit set: No THUMB interworking, just write value directly
+                // (Used with SPSR restore in privileged modes, or just PC write in user mode)
+                parentCPU.R()[15] = value & ~1u;  // Still need to align PC
+            }
+        } else {
+            parentCPU.R()[rd] = value;
+        }
+    }
+   
     void handleException(uint32_t vector_address, uint32_t new_mode, bool disable_irq, bool disable_fiq);
    
 public:

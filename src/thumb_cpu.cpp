@@ -1351,7 +1351,8 @@ void ThumbCPU::thumb_b(uint16_t instruction) {
     }
 
     // Perform the branch operation
-    int32_t branch_offset = (offset << 1) + 4;
+    // PC has already been incremented by +2 after fetch, so we only add +2 more to make PC+4 base
+    int32_t branch_offset = (offset << 1) + 2;
     // printf("[THUMB_B @0x%08X] offset=%d, branch_offset=%d\n", pc_before, offset, branch_offset);
     parentCPU.R()[15] += branch_offset; // Branch to target address (PC+4 base)
     // printf("[THUMB_B] pc_after=0x%08X\n", parentCPU.R()[15]);
