@@ -7,6 +7,9 @@
 #include "timing.h"
 #include "arm_timing.h"
 
+// Global flag for BIOS tracing
+bool g_trace_bios = false;
+
 
 // Secondary decode function for ambiguous region (data processing/MUL/MLA overlap)
 // Phase 1: New entry point for ambiguous region
@@ -145,6 +148,29 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     bool pc_in_bios = (pc < 0x00004000);
     bool pc_in_iwram = (pc >= 0x03000000 && pc < 0x03008000);
     bool pc_in_ewram = (pc >= 0x02000000 && pc < 0x02040000);
+    
+    // Detailed BIOS tracing
+    if (g_trace_bios && pc_in_bios) {
+        uint32_t cpsr = parentCPU.CPSR();
+        bool is_thumb = (cpsr & 0x20) != 0;
+        const char* mode_str = is_thumb ? "THUMB" : "ARM";
+        
+        // Disassemble instruction
+        if (capstone_handle) {
+            cs_insn* insn;
+            size_t count = cs_disasm(capstone_handle,
+                                     reinterpret_cast<const uint8_t*>(&instruction),
+                                     sizeof(instruction),
+                                     pc, 1, &insn);
+            if (count > 0) {
+                printf("[BIOS:%s] 0x%08X: %-8s %-30s | R0-R3=%08X %08X %08X %08X | LR=%08X\n",
+                       mode_str, pc, insn[0].mnemonic, insn[0].op_str,
+                       parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+                       parentCPU.R()[14]);
+                cs_free(insn, count);
+            }
+        }
+    }
     
     // Track BIOS exit
     if (!pc_in_bios && in_bios) {

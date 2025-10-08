@@ -313,11 +313,15 @@ void ARMCPU::exec_arm_bx_possible(uint32_t instruction) {
         uint32_t rm = instruction & 0xF;
         uint32_t target = parentCPU.R()[rm];
         bool thumb = target & 1;
+        printf("[BX EXEC] PC=0x%08X, target_reg=R%d, target=0x%08X, thumb=%d\n",
+               parentCPU.R()[15], rm, target, thumb);
         parentCPU.R()[15] = target & ~1u;
         if (thumb) {
             parentCPU.setFlag(CPU::FLAG_T);
+            printf("[BX] Switched to THUMB mode, new PC=0x%08X\n", parentCPU.R()[15]);
         } else {
             parentCPU.clearFlag(CPU::FLAG_T);
+            printf("[BX] Staying in ARM mode, new PC=0x%08X\n", parentCPU.R()[15]);
         }
         DEBUG_LOG(std::string("[BX] to=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + (thumb ? " (Thumb)" : " (ARM)"));
         return;

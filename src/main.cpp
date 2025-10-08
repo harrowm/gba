@@ -31,7 +31,8 @@ void printUsage(const char* programName) {
     printf("Options:\n");
     printf("  -h, --help          Show this help message\n");
     printf("  -t, --test-pattern  Use test pattern instead of ROM\n");
-    printf("  --skip-bios         Skip BIOS and jump directly to ROM (for homebrew ROMs)\n\n");
+    printf("  --skip-bios         Skip BIOS and jump directly to ROM (for homebrew ROMs)\n");
+    printf("  --trace-bios        Enable detailed BIOS execution tracing\n\n");
     printf("Examples:\n");
     printf("  %s game.gba                    # Load and run game.gba\n", programName);
     printf("  %s assets/roms/sonic.bin       # Load ROM from assets\n", programName);
@@ -44,6 +45,9 @@ void printUsage(const char* programName) {
     printf("  - Most homebrew ROMs require --skip-bios flag\n");
     printf("  - Commercial ROMs may boot through BIOS (experimental)\n");
 }
+
+// External trace flag from arm_cpu.cpp
+extern bool g_trace_bios;
 
 int main(int argc, char* argv[]) {
     printf("GBA Emulator Starting...\n");
@@ -62,6 +66,9 @@ int main(int argc, char* argv[]) {
             useTestPattern = true;
         } else if (strcmp(argv[i], "--skip-bios") == 0) {
             skipBIOS = true;
+        } else if (strcmp(argv[i], "--trace-bios") == 0) {
+            g_trace_bios = true;
+            printf("BIOS tracing enabled\n");
         } else if (argv[i][0] != '-') {
             // Assume it's a ROM path
             if (romPath != nullptr) {

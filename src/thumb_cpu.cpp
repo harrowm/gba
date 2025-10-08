@@ -8,6 +8,10 @@
 #include <iomanip>
 #include <capstone/capstone.h>
 
+// BIOS tracing flag (shared with ARM)
+extern bool g_trace_bios;
+static uint64_t thumb_instruction_count = 0;
+
 // Define the static constexpr members
 constexpr void (ThumbCPU::*ThumbCPU::thumb_instruction_table[256])(uint16_t);
 constexpr void (ThumbCPU::*ThumbCPU::thumb_alu_operations_table[16])(uint8_t, uint8_t);
@@ -39,8 +43,29 @@ void ThumbCPU::execute(uint32_t cycles) {
         }
         
         // HACK - do we need to model the cpu pipeline?
-        uint16_t instruction = parentCPU.getMemory().read16(parentCPU.R()[15]); // Fetch instruction
+        uint32_t current_pc = parentCPU.R()[15];
+        uint16_t instruction = parentCPU.getMemory().read16(current_pc); // Fetch instruction
         uint8_t opcode = instruction >> 8;
+        
+        // BIOS tracing for THUMB instructions
+        bool pc_in_bios = (current_pc < 0x4000);
+        if (pc_in_bios && g_trace_bios && capstone_handle) {
+            cs_insn* insn;
+            size_t count = cs_disasm(capstone_handle,
+                                     reinterpret_cast<const uint8_t*>(&instruction),
+                                     sizeof(instruction),
+                                     current_pc, 1, &insn);
+            if (count > 0) {
+                printf("[%llu][THUMB] PC=0x%08X: %-8s %-20s | R0=%08X R1=%08X R2=%08X R3=%08X | LR=%08X\n",
+                       thumb_instruction_count++,
+                       current_pc,
+                       insn[0].mnemonic,
+                       insn[0].op_str,
+                       parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+                       parentCPU.R()[14]);
+                cs_free(insn, count);
+            }
+        }
         
         // Debug the infinite loop at 0x120-0x126
         static uint64_t loop_trace_count = 0;
@@ -1157,7 +1182,8 @@ void ThumbCPU::thumb_pop_registers_and_pc(uint16_t instruction) {
     }
 
     // Pop PC from the stack
-    parentCPU.R()[15] = parentCPU.getMemory().read32(parentCPU.R()[13]); // Read PC from memory
+    uint32_t new_pc = parentCPU.getMemory().read32(parentCPU.R()[13]); // Read PC from memory
+    parentCPU.R()[15] = new_pc & 0xFFFFFFFE; // Clear bit 0 for THUMB alignment
     DEBUG_INFO("Popping PC from stack: PC = [0x" + std::to_string(parentCPU.R()[13]) + "]");
     parentCPU.R()[13] += 4; // Increment SP by 4
 }
@@ -1363,6 +1389,8 @@ void ThumbCPU::thumb_bl(uint16_t instruction) {
     // First instruction (F000-F7FF): Sets up high part of target address
     // Second instruction (F800-FFFF): Completes the branch with link
     
+    uint32_t current_pc = parentCPU.R()[15] - 2;  // PC has already been incremented
+    
     if ((instruction & 0xF800) == 0xF000) {
         // First part: BL prefix - store high part of offset in LR
         int32_t high_offset = (instruction & 0x7FF); // Extract 11-bit value
@@ -1371,19 +1399,31 @@ void ThumbCPU::thumb_bl(uint16_t instruction) {
         }
         high_offset <<= 12; // Shift to position (bits 12-22)
         
-        // Store PC (of first instruction) + 4 + high_offset in LR
-        parentCPU.R()[14] = (parentCPU.R()[15] - 2) + 4 + high_offset; 
+        // Store (PC of first instruction + 4) + high_offset in LR
+        // PC is already +4 ahead due to pre-increment, so current_pc + 4 = actual PC value
+        // For THUMB: PC used in calculation = (address of first BL instruction) + 4
+        parentCPU.R()[14] = (current_pc + 4) + high_offset; 
+        
+        if (g_trace_bios && current_pc < 0x4000) {
+            printf("[BL-PART1] PC=0x%08X: BL prefix, LR_temp=0x%08X\n", current_pc, parentCPU.R()[14]);
+        }
         DEBUG_INFO("Executing Thumb BL (first part): Storing intermediate value");
     } else if ((instruction & 0xF800) == 0xF800) {
         // Second part: BL suffix - complete the branch
         uint32_t low_offset = (instruction & 0x7FF) << 1; // Bits 0-10 shifted left by 1
-        uint32_t target = parentCPU.R()[14] + low_offset; // Add to stored value from first part
+        uint32_t lr_value = parentCPU.R()[14]; // Save LR before we change it
+        uint32_t target = lr_value + low_offset; // Add to stored value from first part
         
         // Set return address in LR (PC after this instruction) with Thumb bit set
         parentCPU.R()[14] = parentCPU.R()[15] | 1; 
         
         // Branch to target
         parentCPU.R()[15] = target & 0xFFFFFFFE; // Clear bit 0 for alignment
+        
+        if (g_trace_bios && current_pc < 0x4000) {
+            printf("[BL-PART2] PC=0x%08X: BL suffix, LR_prev=0x%08X, low_offset=0x%X, target=0x%08X, LR=0x%08X\n", 
+                   current_pc, lr_value, low_offset, parentCPU.R()[15], parentCPU.R()[14]);
+        }
         DEBUG_INFO("Executing Thumb BL (second part): Branch to 0x" + debug_to_hex_string(parentCPU.R()[15], 8) + " with link, LR=0x" + debug_to_hex_string(parentCPU.R()[14], 8));
     }
 }
@@ -1401,6 +1441,27 @@ void ThumbCPU::executeOneInstruction() {
     
     uint32_t pc = parentCPU.R()[15];
     uint16_t instruction = parentCPU.getMemory().read16(pc);
+    
+    // BIOS tracing for THUMB instructions
+    bool pc_in_bios = (pc < 0x4000);
+    if (pc_in_bios && g_trace_bios && capstone_handle) {
+        cs_insn* insn;
+        size_t count = cs_disasm(capstone_handle,
+                                 reinterpret_cast<const uint8_t*>(&instruction),
+                                 sizeof(instruction),
+                                 pc, 1, &insn);
+        if (count > 0) {
+            printf("[%llu][THUMB-BIOS] PC=0x%08X: %-8s %-20s | R0=%08X R1=%08X R2=%08X R3=%08X | LR=%08X | INSTR=0x%04X\n",
+                   thumb_instruction_count++,
+                   pc,
+                   insn[0].mnemonic,
+                   insn[0].op_str,
+                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+                   parentCPU.R()[14],
+                   instruction);
+            cs_free(insn, count);
+        }
+    }
     
     // Debug the infinite loop at 0x120-0x126 and returns
     static uint64_t loop_trace_count = 0;

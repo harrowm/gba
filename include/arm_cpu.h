@@ -11,6 +11,9 @@
 
 class CPU; // Forward declaration
 
+// Global flag for BIOS execution tracing
+extern bool g_trace_bios;
+
 
 class ARMCPU {
 public:
