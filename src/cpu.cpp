@@ -166,8 +166,10 @@ bool CPU::checkPendingInterrupts() {
     // Check if any interrupts are pending
     bool has_pending = interruptController.hasPendingInterrupt();
     if (has_pending && check_count++ < 5) {
-        printf("[CHECK_IRQ #%d] IME=%d, IRQ_disabled=%d, pending=%d => WILL CALL handleInterrupt!\n",
-               check_count, ime, irqDisabled, has_pending);
+        uint16_t ie = memory.read16(0x04000200);
+        uint16_t ifReg = memory.read16(0x04000202);
+        printf("[CHECK_IRQ #%d] IME=%d, IRQ_disabled=%d, pending=%d IE=0x%04X IF=0x%04X => WILL CALL handleInterrupt!\n",
+               check_count, ime, irqDisabled, has_pending, ie, ifReg);
     }
     return has_pending;
 }

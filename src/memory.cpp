@@ -264,6 +264,16 @@ void Memory::write16(uint32_t address, uint16_t value) {
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
     
+    // Log writes to IE register (Interrupt Enable)
+    if (address == 0x04000200) {  // REG_IE
+        printf("[REG Write] IE (Interrupt Enable) = 0x%04X\n", val);
+    }
+    
+    // Log writes to IME register (Interrupt Master Enable)
+    if (address == 0x04000208) {  // REG_IME
+        printf("[REG Write] IME (Interrupt Master Enable) = 0x%04X\n", val);
+    }
+    
     // Special handling for IF register (write 1 to clear)
     if (address == 0x04000202) {  // REG_IF
         uint16_t currentIF = base[offset] | (base[(offset + 1) % Memory::BLOCK_SIZE] << 8);
@@ -401,6 +411,11 @@ void Memory::write32(uint32_t address, uint32_t value) {
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, aligned_address, offset);
     if (!base) return;
+    
+    // Log writes that overlap IE/IF/IME registers
+    if (aligned_address >= 0x04000200 && aligned_address <= 0x04000208) {
+        printf("[REG Write32] Address=0x%08X Value=0x%08X (may write IE/IF/IME)\n", aligned_address, val);
+    }
     
     // Debug: Track VRAM writes
     if (address >= 0x06000000 && address < 0x06018000) {
