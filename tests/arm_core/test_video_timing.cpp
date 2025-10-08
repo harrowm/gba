@@ -12,8 +12,9 @@ protected:
     GBA* gba;
     
     void SetUp() override {
-        // Video timing tests need I/O registers, so use normal mode (not test mode)
-        gba = new GBA(false);
+        // Use test mode (true) to skip BIOS - these tests measure exact cycle counts
+        // and BIOS initialization would add unpredictable overhead
+        gba = new GBA(true);
     }
     
     void TearDown() override {
@@ -49,9 +50,6 @@ TEST_F(VideoTimingTest, MultipleFramesAccumulate) {
 }
 
 TEST_F(VideoTimingTest, VCountUpdatesEachScanline) {
-    // Initialize VCOUNT to 0 (in test mode I/O might not be zeroed)
-    gba->getMemory().write16(REG_VCOUNT, 0);
-    
     // Run enough to get through a few scanlines
     gba->getScheduler().runUntil(CYCLES_PER_SCANLINE * 5);
     
@@ -66,10 +64,15 @@ TEST_F(VideoTimingTest, VCountUpdatesEachScanline) {
 
 TEST_F(VideoTimingTest, VBlankFlagSetAtScanline160) {
     // Run until after scanline 160 starts (need to let H-Draw complete to trigger the transition)
-    gba->getScheduler().runUntil(CYCLES_PER_SCANLINE * 160 + CYCLES_HDRAW + 1);
+    uint64_t targetCycle = CYCLES_PER_SCANLINE * 160 + CYCLES_HDRAW + 1;
+    gba->getScheduler().runUntil(targetCycle);
     
+    uint64_t actualCycle = gba->getScheduler().getCurrentCycle();
     uint16_t dispstat = gba->getMemory().read16(REG_DISPSTAT);
     uint16_t vcount = gba->getMemory().read16(REG_VCOUNT);
+    
+    printf("[TEST] Target cycle: %llu, Actual cycle: %llu, VCOUNT: %u, VBLANK: %s\n",
+           targetCycle, actualCycle, vcount, (dispstat & DISPSTAT_VBLANK) ? "SET" : "CLEAR");
     
     // V-Blank should be set and we should be at scanline 160
     EXPECT_EQ(vcount, 160);

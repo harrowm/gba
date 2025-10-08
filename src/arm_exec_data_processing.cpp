@@ -707,13 +707,13 @@ void ARMCPU::exec_arm_msr_reg(uint32_t instruction) {
         if (mask & 1) {
             uint32_t old_mode = parentCPU.CPSR() & 0x1F;
             uint32_t new_mode = value & 0x1F;
-            printf("[MSR REG] mask=0x%X, old_mode=0x%02X, new_mode=0x%02X\n", mask, old_mode, new_mode);
+            // printf("[MSR REG] mask=0x%X, old_mode=0x%02X, new_mode=0x%02X\n", mask, old_mode, new_mode);
             // If mode bits changed, call setMode to bank/unbank registers BEFORE changing CPSR
             // This allows setMode to read the old mode from CPSR correctly
             if (old_mode != new_mode) {
-                printf("[MSR REG] Mode switch: 0x%02X → 0x%02X\n", old_mode, new_mode);
+                // printf("[MSR REG] Mode switch: 0x%02X → 0x%02X\n", old_mode, new_mode);
                 parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
-                printf("[MSR REG] After setMode: LR=0x%08X\n", parentCPU.R()[14]);
+                // printf("[MSR REG] After setMode: LR=0x%08X\n", parentCPU.R()[14]);
             }
             // Now update CPSR after setMode (setMode also updates CPSR, but we need to set all control bits)
             parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);

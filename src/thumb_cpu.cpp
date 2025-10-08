@@ -1344,7 +1344,7 @@ void ThumbCPU::thumb_swi(uint16_t instruction) {
 }
 
 void ThumbCPU::thumb_b(uint16_t instruction) {
-    uint32_t pc_before = parentCPU.R()[15];
+    // uint32_t pc_before = parentCPU.R()[15];
     int16_t offset = instruction & 0x7FF; // Signed 11-bit offset (bits 0-10)
     if (offset & 0x400) { // Sign-extend the offset
         offset |= 0xF800;
@@ -1352,9 +1352,9 @@ void ThumbCPU::thumb_b(uint16_t instruction) {
 
     // Perform the branch operation
     int32_t branch_offset = (offset << 1) + 4;
-    printf("[THUMB_B @0x%08X] offset=%d, branch_offset=%d\n", pc_before, offset, branch_offset);
+    // printf("[THUMB_B @0x%08X] offset=%d, branch_offset=%d\n", pc_before, offset, branch_offset);
     parentCPU.R()[15] += branch_offset; // Branch to target address (PC+4 base)
-    printf("[THUMB_B] pc_after=0x%08X\n", parentCPU.R()[15]);
+    // printf("[THUMB_B] pc_after=0x%08X\n", parentCPU.R()[15]);
 }
 
 void ThumbCPU::thumb_bl(uint16_t instruction) {
@@ -1403,26 +1403,26 @@ void ThumbCPU::executeOneInstruction() {
     
     // Debug the infinite loop at 0x120-0x126 and returns
     static uint64_t loop_trace_count = 0;
-    static uint64_t loop_entry_count = 0;
-    static uint32_t last_lr = 0;
+    // static uint64_t loop_entry_count = 0;
+    // static uint32_t last_lr = 0;
     
     if (pc >= 0x120 && pc <= 0x126) {
         if (loop_trace_count == 0) {
             // First entry into loop
-            loop_entry_count++;
-            printf("\n[LOOP ENTRY #%llu] Called from LR=0x%08X\n", loop_entry_count, parentCPU.R()[14]);
-            last_lr = parentCPU.R()[14];
+            // loop_entry_count++;
+            // printf("\n[LOOP ENTRY #%llu] Called from LR=0x%08X\n", loop_entry_count, parentCPU.R()[14]);
+            // last_lr = parentCPU.R()[14];
         }
         if (loop_trace_count < 5 || (loop_trace_count % 100 == 0)) {
             uint32_t cpsr __attribute__((unused)) = parentCPU.CPSR();
-            printf("[LOOP #%llu] PC=0x%04X Instr=0x%04X | R0=%08X R1=%08X R4=%08X LR=%08X\n",
-                   loop_trace_count, pc, instruction,
-                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[4], parentCPU.R()[14]);
+            // printf("[LOOP #%llu] PC=0x%04X Instr=0x%04X | R0=%08X R1=%08X R4=%08X LR=%08X\n",
+            //        loop_trace_count, pc, instruction,
+            //        parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[4], parentCPU.R()[14]);
         }
         loop_trace_count++;
     } else if (loop_trace_count > 0) {
-        printf("[LOOP EXIT #%llu] After %llu iterations, returning to LR=0x%08X, next PC=0x%08X\n\n", 
-               loop_entry_count, loop_trace_count, last_lr, pc);
+        // printf("[LOOP EXIT #%llu] After %llu iterations, returning to LR=0x%08X, next PC=0x%08X\n\n", 
+        //        loop_entry_count, loop_trace_count, last_lr, pc);
         loop_trace_count = 0;
     }
     

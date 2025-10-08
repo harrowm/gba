@@ -1,5 +1,5 @@
 #include "debug.h"
-int g_debug_level = 2;        // Default debug level (can be changed at runtime)
+int g_debug_level = 0;        // Default debug level (0=OFF, can be changed at runtime)
 int g_debug_file_mask = 0xFF; // Default file mask (enable all files, or adjust as needed)
 
 // Global flag to enable Capstone disassembly

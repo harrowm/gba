@@ -307,6 +307,7 @@ public:
     
     // Setup video timing with scheduler
     void setupTiming(Scheduler* scheduler);
+    void scheduleScanline(Scheduler* scheduler);  // Helper for scanline scheduling
     
     // Rendering
     void renderScanline();

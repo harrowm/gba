@@ -19,12 +19,18 @@ void ARMCPU::exec_arm_mul(uint32_t instruction) {
     uint32_t op2 = parentCPU.R()[rs];
     uint32_t result = op1 * op2;
     DEBUG_LOG("MUL operands: Rm=" + DEBUG_TO_HEX_STRING(op1, 8) + ", Rs=" + DEBUG_TO_HEX_STRING(op2, 8) + ", result=" + DEBUG_TO_HEX_STRING(result, 8));
-    parentCPU.R()[rd] = result;
     
+    // Using R15 as destination is unpredictable - don't write to R15
     if (rd != 15) {
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
-        bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsMultiply(0, parentCPU.R()[rd]);
+        parentCPU.R()[rd] = result;
+    }
+    
+    // Always increment PC
+    parentCPU.R()[15] += 4;
+    
+    bool set_flags = bits<20,20>(instruction);
+    if (set_flags && rd != 15) {
+        updateFlagsMultiply(0, parentCPU.R()[rd]);
     }
 }
 
@@ -45,12 +51,19 @@ void ARMCPU::exec_arm_mla(uint32_t instruction) {
     uint32_t op1 = parentCPU.R()[rm];
     uint32_t op2 = parentCPU.R()[rs];
     uint32_t acc = parentCPU.R()[rn];
-    parentCPU.R()[rd] = (op1 * op2) + acc;
-
+    uint32_t result = (op1 * op2) + acc;
+    
+    // Using R15 as destination is unpredictable - don't write to R15
     if (rd != 15) {
-        parentCPU.R()[15] += 4; // Increment PC for next instruction
-        bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsMultiply(0, parentCPU.R()[rd]);
+        parentCPU.R()[rd] = result;
+    }
+    
+    // Always increment PC
+    parentCPU.R()[15] += 4;
+    
+    bool set_flags = bits<20,20>(instruction);
+    if (set_flags && rd != 15) {
+        updateFlagsMultiply(0, parentCPU.R()[rd]);
     }
 }
 

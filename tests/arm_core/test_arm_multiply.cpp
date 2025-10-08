@@ -153,7 +153,11 @@ TEST_F(ARMMultiplyTest, MUL_RdIsPC) {
     cpu.R()[0] = 2; // Rm
     cpu.R()[1] = 3; // Rs
     cpu.R()[15] = 0x00000000;
-    assemble_and_write("mul r15, r1, r0", cpu.R()[15]); // MUL r15, r1, r0
+    // MUL R15, R1, R0: R15 = R1 * R0 (PC as destination)
+    // Keystone rejects this, so manually encode
+    // Encoding: cond=1110 0000000 S=0 Rd=1111 0000 Rs=0001 1001 Rm=0000
+    // Binary: 1110 0000000 0 1111 0000 0001 1001 0000 = 0xE00F0190
+    memory.write32(cpu.R()[15], 0xE00F0190);
     // Should not crash, result is unpredictable, but PC should increment
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], 0x00000004u);
@@ -274,11 +278,15 @@ TEST_F(ARMMultiplyTest, SMLALS_ZeroResultSetsZ) {
 
 // --------- Stage 5: PC and forbidden register usage ---------
 TEST_F(ARMMultiplyTest, MLA_UsesPCAsOperand) {
-    cpu.R()[0] = 2; // Rm
-    cpu.R()[1] = 3; // Rs
-    cpu.R()[2] = 5; // Rn
+    cpu.R()[0] = 2; // Rm (actually Rs in the encoding)
+    cpu.R()[1] = 3; // Rs (actually Rm in the encoding)
+    cpu.R()[2] = 5; // Rn (not used, we use R15 instead)
     cpu.R()[15] = 0x00000008; // PC
-    assemble_and_write("mla r0, r1, r0, r15", cpu.R()[15]); // MLA r0, r1, r0, r15 (Rn=15)
+    // MLA R0, R1, R0, R15: R0 = R1 * R0 + R15
+    // Keystone rejects this, so manually encode
+    // Encoding: cond=1110 0000001 S=0 Rd=0000 Rn=1111 Rs=0000 1001 Rm=0001
+    // Binary: 1110 0000001 0 0000 1111 0000 1001 0001 = 0xE021F091
+    memory.write32(cpu.R()[15], 0xE021F091);
     // Should not crash, result is unpredictable, but test for no crash and PC increment
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x0000000C);
@@ -723,10 +731,14 @@ TEST_F(ARMMultiplyTest, SMULLS_NegativeResultSetsN) {
 // --------- Stage 5: PC and forbidden register usage ---------
 // ARM spec: Using R15 (PC) as a destination or operand is unpredictable, but should not crash.
 TEST_F(ARMMultiplyTest, MUL_UsesPCAsOperand) {
-    cpu.R()[0] = 3; // Rm
+    cpu.R()[0] = 3; // Rd (destination)
     cpu.R()[1] = 4; // Rs
-    cpu.R()[15] = 0x00000008; // PC
-    assemble_and_write("mul r0, r1, r15", cpu.R()[15]); // MUL r0, r1, r15 (Rm=15)
+    cpu.R()[15] = 0x00000008; // PC (used as Rm)
+    // MUL R0, R1, R15: R0 = R1 * R15
+    // Keystone rejects this, so manually encode
+    // Encoding: cond=1110 0000000 S=0 Rd=0000 0000 Rs=0001 1001 Rm=1111
+    // Binary: 1110 0000000 0 0000 0000 0001 1001 1111 = 0xE000019F
+    memory.write32(cpu.R()[15], 0xE000019F);
     // Should not crash, result is unpredictable, but test for no crash and PC increment
     arm_cpu.execute(1);
     EXPECT_EQ(cpu.R()[15], (uint32_t)0x0000000C);

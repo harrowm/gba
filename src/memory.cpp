@@ -12,10 +12,32 @@ Memory::Memory(bool testMode) {
     if (testMode) {
         // Only allocate and map test RAM at 0x00000000 (32KB)
         test_ram = (uint8_t*)std::malloc(32 * 1024);
+        
+        // Initialize with infinite loop instruction (ARM: B #-8, opcode 0xEAFFFFFE)
+        // This provides safe default code if no test instructions are loaded
+        for (uint32_t i = 0; i < 32 * 1024; i += 4) {
+            test_ram[i + 0] = 0xFE;  // Little-endian 0xEAFFFFFE
+            test_ram[i + 1] = 0xFF;
+            test_ram[i + 2] = 0xFF;
+            test_ram[i + 3] = 0xEA;
+        }
+        
         for (uint32_t addr = 0x00000000; addr < 0x00008000; addr += BLOCK_SIZE)
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = test_ram + (addr - 0x00000000);
+        
+        // Allocate IO region even in test mode (needed for video timing tests)
+        io = (uint8_t*)std::malloc(1 * 1024);
+        memset(io, 0, 1 * 1024);  // Zero-initialize
+        regionTable[0x04000000 / BLOCK_SIZE] = io;
+        
+        // Allocate palette RAM in test mode (GPU needs it for rendering)
+        palette = (uint8_t*)std::malloc(1 * 1024);
+        memset(palette, 0, 1 * 1024);  // Zero-initialize  
+        for (uint32_t addr = 0x05000000; addr < 0x05000400; addr += BLOCK_SIZE)
+            regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = palette;
+        
         // All other region pointers remain null
-        bios = wram = iwram = io = palette = vram = oam = rom = sram = nullptr;
+        bios = wram = iwram = vram = oam = rom = sram = nullptr;
 
     } else {
         // --- BIOS: 16KB at 0x00000000 ---
@@ -56,6 +78,7 @@ Memory::Memory(bool testMode) {
 
         // --- I/O: 1KB at 0x04000000 ---
         io = (uint8_t*)std::malloc(1 * 1024);
+        memset(io, 0, 1 * 1024);  // Zero-initialize IO memory
         regionTable[0x04000000 / BLOCK_SIZE] = io;
         // Initialize critical boot-related registers for clean BIOS boot
         io[0x300] = 0x00; // POSTFLG: Boot Flag (0=First boot from power-on, 1=Further boot/reset)
@@ -133,13 +156,13 @@ uint8_t Memory::read8(uint32_t address) const {
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
     if (!base) return 0xFF;
     // Debug: Print reads from logo and entry point
-    if (address == 0x0800009C || address == 0x080000B4) {
-        printf("[Memory::read8] Read from 0x%08X: 0x%02X\n", address, base[offset]);
-    }
+    // if (address == 0x0800009C || address == 0x080000B4) {
+    //     printf("[Memory::read8] Read from 0x%08X: 0x%02X\n", address, base[offset]);
+    // }
     // Debug: Print POSTFLG reads
-    if (address == 0x04000300) {
-        printf("[Memory::read8] POSTFLG read: 0x%02X\n", base[offset]);
-    }
+    // if (address == 0x04000300) {
+    //     printf("[Memory::read8] POSTFLG read: 0x%02X\n", base[offset]);
+    // }
     return base[offset];
 }
 
@@ -257,19 +280,19 @@ void Memory::write16(uint32_t address, uint16_t value) {
     // }
     
     // Debug: Track important register writes
-    if (address == 0x04000000) { // REG_DISPCNT
-        printf("[REG Write] DISPCNT = 0x%04X (Mode: %d, BG0-3: %d%d%d%d, OBJ: %d)\n",
-               value, value & 0x7,
-               (value >> 8) & 1, (value >> 9) & 1, (value >> 10) & 1, (value >> 11) & 1,
-               (value >> 12) & 1);
-    } else if (address == 0x04000208) { // REG_IME
-        printf("[REG Write] IME = 0x%04X (Interrupts %s)\n", 
-               value, (value & 1) ? "ENABLED" : "DISABLED");
-    } else if (address == 0x04000200) { // REG_IE
-        printf("[REG Write] IE = 0x%04X (Enabled interrupts)\n", value);
-    } else if (address == 0x04000202) { // REG_IF
-        printf("[REG Write] IF = 0x%04X (Acknowledge interrupts)\n", value);
-    }
+    // if (address == 0x04000000) { // REG_DISPCNT
+    //     printf("[REG Write] DISPCNT = 0x%04X (Mode: %d, BG0-3: %d%d%d%d, OBJ: %d)\n",
+    //            value, value & 0x7,
+    //            (value >> 8) & 1, (value >> 9) & 1, (value >> 10) & 1, (value >> 11) & 1,
+    //            (value >> 12) & 1);
+    // } else if (address == 0x04000208) { // REG_IME
+    //     printf("[REG Write] IME = 0x%04X (Interrupts %s)\n", 
+    //            value, (value & 1) ? "ENABLED" : "DISABLED");
+    // } else if (address == 0x04000200) { // REG_IE
+    //     printf("[REG Write] IE = 0x%04X (Enabled interrupts)\n", value);
+    // } else if (address == 0x04000202) { // REG_IF
+    //     printf("[REG Write] IF = 0x%04X (Acknowledge interrupts)\n", value);
+    // }
     
     base[offset] = val & 0xFF;
     base[(offset + 1) % Memory::BLOCK_SIZE] = (val >> 8) & 0xFF;

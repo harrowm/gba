@@ -82,6 +82,9 @@ public:
 
     // Advance cycle counter without processing events (use with caution)
     void advanceCycles(uint32_t cycles) { currentCycle += cycles; }
+    
+    // Set cycle counter to specific value (use for frame timing corrections)
+    void setCurrentCycle(uint64_t cycle) { currentCycle = cycle; }
 
 private:
     uint64_t currentCycle;

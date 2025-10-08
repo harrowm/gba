@@ -12,44 +12,33 @@ GPU::GPU(Memory& mem)
     // Clear the tiled framebuffer
     memset(tiledFramebuffer, 0, sizeof(tiledFramebuffer));
     
-
+    // Initialize VCOUNT to 0 (some tests check this before any scanlines run)
+    memory.write16(REG_VCOUNT, 0);
     
     DEBUG_INFO("GPU initialized");
 }
 
-void GPU::setupTiming(Scheduler* scheduler) {
-    if (!scheduler) {
-        DEBUG_ERROR("GPU::setupTiming called with null scheduler");
-        return;
-    }
-    
-    DEBUG_INFO("Setting up GPU video timing with scheduler");
-    
-    // Schedule the first scanline event
+// Helper to schedule one complete scanline
+void GPU::scheduleScanline(Scheduler* scheduler) {
+    // Schedule H-Draw completion
     scheduler->schedule(CYCLES_HDRAW, [this, scheduler]() {
         // H-Draw complete, enter H-Blank
         inHBlank = true;
-        
-        // Update DISPSTAT register
         uint16_t dispstat = memory.read16(REG_DISPSTAT);
         dispstat |= DISPSTAT_HBLANK;
         memory.write16(REG_DISPSTAT, dispstat);
         
-        // Trigger H-Blank interrupt if enabled
         if ((dispstat & DISPSTAT_HBLANK_IRQ_ENABLE) && hblankCallback) {
             hblankCallback();
         }
         
-        // Render this scanline if in visible area
         if (currentScanline < SCANLINES_VISIBLE) {
             renderScanline();
         }
         
-        // Schedule end of H-Blank (start of next scanline)
+        // Schedule H-Blank end
         scheduler->schedule(CYCLES_HBLANK, [this, scheduler]() {
             inHBlank = false;
-            
-            // Clear H-Blank bit in DISPSTAT
             uint16_t dispstat = memory.read16(REG_DISPSTAT);
             dispstat &= ~DISPSTAT_HBLANK;
             memory.write16(REG_DISPSTAT, dispstat);
@@ -59,36 +48,46 @@ void GPU::setupTiming(Scheduler* scheduler) {
             if (currentScanline >= SCANLINES_TOTAL) {
                 currentScanline = 0;
             }
-            
-            // Update VCOUNT register
             memory.write16(REG_VCOUNT, currentScanline);
             
-            // Check for V-Blank transition
+            // Debug
+            if (currentScanline >= 158 && currentScanline <= 162) {
+                printf("[GPU] Scanline %d starts at cycle %llu\n", 
+                       currentScanline, scheduler->getCurrentCycle());
+            }
+            
+            // Handle V-Blank transition
             if (currentScanline == SCANLINES_VISIBLE) {
-                // Entering V-Blank
                 inVBlank = true;
                 dispstat = memory.read16(REG_DISPSTAT);
                 dispstat |= DISPSTAT_VBLANK;
                 memory.write16(REG_DISPSTAT, dispstat);
+                printf("[GPU] V-Blank flag set at cycle %llu\n", scheduler->getCurrentCycle());
                 
-                // Trigger V-Blank interrupt if enabled
                 if ((dispstat & DISPSTAT_VBLANK_IRQ_ENABLE) && vblankCallback) {
-                    DEBUG_INFO("V-Blank interrupt triggered at scanline 160");
                     vblankCallback();
                 }
             } else if (currentScanline == 0) {
-                // Exiting V-Blank, start new frame
                 inVBlank = false;
                 dispstat = memory.read16(REG_DISPSTAT);
                 dispstat &= ~DISPSTAT_VBLANK;
                 memory.write16(REG_DISPSTAT, dispstat);
             }
             
-            // Schedule next scanline's H-Draw period
-            setupTiming(scheduler);
+            // Schedule next scanline immediately (new scanline starts now)
+            scheduleScanline(scheduler);
         }, EventType::VIDEO_SCANLINE, 1);
-        
     }, EventType::VIDEO_HBLANK, 1);
+}
+
+void GPU::setupTiming(Scheduler* scheduler) {
+    if (!scheduler) {
+        DEBUG_ERROR("GPU::setupTiming called with null scheduler");
+        return;
+    }
+    
+    DEBUG_INFO("Setting up GPU video timing with scheduler");
+    scheduleScanline(scheduler);
 }
 
 void GPU::renderScanline() {

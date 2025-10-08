@@ -178,13 +178,13 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
 }
 
 void ARMCPU::exec_arm_b(uint32_t instruction) {
-    uint32_t pc_before = parentCPU.R()[15];
+    uint32_t pc_before = parentCPU.R()[15]; UNUSED(pc_before);
     int32_t offset = bits<23,0>(instruction);
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
     int32_t branch_offset = (offset << 2) + 8;
-    printf("[B @0x%08X] offset=%d, branch_offset=%d\n", pc_before, offset, branch_offset);
+    // printf("[B @0x%08X] offset=%d, branch_offset=%d\n", pc_before, offset, branch_offset);
     parentCPU.R()[15] += branch_offset;
-    printf("[B] pc_after=0x%08X\n", parentCPU.R()[15]);
+    // printf("[B] pc_after=0x%08X\n", parentCPU.R()[15]);
 }
 
 void ARMCPU::exec_arm_bl(uint32_t instruction) {
@@ -196,13 +196,13 @@ void ARMCPU::exec_arm_bl(uint32_t instruction) {
     DEBUG_LOG(std::string("[BL] offset=") + std::to_string(offset) + ", branch_offset=" + std::to_string(branch_offset));
     
     // Debug: Print mode and old LR before setting
-    uint32_t old_lr = parentCPU.R()[14];
-    uint32_t mode = parentCPU.CPSR() & 0x1F;
+    uint32_t old_lr = parentCPU.R()[14]; UNUSED(old_lr);
+    uint32_t mode = parentCPU.CPSR() & 0x1F; UNUSED(mode);
     
     parentCPU.R()[14] = parentCPU.R()[15] + 4;
     
-    printf("[BL @0x%08X] Mode=0x%02X, Old LR=0x%08X, New LR=0x%08X\n", 
-           pc_before, mode, old_lr, parentCPU.R()[14]);
+    // printf("[BL @0x%08X] Mode=0x%02X, Old LR=0x%08X, New LR=0x%08X\n", 
+    //        pc_before, mode, old_lr, parentCPU.R()[14]);
     
     parentCPU.R()[15] += branch_offset;
     DEBUG_LOG(std::string("[BL] pc_after=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
@@ -265,7 +265,7 @@ void ARMCPU::exec_arm_software_interrupt(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_software_interrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     uint32_t swi_imm = bits<23,0>(instruction); UNUSED(swi_imm);
     // Handle software interrupt (SWI) here. Triggers Supervisor exception.
-    DEBUG_ERROR(std::string("SWI executed: immediate=0x") + DEBUG_TO_HEX_STRING(swi_imm, 8) + ", pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
+    // DEBUG_ERROR(std::string("SWI executed: immediate=0x") + DEBUG_TO_HEX_STRING(swi_imm, 8) + ", pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
     handleException(0x08, 0x13, true, false); // Vector 0x08, mode 0x13 (SVC), disable IRQ
 }
 

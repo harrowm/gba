@@ -1639,7 +1639,7 @@ TEST_F(ARMDataProcessingTest, SBC_IMM_WithPC) {
     cpu.CPSR() = 0x20000000; // C flag set
     assemble_and_write("sbc r2, r15, #8", cpu.R()[15]);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], (0x1000 + 8) - 8 - 0);
+    EXPECT_EQ(cpu.R()[2], 0x1000u);
 }
 
 TEST_F(ARMDataProcessingTest, SBC_REG_WithPC_AsRn) {
@@ -1648,7 +1648,7 @@ TEST_F(ARMDataProcessingTest, SBC_REG_WithPC_AsRn) {
     cpu.CPSR() = 0x20000000; // C flag set
     assemble_and_write("sbc r2, r15, r1", cpu.R()[15]);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], (0x1000 + 8) - 0x4 - 0);
+    EXPECT_EQ(cpu.R()[2], 0x1004u);
 }
 
 TEST_F(ARMDataProcessingTest, SBC_REG_WithPC_AsRm) {
@@ -1657,7 +1657,7 @@ TEST_F(ARMDataProcessingTest, SBC_REG_WithPC_AsRm) {
     cpu.CPSR() = 0x20000000; // C flag set
     assemble_and_write("sbc r2, r1, r15", cpu.R()[15]);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0x2000 - (0x1000 + 8) - 0);
+    EXPECT_EQ(cpu.R()[2], 0xFF8u);
 }
 
 // ===================== RSC Tests =====================
@@ -1885,7 +1885,7 @@ TEST_F(ARMDataProcessingTest, RSC_IMM_WithPC) {
     cpu.CPSR() = 0x20000000; // C flag set
     assemble_and_write("rsc r2, r15, #8", cpu.R()[15]);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 8 - (0x1000 + 8) - 0);
+    EXPECT_EQ(cpu.R()[2], 0xFFFFF000u);
 }
 
 TEST_F(ARMDataProcessingTest, RSC_REG_WithPC_AsRn) {
@@ -1894,7 +1894,7 @@ TEST_F(ARMDataProcessingTest, RSC_REG_WithPC_AsRn) {
     cpu.CPSR() = 0x20000000; // C flag set
     assemble_and_write("rsc r2, r15, r1", cpu.R()[15]);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], 0x4 - (0x1000 + 8) - 0);
+    EXPECT_EQ(cpu.R()[2], 4294963196u);
 }
 
 TEST_F(ARMDataProcessingTest, RSC_REG_WithPC_AsRm) {
@@ -1903,7 +1903,7 @@ TEST_F(ARMDataProcessingTest, RSC_REG_WithPC_AsRm) {
     cpu.CPSR() = 0x20000000; // C flag set
     assemble_and_write("rsc r2, r1, r15", cpu.R()[15]);
     arm_cpu.execute(1);
-    EXPECT_EQ(cpu.R()[2], (0x1000 + 8) - 0x2000 - 0);
+    EXPECT_EQ(cpu.R()[2], 4294963208u);
 }
 
 // ===================== TST Tests =====================
@@ -2283,10 +2283,16 @@ TEST_F(ARMDataProcessingTest, TEQ_ImmediateRotated) {
 TEST_F(ARMDataProcessingTest, TEQ_IMM_WithPC) {
     cpu.R()[15] = 0x1000;
     cpu.CPSR() = 0;
-    assemble_and_write("teq r15, #0x1008", cpu.R()[15]);
+    // 0x1008 is not a valid ARM immediate (bits at positions 3 and 12, span > 8 bits)
+    // Use 0x1000 instead, which IS valid (0x10 ROR 24)
+    // Keystone rejects invalid immediates, so manually encode
+    // TEQ R15, #0x1000: rotate=12, imm8=0x10
+    // Binary: 1110 00 1 10011 1 1111 0000 1100 00010000 = 0xE33F0C10
+    memory.write32(cpu.R()[15], 0xE33F0C10);
     arm_cpu.execute(1);
-    // TEQ: (0x1000 + 8) XOR 0x1008 = 0x1008 XOR 0x1008 = 0
-    EXPECT_TRUE(cpu.CPSR() & (1u << 30)); // Z set (result zero)
+    // TEQ: (0x1000 + 8) XOR 0x1000 = 0x1008 XOR 0x1000 = 0x0008 (not zero)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 30)); // Z clear (result = 0x0008)
+    EXPECT_FALSE(cpu.CPSR() & (1u << 31)); // N clear (bit 31 of result is 0)
 }
 
 TEST_F(ARMDataProcessingTest, TEQ_REG_WithPC_AsRn) {
