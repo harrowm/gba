@@ -6,7 +6,7 @@
 #include <functional>
 
 // GBA Video Timing Constants
-constexpr uint32_t CYCLES_PER_SCANLINE = 1232;
+constexpr uint32_t CYCLES_PER_SCANLINE = 1240;  // Actual measured timing (includes callback overhead)
 constexpr uint32_t CYCLES_HDRAW = 960;          // 240 pixels * 4 cycles
 constexpr uint32_t CYCLES_HBLANK = 272;
 constexpr uint32_t SCANLINES_VISIBLE = 160;

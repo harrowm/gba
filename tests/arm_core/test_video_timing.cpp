@@ -63,8 +63,10 @@ TEST_F(VideoTimingTest, VCountUpdatesEachScanline) {
 }
 
 TEST_F(VideoTimingTest, VBlankFlagSetAtScanline160) {
-    // Run until after scanline 160 starts (need to let H-Draw complete to trigger the transition)
-    uint64_t targetCycle = CYCLES_PER_SCANLINE * 160 + CYCLES_HDRAW + 1;
+    // VBlank flag is set at the START of scanline 160 (after scanline 159's HBlank completes)
+    // This happens at exactly: 160 scanlines * 1232 cycles/scanline = 197120 cycles
+    // Run just past this point to ensure the event has fired
+    uint64_t targetCycle = CYCLES_PER_SCANLINE * 160 + 10;
     gba->getScheduler().runUntil(targetCycle);
     
     uint64_t actualCycle = gba->getScheduler().getCurrentCycle();
@@ -92,8 +94,8 @@ TEST_F(VideoTimingTest, VBlankInterruptCanBeEnabled) {
     // Clear any existing IF flags
     gba->getMemory().write16(REG_IF, 0xFFFF);
     
-    // Run until scanline 160 (V-Blank) - need to let H-Draw complete to trigger transition
-    gba->getScheduler().runUntil(CYCLES_PER_SCANLINE * 161);
+    // Run until start of scanline 160 + a bit (V-Blank interrupt fires at start of scanline 160)
+    gba->getScheduler().runUntil(CYCLES_PER_SCANLINE * 160 + 10);
     
     // Check that IF flag was set
     uint16_t ifReg = gba->getMemory().read16(REG_IF);
