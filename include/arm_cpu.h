@@ -195,8 +195,10 @@ public:
    
     // Helper function for PC+8 pipeline offset in data processing instructions
     // When R15 (PC) is used as an operand, the value read is PC+8 due to ARM7TDMI pipeline
-    FORCE_INLINE uint32_t readOperand(uint8_t reg) const {
-        return (reg == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[reg];
+    // If a register is used to specify the shift amount, add an additional 4 bytes per register shift
+    // See https://github.com/jsmolka/gba-tests/issues/10
+    FORCE_INLINE uint32_t readOperand(uint8_t reg, uint8_t reg_shift) const {
+        return (reg == 15) ? (parentCPU.R()[15] + 8 + reg_shift*4) : parentCPU.R()[reg];
     }
    
     // Helper function for writing to destination register with THUMB interworking
