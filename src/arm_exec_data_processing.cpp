@@ -831,7 +831,19 @@ void ARMCPU::exec_arm_cmp_reg(uint32_t instruction) {
     ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 - shifted.value;
+    printf("[CMP REG DEBUG] PC=0x%08X, R0=0x%08X, R12=0x%08X, op1=0x%08X, shifted=0x%08X, result=0x%08X, instr=0x%08X, rn=%u, rm=%u\n",
+        parentCPU.R()[15], parentCPU.R()[0], parentCPU.R()[12], op1, shifted.value, result, instruction, rn, rm);
+    printf("[CMP OPERANDS] op1=0x%08X, shifted=0x%08X, result=0x%08X\n", op1, shifted.value, result);
+    fflush(stdout);
     updateFlagsSub(op1, shifted.value, result);
+    uint32_t cpsr = parentCPU.CPSR();
+    printf("[CPSR FLAGS] N=%u Z=%u C=%u V=%u CPSR=0x%08X\n",
+        (cpsr >> 31) & 1,
+        (cpsr >> 30) & 1,
+        (cpsr >> 29) & 1,
+        (cpsr >> 28) & 1,
+        cpsr);
+    fflush(stdout);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
@@ -930,12 +942,15 @@ void ARMCPU::exec_arm_mov_reg(uint32_t instruction) {
     if (reg_shift) {
         uint8_t rs = bits<11,8>(instruction);
         shift_val = parentCPU.R()[rs] & 0xFF;
+        // Debug: Print for any MOV with PC as source and register shift
+        if (rm == 15) {
+            printf("[MOV REG DEBUG] PC=0x%08X, R0=0x%08X, R12=0x%08X, value=0x%08X, shift_val=%u, instr=0x%08X, rd=%u, rs=%u\n", parentCPU.R()[15], parentCPU.R()[0], parentCPU.R()[12], value, shift_val, instruction, rd, rs);
+        }
     } else {
         shift_val = bits<11,7>(instruction);
     }
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
     ShiftResult shifted;
-    
     // Register shift by 0: preserve value and carry (different from immediate shift)
     if (reg_shift && shift_val == 0) {
         shifted.value = value;
@@ -943,9 +958,11 @@ void ARMCPU::exec_arm_mov_reg(uint32_t instruction) {
     } else {
         shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     }
-    
     parentCPU.R()[rd] = shifted.value;
-
+    // Print result after MOV for t224
+    if (rm == 15 && reg_shift) {
+        printf("[MOV REG DEBUG] After MOV: R0=0x%08X, PC=0x%08X, R12=0x%08X\n", parentCPU.R()[0], parentCPU.R()[15], parentCPU.R()[12]);
+    }
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);

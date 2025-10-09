@@ -22,13 +22,14 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     banked_r8_usr = banked_r9_usr = banked_r10_usr = banked_r11_usr = banked_r12_usr = 0;
     banked_r13_usr = banked_r14_usr = 0;
     
-    // Initialize all SPSR registers
-    // SPSR_irq must be initialized to current CPSR so BIOS IRQ handler can read it
-    spsr_fiq = 0;
-    spsr_svc = 0;
-    spsr_abt = 0;
-    spsr_irq = cpsr;  // Initialize to current CPSR (User mode + IRQ disabled)
-    spsr_und = 0;
+    // Initialize all SPSR registers to System mode (0x1F) to avoid invalid mode issues
+    // SPSR should contain a valid CPSR value with a valid mode (0x10-0x1F)
+    // Using System mode (0x1F) is safe as a default
+    spsr_fiq = 0x1F;  // System mode
+    spsr_svc = 0x1F;  // System mode
+    spsr_abt = 0x1F;  // System mode
+    spsr_irq = 0x1F;  // System mode
+    spsr_und = 0x1F;  // System mode
 
     // Initialize timing system
     timing_init(&timing);
