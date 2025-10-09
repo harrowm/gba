@@ -315,11 +315,15 @@ void ARMCPU::exec_arm_bx_possible(uint32_t instruction) {
         bool thumb = target & 1;
         printf("[BX EXEC] PC=0x%08X, target_reg=R%d, target=0x%08X, thumb=%d\n",
                parentCPU.R()[15], rm, target, thumb);
-        parentCPU.R()[15] = target & ~1u;
+        
         if (thumb) {
+            // THUMB mode: clear bit 0 (halfword align)
+            parentCPU.R()[15] = target & ~1u;
             parentCPU.setFlag(CPU::FLAG_T);
             printf("[BX] Switched to THUMB mode, new PC=0x%08X\n", parentCPU.R()[15]);
         } else {
+            // ARM mode: clear bits 0 and 1 (word align to 4 bytes)
+            parentCPU.R()[15] = target & ~3u;
             parentCPU.clearFlag(CPU::FLAG_T);
             printf("[BX] Staying in ARM mode, new PC=0x%08X\n", parentCPU.R()[15]);
         }

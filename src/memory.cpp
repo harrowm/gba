@@ -172,6 +172,13 @@ void Memory::write8(uint32_t address, uint8_t value) {
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
     
+    // Feature detection: OAM writes (sprite data)
+    static bool oam_logged = false;
+    if (address >= 0x07000000 && address < 0x07000400 && !oam_logged) {
+        printf("[FEATURE] ROM writing to OAM (sprite attribute memory) at 0x%08X\n", address);
+        oam_logged = true;
+    }
+    
     // Debug: Track VRAM writes (commented out - verified working)
     // if (address >= 0x06000000 && address < 0x06018000) {
     //     printf("[VRAM Write8] Address: 0x%08X, Value: 0x%02X\n", address, value);
@@ -195,9 +202,13 @@ uint16_t Memory::read16(uint32_t address) const {
             int regOffset = (address - 0x040000B0) % 12;
             
             if (regOffset == 8) {  // Word count (DMAxCNT_L)
-                return dmaController->readWordCount(channelID);
+                uint16_t count = dmaController->readWordCount(channelID);
+                printf("[DMA%d] Read Word Count: 0x%04X\n", channelID, count);
+                return count;
             } else if (regOffset == 10) {  // Control (DMAxCNT_H)
-                return dmaController->readControl(channelID);
+                uint16_t ctrl = dmaController->readControl(channelID);
+                printf("[DMA%d] Read Control: 0x%04X (Enable=%d)\n", channelID, ctrl, (ctrl >> 15) & 1);
+                return ctrl;
             }
         }
     }
@@ -234,9 +245,12 @@ void Memory::write16(uint32_t address, uint16_t value) {
             int regOffset = (address - 0x040000B0) % 12;
             
             if (regOffset == 8) {  // Word count (DMAxCNT_L)
+                printf("[DMA%d] Write Word Count: 0x%04X (%d transfers)\n", channelID, value, value ? value : 65536);
                 dmaController->writeWordCount(channelID, value);
                 return;  // Don't write to memory
             } else if (regOffset == 10) {  // Control (DMAxCNT_H)
+                printf("[DMA%d] Write Control: 0x%04X (Enable=%d, Mode=%d, 32bit=%d)\n", 
+                       channelID, value, (value >> 15) & 1, (value >> 12) & 3, (value >> 10) & 1);
                 dmaController->writeControl(channelID, value);
                 return;  // Don't write to memory
             }
@@ -289,20 +303,83 @@ void Memory::write16(uint32_t address, uint16_t value) {
     //     printf("[VRAM Write16] Address: 0x%08X, Value: 0x%04X (RGB555)\n", address, value);
     // }
     
-    // Debug: Track important register writes
-    // if (address == 0x04000000) { // REG_DISPCNT
-    //     printf("[REG Write] DISPCNT = 0x%04X (Mode: %d, BG0-3: %d%d%d%d, OBJ: %d)\n",
-    //            value, value & 0x7,
-    //            (value >> 8) & 1, (value >> 9) & 1, (value >> 10) & 1, (value >> 11) & 1,
-    //            (value >> 12) & 1);
-    // } else if (address == 0x04000208) { // REG_IME
-    //     printf("[REG Write] IME = 0x%04X (Interrupts %s)\n", 
-    //            value, (value & 1) ? "ENABLED" : "DISABLED");
-    // } else if (address == 0x04000200) { // REG_IE
-    //     printf("[REG Write] IE = 0x%04X (Enabled interrupts)\n", value);
-    // } else if (address == 0x04000202) { // REG_IF
-    //     printf("[REG Write] IF = 0x%04X (Acknowledge interrupts)\n", value);
-    // }
+    // Feature detection: Track what display features ROM is trying to use
+    static bool feature_logged[256] = {false};  // Track which features we've logged
+    
+    if (address == 0x04000000) { // REG_DISPCNT
+        int mode = value & 0x7;
+        bool bg0 = (value >> 8) & 1;
+        bool bg1 = (value >> 9) & 1;
+        bool bg2 = (value >> 10) & 1;
+        bool bg3 = (value >> 11) & 1;
+        bool obj = (value >> 12) & 1;
+        bool win0 = (value >> 13) & 1;
+        bool win1 = (value >> 14) & 1;
+        bool objWin = (value >> 15) & 1;
+        
+        printf("[DISPCNT] Write 0x%04X: Mode=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d Win0=%d Win1=%d ObjWin=%d\n",
+               value, mode, bg0, bg1, bg2, bg3, obj, win0, win1, objWin);
+        
+        // Log features being used
+        if (mode > 0 && !feature_logged[0]) {
+            printf("[FEATURE] ROM using video Mode %d (bitmap/affine modes)\n", mode);
+            feature_logged[0] = true;
+        }
+        if (bg1 && !feature_logged[1]) {
+            printf("[FEATURE] ROM enabling BG1 (text/affine background layer)\n");
+            feature_logged[1] = true;
+        }
+        if (bg2 && !feature_logged[2]) {
+            printf("[FEATURE] ROM enabling BG2 (text/affine background layer)\n");
+            feature_logged[2] = true;
+        }
+        if (bg3 && !feature_logged[3]) {
+            printf("[FEATURE] ROM enabling BG3 (text/affine background layer)\n");
+            feature_logged[3] = true;
+        }
+        if (obj && !feature_logged[4]) {
+            printf("[FEATURE] ROM enabling OBJ (sprites/objects)\n");
+            feature_logged[4] = true;
+        }
+        if ((win0 || win1 || objWin) && !feature_logged[5]) {
+            printf("[FEATURE] ROM enabling Windows (win0=%d win1=%d objWin=%d)\n", win0, win1, objWin);
+            feature_logged[5] = true;
+        }
+    }
+    
+    // Track background control registers (BG0CNT-BG3CNT)
+    if (address >= 0x04000008 && address <= 0x0400000E && !feature_logged[10 + (address - 0x04000008)/2]) {
+        int bgNum = (address - 0x04000008) / 2;
+        int priority = value & 0x3;
+        int charBase = (value >> 2) & 0x3;
+        int mosaic = (value >> 6) & 0x1;
+        int colors = (value >> 7) & 0x1;  // 0=16 colors, 1=256 colors
+        int screenBase = (value >> 8) & 0x1F;
+        int wraparound = (value >> 13) & 0x1;
+        int screenSize = (value >> 14) & 0x3;
+        
+        printf("[BG%dCNT] Write 0x%04X: Priority=%d CharBase=%d Mosaic=%d Colors=%s ScreenBase=%d Wrap=%d Size=%d\n",
+               bgNum, value, priority, charBase, mosaic, colors ? "256" : "16", screenBase, wraparound, screenSize);
+        feature_logged[10 + bgNum] = true;
+    }
+    
+    // Track affine parameters (BG2/BG3 rotation/scaling)
+    if (address >= 0x04000020 && address <= 0x0400003F && !feature_logged[20]) {
+        printf("[FEATURE] ROM writing BG affine parameters (rotation/scaling) at 0x%08X = 0x%04X\n", address, value);
+        feature_logged[20] = true;
+    }
+    
+    // Track blending registers
+    if (address >= 0x04000050 && address <= 0x04000054 && !feature_logged[21]) {
+        printf("[FEATURE] ROM enabling color blending/effects at 0x%08X = 0x%04X\n", address, value);
+        feature_logged[21] = true;
+    }
+    
+    // Track mosaic
+    if (address == 0x0400004C && !feature_logged[22]) {
+        printf("[FEATURE] ROM enabling mosaic effect = 0x%04X\n", value);
+        feature_logged[22] = true;
+    }
     
     base[offset] = val & 0xFF;
     base[(offset + 1) % Memory::BLOCK_SIZE] = (val >> 8) & 0xFF;
@@ -361,6 +438,14 @@ uint32_t Memory::read32(uint32_t address) const {
         | (base[offset + 1] << 8)
         | (base[offset + 2] << 16)
         | (base[offset + 3] << 24);
+    // Debug: Log I/O register reads during BIOS loop
+    if (address >= 0x04000000 && address < 0x04000400) {
+        static int ioReadCount = 0;
+        if (ioReadCount < 20) {
+            printf("[I/O Read32] Address=0x%08X Value=0x%08X\n", address, val);
+            ioReadCount++;
+        }
+    }
     // Debug: Print reads from entry point
     if (address == 0x080000B4) {
         printf("[Memory::read32] Read from 0x%08X: 0x%08X\n", address, val);
@@ -396,9 +481,11 @@ void Memory::write32(uint32_t address, uint32_t value) {
             int regOffset = (address - 0x040000B0) % 12;
             
             if (regOffset == 0) {  // Source address (DMAxSAD)
+                printf("[DMA%d] Write Source Address: 0x%08X\n", channelID, value);
                 dmaController->writeSourceAddress(channelID, value);
                 return;  // Don't write to memory
             } else if (regOffset == 4) {  // Dest address (DMAxDAD)
+                printf("[DMA%d] Write Dest Address: 0x%08X\n", channelID, value);
                 dmaController->writeDestAddress(channelID, value);
                 return;  // Don't write to memory
             }
@@ -415,6 +502,37 @@ void Memory::write32(uint32_t address, uint32_t value) {
     // Log writes that overlap IE/IF/IME registers
     if (aligned_address >= 0x04000200 && aligned_address <= 0x04000208) {
         printf("[REG Write32] Address=0x%08X Value=0x%08X (may write IE/IF/IME)\n", aligned_address, val);
+    }
+    
+    // Feature detection: Track display register writes in write32
+    static bool feature_logged32[256] = {false};
+    
+    if (aligned_address == 0x04000000) { // REG_DISPCNT (32-bit write)
+        uint16_t dispcnt_value = val & 0xFFFF;
+        int mode = dispcnt_value & 0x7;
+        bool bg0 = (dispcnt_value >> 8) & 1;
+        bool bg1 = (dispcnt_value >> 9) & 1;
+        bool bg2 = (dispcnt_value >> 10) & 1;
+        bool bg3 = (dispcnt_value >> 11) & 1;
+        bool obj = (dispcnt_value >> 12) & 1;
+        
+        printf("[DISPCNT32] Write 0x%04X: Mode=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d\n",
+               dispcnt_value, mode, bg0, bg1, bg2, bg3, obj);
+        
+        if (mode > 0 && !feature_logged32[0]) {
+            printf("[FEATURE] ROM using video Mode %d (detected in write32)\n", mode);
+            feature_logged32[0] = true;
+        }
+        if (obj && !feature_logged32[10]) {
+            printf("[FEATURE] ROM enabling sprites/OBJ (detected in write32)\n");
+            feature_logged32[10] = true;
+        }
+    }
+    
+    // Track OAM writes (32-bit)
+    if (aligned_address >= 0x07000000 && aligned_address < 0x07000400 && !feature_logged32[30]) {
+        printf("[FEATURE] ROM writing to OAM via write32 at 0x%08X\n", aligned_address);
+        feature_logged32[30] = true;
     }
     
     // Debug: Track VRAM writes

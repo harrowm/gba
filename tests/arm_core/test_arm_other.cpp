@@ -501,3 +501,38 @@ TEST_F(ARMOtherTest, LDM_STM_EmptyList_SBit) {
     EXPECT_EQ(cpu.R()[4], 0x1000u); // No writeback
 }
 
+// BX instruction - ARM mode alignment (fix: clear bits 0-1)
+TEST_F(ARMOtherTest, BX_ARMMode_Alignment) {
+    // Test that BX clears bits 0-1 when staying in ARM mode
+    // This was test 53 in arm.gba: branch to unaligned address should align to 4-byte boundary
+    cpu.CPSR() = 0x10; // ARM mode (T flag clear)
+    cpu.R()[0] = 0x08001002; // Unaligned address (bits 0-1 set)
+    cpu.R()[15] = 0x1000;
+    
+    // BX r0 - should branch to 0x08001000 (aligned), not 0x08001002
+    assemble_and_write("bx r0", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // PC should be aligned to 4-byte boundary (bits 0-1 cleared)
+    EXPECT_EQ(cpu.R()[15], 0x08001000u);
+    // Should stay in ARM mode
+    EXPECT_EQ((cpu.CPSR() & (1 << 5)), 0u); // T flag should be clear
+}
+
+// BX instruction - Switch to THUMB mode
+TEST_F(ARMOtherTest, BX_SwitchToThumb) {
+    // Test that BX switches to THUMB mode when bit 0 is set
+    cpu.CPSR() = 0x10; // ARM mode (T flag clear)
+    cpu.R()[0] = 0x08001001; // Address with bit 0 set
+    cpu.R()[15] = 0x1000;
+    
+    // BX r0 - should switch to THUMB mode and clear bit 0
+    assemble_and_write("bx r0", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // PC should have bit 0 cleared (halfword aligned)
+    EXPECT_EQ(cpu.R()[15], 0x08001000u);
+    // Should be in THUMB mode
+    EXPECT_EQ((cpu.CPSR() & (1 << 5)), (1u << 5)); // T flag should be set
+}
+

@@ -33,7 +33,7 @@ void ARMCPU::exec_arm_eor_reg(uint32_t instruction) {
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
 
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](op2, shift_val, carry);
+    ShiftResult shifted = apply_shift(op2, shift_val, carry, shift_type, reg_shift);
     uint32_t result = op1 ^ shifted.value;
     parentCPU.R()[rd] = result;
     if (rd != 15) {
@@ -92,7 +92,7 @@ void ARMCPU::exec_arm_sub_imm(uint32_t instruction) {
     // When PC is used as operand (Rn), apply +8 pipeline offset
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 - value;
-    writeResult(rd, result);  // Handles THUMB interworking when rd == 15
+    parentCPU.R()[rd] = result;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
@@ -330,7 +330,7 @@ void ARMCPU::exec_arm_adc_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsAdd(op1, value, result);
+        if (set_flags) updateFlagsAdd(op1, value + carry, result);
     }
 }
 
@@ -353,7 +353,7 @@ void ARMCPU::exec_arm_adc_reg(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsAdd(op1, shifted.value, result);
+        if (set_flags) updateFlagsAdd(op1, shifted.value + carry, result);
     }
 }
 
@@ -592,7 +592,16 @@ void ARMCPU::exec_arm_mov_reg(uint32_t instruction) {
         shift_val = bits<11,7>(instruction);
     }
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted;
+    
+    // Register shift by 0: preserve value and carry (different from immediate shift)
+    if (reg_shift && shift_val == 0) {
+        shifted.value = value;
+        shifted.carry_out = carry;
+    } else {
+        shifted = arm_shift[shift_type](value, shift_val, carry);
+    }
+    
     parentCPU.R()[rd] = shifted.value;
 
     if (rd != 15) {

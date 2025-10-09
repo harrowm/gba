@@ -9,13 +9,29 @@ void ARMCPU::exec_arm_eor_imm(uint32_t instruction) {
     uint8_t rotate = bits<11,8>(instruction) * 2;
     uint32_t imm = bits<7,0>(instruction);
     uint32_t value = (imm >> rotate) | (imm << (32 - rotate));
-    // When PC is used as operand (Rn), apply +8 pipeline offset
     uint32_t op1 = readOperand(rn);
     parentCPU.R()[rd] = op1 ^ value;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
+        if (set_flags) {
+            uint32_t carry_out = (rotate == 0) ? ((parentCPU.CPSR() >> 29) & 1) : ((value >> 31) & 1);
+            updateFlagsLogical(parentCPU.R()[rd], carry_out);
+        }
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -33,13 +49,27 @@ void ARMCPU::exec_arm_eor_reg(uint32_t instruction) {
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
 
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](op2, shift_val, carry);
+    ShiftResult shifted = apply_shift(op2, shift_val, carry, shift_type, reg_shift);
     uint32_t result = op1 ^ shifted.value;
     parentCPU.R()[rd] = result;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsLogical(parentCPU.R()[rd], shifted.carry_out);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -56,7 +86,24 @@ void ARMCPU::exec_arm_and_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
+        if (set_flags) {
+            uint32_t carry_out = (rotate == 0) ? ((parentCPU.CPSR() >> 29) & 1) : ((value >> 31) & 1);
+            updateFlagsLogical(parentCPU.R()[rd], carry_out);
+        }
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -72,13 +119,27 @@ void ARMCPU::exec_arm_and_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     parentCPU.R()[rd] = op1 & shifted.value;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsLogical(parentCPU.R()[rd], shifted.carry_out);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -97,6 +158,20 @@ void ARMCPU::exec_arm_sub_imm(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsSub(op1, value, result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -115,6 +190,20 @@ void ARMCPU::exec_arm_rsb_imm(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsSub(value, op1, result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -130,7 +219,7 @@ void ARMCPU::exec_arm_sub_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 - shifted.value;
     parentCPU.R()[rd] = result;
@@ -138,6 +227,20 @@ void ARMCPU::exec_arm_sub_reg(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsSub(op1, shifted.value, result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -153,7 +256,7 @@ void ARMCPU::exec_arm_rsb_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = shifted.value - op1;
     parentCPU.R()[rd] = result;
@@ -161,6 +264,20 @@ void ARMCPU::exec_arm_rsb_reg(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsSub(shifted.value, op1, result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -178,6 +295,20 @@ void ARMCPU::exec_arm_add_imm(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsAdd(op1, value, result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -195,7 +326,24 @@ void ARMCPU::exec_arm_orr_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
+        if (set_flags) {
+            uint32_t carry_out = (rotate == 0) ? ((parentCPU.CPSR() >> 29) & 1) : ((value >> 31) & 1);
+            updateFlagsLogical(parentCPU.R()[rd], carry_out);
+        }
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -211,13 +359,27 @@ void ARMCPU::exec_arm_orr_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     parentCPU.R()[rd] = op1 | shifted.value;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsLogical(parentCPU.R()[rd], shifted.carry_out);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -234,7 +396,24 @@ void ARMCPU::exec_arm_bic_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
+        if (set_flags) {
+            uint32_t carry_out = (rotate == 0) ? ((parentCPU.CPSR() >> 29) & 1) : ((value >> 31) & 1);
+            updateFlagsLogical(parentCPU.R()[rd], carry_out);
+        }
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -250,13 +429,27 @@ void ARMCPU::exec_arm_bic_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     parentCPU.R()[rd] = op1 & ~shifted.value;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsLogical(parentCPU.R()[rd], shifted.carry_out);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -270,7 +463,24 @@ void ARMCPU::exec_arm_mvn_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(parentCPU.R()[rd], 0);
+        if (set_flags) {
+            uint32_t carry_out = (rotate == 0) ? ((parentCPU.CPSR() >> 29) & 1) : ((value >> 31) & 1);
+            updateFlagsLogical(parentCPU.R()[rd], carry_out);
+        }
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -284,12 +494,26 @@ void ARMCPU::exec_arm_mvn_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     parentCPU.R()[rd] = ~shifted.value;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsLogical(parentCPU.R()[rd], shifted.carry_out);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -304,7 +528,7 @@ void ARMCPU::exec_arm_add_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 + shifted.value;
     parentCPU.R()[rd] = result;
@@ -312,6 +536,20 @@ void ARMCPU::exec_arm_add_reg(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsAdd(op1, shifted.value, result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -330,7 +568,21 @@ void ARMCPU::exec_arm_adc_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsAdd(op1, value, result);
+        if (set_flags) updateFlagsAdd(op1, value + carry, result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -346,14 +598,28 @@ void ARMCPU::exec_arm_adc_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 + shifted.value + carry;
     parentCPU.R()[rd] = result;
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsAdd(op1, shifted.value, result);
+        if (set_flags) updateFlagsAdd(op1, shifted.value + carry, result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -372,6 +638,20 @@ void ARMCPU::exec_arm_sbc_imm(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsSub(op1, value + (1 - carry), result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -386,7 +666,7 @@ void ARMCPU::exec_arm_sbc_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 - shifted.value - (1 - carry);
     parentCPU.R()[rd] = result;
@@ -394,6 +674,20 @@ void ARMCPU::exec_arm_sbc_reg(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsSub(op1, shifted.value + (1 - carry), result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -412,6 +706,20 @@ void ARMCPU::exec_arm_rsc_imm(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsSub(value, op1 + (1 - carry), result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -426,7 +734,7 @@ void ARMCPU::exec_arm_rsc_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = shifted.value - op1 - (1 - carry);
     parentCPU.R()[rd] = result;
@@ -434,6 +742,20 @@ void ARMCPU::exec_arm_rsc_reg(uint32_t instruction) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsSub(shifted.value, op1 + (1 - carry), result);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -446,7 +768,8 @@ void ARMCPU::exec_arm_tst_imm(uint32_t instruction) {
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 & value;
     // Update flags, especially Z
-    updateFlagsLogical(result, 0);
+    uint32_t carry_out = (rotate == 0) ? ((parentCPU.CPSR() >> 29) & 1) : ((value >> 31) & 1);
+    updateFlagsLogical(result, carry_out);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
@@ -460,7 +783,7 @@ void ARMCPU::exec_arm_tst_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 & shifted.value;
     // Update flags, especially Z
@@ -477,7 +800,8 @@ void ARMCPU::exec_arm_teq_imm(uint32_t instruction) {
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 ^ value;
     // Update flags, especially Z
-    updateFlagsLogical(result, 0);
+    uint32_t carry_out = (rotate == 0) ? ((parentCPU.CPSR() >> 29) & 1) : ((value >> 31) & 1);
+    updateFlagsLogical(result, carry_out);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 
@@ -504,7 +828,7 @@ void ARMCPU::exec_arm_cmp_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 - shifted.value;
     updateFlagsSub(op1, shifted.value, result);
@@ -534,7 +858,7 @@ void ARMCPU::exec_arm_cmn_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 + shifted.value;
     updateFlagsAdd(op1, shifted.value, result);
@@ -551,7 +875,7 @@ void ARMCPU::exec_arm_teq_reg(uint32_t instruction) {
     uint32_t value = readOperand(rm);
     uint32_t shift_val = reg_shift ? parentCPU.R()[rs] & 0xFF : bits<11,7>(instruction);
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
     uint32_t op1 = readOperand(rn);
     uint32_t result = op1 ^ shifted.value;
     // Update flags, especially Z
@@ -573,7 +897,25 @@ void ARMCPU::exec_arm_mov_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsLogical(value, 0); // No carry for MOV
+        if (set_flags) {
+            // If rotate > 0, carry is set to bit 31 of result; otherwise unchanged
+            uint32_t carry_out = (rotate == 0) ? ((parentCPU.CPSR() >> 29) & 1) : ((value >> 31) & 1);
+            updateFlagsLogical(value, carry_out);
+        }
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 
@@ -592,13 +934,36 @@ void ARMCPU::exec_arm_mov_reg(uint32_t instruction) {
         shift_val = bits<11,7>(instruction);
     }
     uint32_t carry = (parentCPU.CPSR() >> 29) & 1;
-    ShiftResult shifted = arm_shift[shift_type](value, shift_val, carry);
+    ShiftResult shifted;
+    
+    // Register shift by 0: preserve value and carry (different from immediate shift)
+    if (reg_shift && shift_val == 0) {
+        shifted.value = value;
+        shifted.carry_out = carry;
+    } else {
+        shifted = apply_shift(value, shift_val, carry, shift_type, reg_shift);
+    }
+    
     parentCPU.R()[rd] = shifted.value;
 
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
         if (set_flags) updateFlagsLogical(shifted.value, shifted.carry_out);
+    } else {
+        // When rd == 15 and S bit is set, restore CPSR from SPSR
+        bool set_flags = bits<20,20>(instruction);
+        if (set_flags) {
+            uint32_t spsr = parentCPU.SPSR();
+            uint32_t new_mode = spsr & 0x1F;
+            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            // If mode changes, call setMode to bank/unbank registers
+            if (new_mode != old_mode) {
+                parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
+            }
+            // Now restore full CPSR from SPSR
+            parentCPU.CPSR() = spsr;
+        }
     }
 }
 

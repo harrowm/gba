@@ -336,6 +336,22 @@ void ARMCPU::executeOneInstruction() {
     uint32_t pc = parentCPU.R()[15];
     uint32_t instruction = parentCPU.getMemory().read32(pc);
     
+    // Detect infinite loop (b . or 0xEAFFFFFE) - used by test ROMs to indicate completion
+    static bool infinite_loop_detected = false;
+    if (instruction == 0xEAFFFFFE && !infinite_loop_detected) {
+        infinite_loop_detected = true;
+        printf("\n*** INFINITE LOOP DETECTED at PC=0x%08X ***\n", pc);
+        printf("R0=0x%08X R1=0x%08X R2=0x%08X R3=0x%08X\n", 
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+        printf("R4=0x%08X R5=0x%08X R6=0x%08X R7=0x%08X\n",
+               parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7]);
+        printf("R8=0x%08X R9=0x%08X R10=0x%08X R11=0x%08X\n",
+               parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11]);
+        printf("R12=0x%08X (TEST ID) SP=0x%08X LR=0x%08X PC=0x%08X\n",
+               parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[15]);
+        printf("CPSR=0x%08X\n\n", parentCPU.CPSR());
+    }
+    
     // Calculate how many cycles this instruction will take
     uint32_t instruction_cycles = calculateInstructionCycles(instruction);
     

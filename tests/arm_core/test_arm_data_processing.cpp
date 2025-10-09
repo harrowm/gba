@@ -3513,3 +3513,292 @@ TEST_F(ARMDataProcessingTest, MVN_REG_WithPC) {
     EXPECT_EQ(cpu.R()[2], ~(0x1000u + 8));
 }
 
+// ADCS overflow flag with carry (fix: pass value + carry to overflow calculation)
+TEST_F(ARMDataProcessingTest, ADCS_OverflowFlag_WithCarry) {
+    // This was test 107 in arm.gba: 0x7FFFFFFE + 1 + 1 (carry) = 0x80000000
+    // Should set overflow flag (positive + positive = negative)
+    cpu.R()[0] = 0x7FFFFFFE;
+    cpu.CPSR() = 0x20000000; // Set carry flag
+    cpu.R()[15] = 0x1000;
+    
+    // ADCS r0, r0, #1 - should overflow
+    assemble_and_write("adcs r0, r0, #1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // Result: 0x7FFFFFFE + 1 + 1 = 0x80000000
+    EXPECT_EQ(cpu.R()[0], 0x80000000u);
+    // V flag should be set (overflow)
+    EXPECT_NE((cpu.CPSR() & (1 << 28)), 0u);
+    // N flag should be set (negative result)
+    EXPECT_NE((cpu.CPSR() & (1 << 31)), 0u);
+}
+
+// ADCS no overflow when adding small values
+TEST_F(ARMDataProcessingTest, ADCS_NoOverflow_SmallValues) {
+    // Test that ADCS doesn't falsely set overflow for small additions
+    cpu.R()[0] = 0;
+    cpu.CPSR() = 0x20000000; // Set carry flag
+    cpu.R()[15] = 0x1000;
+    
+    // ADCS r0, r0, #1 - should NOT overflow
+    assemble_and_write("adcs r0, r0, #1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // Result: 0 + 1 + 1 = 2
+    EXPECT_EQ(cpu.R()[0], 2u);
+    // V flag should NOT be set
+    EXPECT_EQ((cpu.CPSR() & (1 << 28)), 0u);
+}
+
+// LSL by 32 - result zero, carry = bit 0 (fix: handle shift >= 32)
+TEST_F(ARMDataProcessingTest, LSL_Shift32_CarryAndResult) {
+    // This was test 152 in arm.gba: shift 1 left by 32 positions
+    // Result should be 0, carry should be 1 (bit 0 of original value)
+    cpu.R()[0] = 1;
+    cpu.R()[1] = 32;
+    cpu.R()[15] = 0x1000;
+    
+    // MOVS r0, r0, lsl r1 - shift by 32
+    assemble_and_write("movs r0, r0, lsl r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // Result should be 0
+    EXPECT_EQ(cpu.R()[0], 0u);
+    // C flag should be set (bit 0 of original = 1)
+    EXPECT_NE((cpu.CPSR() & (1 << 29)), 0u);
+    // Z flag should be set (result is zero)
+    EXPECT_NE((cpu.CPSR() & (1 << 30)), 0u);
+}
+
+// LSL by > 32 - result zero, carry = 0
+TEST_F(ARMDataProcessingTest, LSL_ShiftGreaterThan32) {
+    // Shift by more than 32: result 0, carry 0
+    cpu.R()[0] = 1;
+    cpu.R()[1] = 33;
+    cpu.R()[15] = 0x1000;
+    
+    // MOVS r0, r0, lsl r1 - shift by 33
+    assemble_and_write("movs r0, r0, lsl r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // Result should be 0
+    EXPECT_EQ(cpu.R()[0], 0u);
+    // C flag should be clear (shift > 32)
+    EXPECT_EQ((cpu.CPSR() & (1 << 29)), 0u);
+    // Z flag should be set
+    EXPECT_NE((cpu.CPSR() & (1 << 30)), 0u);
+}
+
+// LSL by 31 - normal case for comparison
+TEST_F(ARMDataProcessingTest, LSL_Shift31_Normal) {
+    // LSL by 31: 1 << 31 = 0x80000000
+    cpu.R()[0] = 1;
+    cpu.R()[1] = 31;
+    cpu.R()[15] = 0x1000;
+    
+    // MOVS r0, r0, lsl r1
+    assemble_and_write("movs r0, r0, lsl r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // Result should be 0x80000000
+    EXPECT_EQ(cpu.R()[0], 0x80000000u);
+    // C flag should be clear (bit 31 became result bit 31, not carry)
+    EXPECT_EQ((cpu.CPSR() & (1 << 29)), 0u);
+}
+
+// ASR #32 immediate (encoded as shift amount 0) - Test 160 scenario
+TEST_F(ARMDataProcessingTest, ASR_Immediate32_PositiveValue) {
+    // ASR #32 on positive value (bit 31 = 0): result 0, carry 0
+    cpu.R()[0] = 1;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000;  // Clear all flags initially
+    
+    // MOVS r0, r0, asr #32 (note: encoded as asr #0 in instruction)
+    assemble_and_write("movs r0, r0, asr #32", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // Result should be 0 (sign extended from bit 31 = 0)
+    EXPECT_EQ(cpu.R()[0], 0u);
+    // C flag should be clear (bit 31 was 0)
+    EXPECT_EQ((cpu.CPSR() & (1 << 29)), 0u);
+    // Z flag should be set (result is 0)
+    EXPECT_NE((cpu.CPSR() & (1 << 30)), 0u);
+}
+
+// ASR #32 immediate with negative value - Test 160 scenario part 2
+TEST_F(ARMDataProcessingTest, ASR_Immediate32_NegativeValue) {
+    // ASR #32 on negative value (bit 31 = 1): result 0xFFFFFFFF, carry 1
+    cpu.R()[0] = 0x80000000;  // 1 << 31
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x00000000;  // Clear all flags initially
+    
+    // MOVS r0, r0, asr #32
+    assemble_and_write("movs r0, r0, asr #32", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // Result should be 0xFFFFFFFF (sign extended from bit 31 = 1)
+    EXPECT_EQ(cpu.R()[0], 0xFFFFFFFFu);
+    // C flag should be set (bit 31 was 1)
+    EXPECT_NE((cpu.CPSR() & (1 << 29)), 0u);
+    // N flag should be set (result bit 31 = 1)
+    EXPECT_NE((cpu.CPSR() & (1 << 31)), 0u);
+    // Z flag should be clear (result is not 0)
+    EXPECT_EQ((cpu.CPSR() & (1 << 30)), 0u);
+}
+
+// Register shift by 0 - Test 166 scenario
+TEST_F(ARMDataProcessingTest, RegisterShiftBy0_PreservesValueAndCarry) {
+    // Test that LSL/LSR/ASR/ROR with register shift by 0 preserves value and carry
+    cpu.R()[0] = 1;
+    cpu.R()[1] = 0;  // Shift amount = 0
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000;  // Set carry flag initially
+    
+    // MOVS r0, r0, lsl r1 (register shift by 0)
+    assemble_and_write("movs r0, r0, lsl r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // Value should be preserved
+    EXPECT_EQ(cpu.R()[0], 1u);
+    // C flag should still be set (carry preserved)
+    EXPECT_NE((cpu.CPSR() & (1 << 29)), 0u);
+    
+    // Test LSR with register shift by 0
+    cpu.R()[0] = 1;
+    cpu.R()[1] = 0;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000;  // Set carry
+    
+    assemble_and_write("movs r0, r0, lsr r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    EXPECT_EQ(cpu.R()[0], 1u);
+    EXPECT_NE((cpu.CPSR() & (1 << 29)), 0u);  // Carry preserved
+    
+    // Test ASR with register shift by 0
+    cpu.R()[0] = 1;
+    cpu.R()[1] = 0;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000;  // Set carry
+    
+    assemble_and_write("movs r0, r0, asr r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    EXPECT_EQ(cpu.R()[0], 1u);
+    EXPECT_NE((cpu.CPSR() & (1 << 29)), 0u);  // Carry preserved
+    
+    // Test ROR with register shift by 0
+    cpu.R()[0] = 1;
+    cpu.R()[1] = 0;
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x20000000;  // Set carry
+    
+    assemble_and_write("movs r0, r0, ror r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    EXPECT_EQ(cpu.R()[0], 1u);
+    EXPECT_NE((cpu.CPSR() & (1 << 29)), 0u);  // Carry preserved
+}
+
+// Register shift by 0 with carry clear
+TEST_F(ARMDataProcessingTest, RegisterShiftBy0_PreservesCarryClear) {
+    // Test that register shift by 0 preserves carry when it's clear
+    cpu.R()[0] = 0xFFFFFFFF;
+    cpu.R()[1] = 0;  // Shift amount = 0
+    cpu.R()[15] = 0x1000;
+    cpu.CPSR() = 0x00000000;  // Clear all flags including carry
+    
+    // MOVS r0, r0, lsl r1
+    assemble_and_write("movs r0, r0, lsl r1", cpu.R()[15]);
+    arm_cpu.execute(1);
+    
+    // Value should be preserved
+    EXPECT_EQ(cpu.R()[0], 0xFFFFFFFFu);
+    // C flag should still be clear
+    EXPECT_EQ((cpu.CPSR() & (1 << 29)), 0u);
+    // N flag should be set (bit 31 = 1)
+    EXPECT_NE((cpu.CPSR() & (1 << 31)), 0u);
+}
+
+// PC as destination with S bit set - restores CPSR from SPSR
+TEST_F(ARMDataProcessingTest, PCDestinationWithSBit_RestoresCPSRFromSPSR) {
+    // Test that when PC is destination and S bit is set, CPSR is restored from SPSR
+    // This is used for returning from exceptions
+    
+    // Start in System mode (0x1F)
+    cpu.CPSR() = 0x0000001F;  // System mode
+    cpu.R()[8] = 32;  // Set r8 in system mode
+    
+    // Switch to FIQ mode (0x11) - r8 is banked
+    cpu.setMode(CPU::Mode::FIQ);
+    cpu.CPSR() = 0x00000011;  // FIQ mode
+    cpu.R()[8] = 64;  // Set r8 in FIQ mode (different register)
+    
+    // Set SPSR to System mode
+    cpu.SPSR() = 0x0000001F;  // Will restore to System mode
+    
+    // Set PC
+    cpu.R()[15] = 0x1000;  // PC = 0x1000
+    
+    // SUBS PC, PC, #4 (S bit set, destination is PC)
+    // PC is read with +8 offset, so PC operand = 0x1008
+    // Result: 0x1008 - 4 = 0x1004
+    // This should: 1) Set PC = 0x1004, 2) Restore CPSR from SPSR
+    assemble_and_write("subs pc, pc, #4", 0x1000);
+    arm_cpu.execute(1);
+    
+    // PC should be set to 0x1004 (0x1008 from +8 pipeline offset - 4)
+    EXPECT_EQ(cpu.R()[15], 0x1004u);
+    
+    // CPSR should be restored to System mode (0x1F)
+    EXPECT_EQ(cpu.CPSR() & 0x1F, 0x1Fu);
+    
+    // R8 should now be the System mode r8 (32), not FIQ r8 (64)
+    EXPECT_EQ(cpu.R()[8], 32u);
+}
+
+// PC as destination without S bit - does NOT restore CPSR
+TEST_F(ARMDataProcessingTest, PCDestinationWithoutSBit_DoesNotRestoreCPSR) {
+    // Test that when PC is destination but S bit is NOT set, CPSR is unchanged
+    
+    // Start in FIQ mode
+    cpu.CPSR() = 0x00000011;  // FIQ mode
+    cpu.SPSR() = 0x0000001F;  // SPSR = System mode
+    
+    // Set PC
+    cpu.R()[15] = 0x1000;
+    
+    // SUB PC, PC, #4 (S bit NOT set)
+    // PC operand = 0x1008 (with +8 offset), result = 0x1004
+    assemble_and_write("sub pc, pc, #4", 0x1000);
+    arm_cpu.execute(1);
+    
+    // PC should be updated to 0x1004
+    EXPECT_EQ(cpu.R()[15], 0x1004u);
+    
+    // CPSR should still be FIQ mode, NOT restored from SPSR
+    EXPECT_EQ(cpu.CPSR() & 0x1F, 0x11u);
+}
+
+// Test with MOV instruction
+TEST_F(ARMDataProcessingTest, MOVSPCRestoresCPSRFromSPSR) {
+    // Test MOVS PC, LR pattern (common exception return)
+    
+    // Setup: FIQ mode with SPSR = System mode
+    cpu.CPSR() = 0x00000011;  // FIQ mode
+    cpu.SPSR() = 0x2000001F;  // System mode with N flag
+    cpu.R()[14] = 0x2000;     // LR = return address
+    cpu.R()[15] = 0x1000;
+    
+    // MOVS PC, LR
+    assemble_and_write("movs pc, lr", 0x1000);
+    arm_cpu.execute(1);
+    
+    // PC should be LR
+    EXPECT_EQ(cpu.R()[15], 0x2000u);
+    
+    // CPSR should be restored from SPSR
+    EXPECT_EQ(cpu.CPSR(), 0x2000001Fu);
+}
+
+

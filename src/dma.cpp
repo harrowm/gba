@@ -179,6 +179,9 @@ void DMAController::performTransfer(int channelId) {
     uint16_t count = channel.internalCount;
     bool is32bit = channel.is32Bit();
     
+    printf("[DMA%d] STARTING TRANSFER: src=0x%08X dst=0x%08X count=%d size=%s\n",
+           channelId, srcAddr, destAddr, count, is32bit ? "32bit" : "16bit");
+    
     // Perform all transfers
     for (uint16_t i = 0; i < count; i++) {
         // Read from source
@@ -226,6 +229,7 @@ void DMAController::performTransfer(int channelId) {
         }
         // Set active=false so it can be retriggered
         channel.active = false;
+        printf("[DMA%d] TRANSFER COMPLETE (repeat mode, keeping enabled)\n", channelId);
         // Keep enabled bit set (don't disable the DMA)
     } else {
         // Transfer complete, disable DMA
@@ -233,6 +237,7 @@ void DMAController::performTransfer(int channelId) {
         uint16_t ctrl = channel.getControl();
         ctrl &= ~DMA_ENABLE;  // Clear enable bit
         channel.setControl(ctrl);
+        printf("[DMA%d] TRANSFER COMPLETE (one-shot, disabling DMA, control now=0x%04X)\n", channelId, ctrl);
     }
     
     // Trigger IRQ if enabled

@@ -69,12 +69,40 @@ GBA::~GBA() {
 
 void GBA::skipBIOS() {
     // Skip BIOS boot process and jump directly to ROM
-    // Set up registers as if BIOS had already initialized them
-    cpu->setMode(CPU::SYS);  // System mode
-    cpu->R()[13] = 0x03007F00;  // SP for system mode
-    cpu->R()[15] = 0x08000000;  // PC at ROM start
-    cpu->CPSR() = 0x0000001F;  // System mode, no flags set
+    // Based on mGBA's GBASkipBIOS() implementation
     
+    // Set up CPU registers as if BIOS had initialized them
+    cpu->setMode(CPU::SYS);  // System mode
+    cpu->R()[13] = 0x03007F00;  // SP_sys
+    cpu->R()[14] = 0x08000000;  // LR
+    cpu->R()[15] = 0x08000000;  // PC at ROM start
+    
+    // Set CPSR: System mode (0x1F), ARM state (T=0)
+    cpu->CPSR() = 0x0000001F;
+    
+    // Initialize hardware registers (following mGBA's approach)
+    // VCOUNT = 0x7E (126) - mimics being at end of VBlank
+    memory.write8(0x04000006, 0x7E);
+    
+    // POSTFLG = 1 - indicates BIOS has already run once
+    memory.write8(0x04000300, 0x01);
+    
+    // Set up other stack pointers that BIOS normally initializes
+    uint32_t oldMode = cpu->CPSR();
+    
+    // IRQ mode stack
+    cpu->setMode(CPU::IRQ);
+    cpu->R()[13] = 0x03007FA0;
+    
+    // Supervisor mode stack  
+    cpu->setMode(CPU::SVC);
+    cpu->R()[13] = 0x03007FE0;
+    
+    // Restore to System mode
+    cpu->CPSR() = oldMode;
+    cpu->setMode(CPU::SYS);
+    
+    printf("[BIOS SKIP] Initialized: PC=0x08000000, VCOUNT=0x7E, POSTFLG=1, stacks set\n");
     DEBUG_INFO("Skipped BIOS, jumping directly to ROM at 0x08000000");
 }
 
@@ -110,10 +138,15 @@ void GBA::runFrame() {
     static bool rom_entered = false;
     static bool in_rom = false;
     
+    uint64_t loopStartCycle = scheduler.getCurrentCycle();
+    int instructionCount = 0;
+    static bool timing_logged = false;
+    
     // Execute CPU instructions until we reach the target cycle
     // The CPU will interleave with scheduler events (DMA, timers, GPU)
     while (scheduler.getCurrentCycle() < targetCycle) {
         uint32_t pc = cpu->R()[15];
+        uint64_t cycleBeforeInstr = scheduler.getCurrentCycle();
         
         // DEBUG: Check for CPSR corruption (bits 8-27 should always be 0)
         uint32_t cpsr = cpu->CPSR();
@@ -207,11 +240,34 @@ void GBA::runFrame() {
         }
         
         cpu->executeOneInstruction();
+        instructionCount++;
+        
+        uint64_t cycleAfterInstr = scheduler.getCurrentCycle();
+        uint64_t cyclesAdvanced = cycleAfterInstr - cycleBeforeInstr;
+        
+        // Log first 10 instructions and their cycle impact
+        if (!timing_logged && instructionCount <= 10) {
+            printf("[TIMING] Instr %d: PC=0x%08X, cycles before=%llu, cycles after=%llu, advanced=%llu\n",
+                   instructionCount, pc, cycleBeforeInstr, cycleAfterInstr, cyclesAdvanced);
+        }
+        
         // Scheduler will process any events that trigger during CPU execution
     }
     
+    uint64_t loopEndCycle = scheduler.getCurrentCycle();
+    uint64_t totalCyclesInLoop = loopEndCycle - loopStartCycle;
+    
+    if (!timing_logged) {
+        printf("[TIMING] Frame complete: instructions=%d, loop_start=%llu, loop_end=%llu, cycles_in_loop=%llu, target=%llu\n",
+               instructionCount, loopStartCycle, loopEndCycle, totalCyclesInLoop, (uint64_t)CYCLES_PER_FRAME);
+        timing_logged = true;
+    }
+    
     // Process remaining scheduler events up to target cycle
-    scheduler.runUntil(targetCycle);
+    // DISABLED: This was causing VBlank to fire before BIOS initialization completes
+    // because scheduler would fast-forward even though CPU barely executed.
+    // TODO: Re-enable this with proper synchronization once BIOS boot is working.
+    // scheduler.runUntil(targetCycle);
     
     // CRITICAL FIX: The loop above will overshoot the target by executing one more
     // instruction after we've already reached targetCycle. This is because we check

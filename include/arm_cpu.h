@@ -73,7 +73,7 @@ public:
         uint32_t z = (result == 0) ? 1 : 0;
         uint32_t c = (result < op1) ? 1 : 0;
         if (carry_override >= 0) c = carry_override;
-        uint32_t v = (~(op1 ^ op2) & (op1 ^ result) >> 31) & 1;
+        uint32_t v = ((~(op1 ^ op2) & (op1 ^ result)) >> 31) & 1;  // Fixed: added parentheses for correct precedence
         uint32_t cpsr = parentCPU.CPSR();
         cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
         cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
@@ -110,11 +110,18 @@ public:
 
     FORCE_INLINE static ShiftResult shift_lsl(uint32_t value, uint32_t shift_val, uint32_t carry) {
         ShiftResult res;
-        res.value = value << shift_val;
         if (shift_val == 0) {
+            res.value = value;
             res.carry_out = carry;
-        } else {
+        } else if (shift_val < 32) {
+            res.value = value << shift_val;
             res.carry_out = (value >> (32 - shift_val)) & 1;
+        } else if (shift_val == 32) {
+            res.value = 0;
+            res.carry_out = value & 1;  // Bit 0 becomes carry
+        } else {  // shift_val > 32
+            res.value = 0;
+            res.carry_out = 0;
         }
         return res;
     }
@@ -138,14 +145,16 @@ public:
         return res;
     }
     FORCE_INLINE static ShiftResult shift_asr(uint32_t value, uint32_t shift_val, uint32_t carry) {
+        (void)carry;  // Unused parameter - carry is needed for other shift types but not ASR
         ShiftResult res;
         if (shift_val == 0) {
-            res.value = value;
-            res.carry_out = carry;
+            // ARM encoding: ASR #0 means ASR #32
+            res.value = (value & 0x80000000) ? 0xFFFFFFFF : 0;
+            res.carry_out = (value & 0x80000000) ? 1 : 0;
         } else if (shift_val < 32) {
             res.value = ((int32_t)value) >> shift_val;
             res.carry_out = (value >> (shift_val - 1)) & 1;
-        } else {
+        } else {  // shift_val >= 32
             res.value = (value & 0x80000000) ? 0xFFFFFFFF : 0;
             res.carry_out = (value & 0x80000000) ? 1 : 0;
         }
@@ -168,6 +177,21 @@ public:
     static constexpr ShiftFunc arm_shift[4] = {
         shift_lsl, shift_lsr, shift_asr, shift_ror
     };
+    
+    // Helper to apply shift, handling register shift by 0 correctly
+    FORCE_INLINE static ShiftResult apply_shift(uint32_t value, uint32_t shift_val, 
+                                                  uint32_t carry, uint32_t shift_type, 
+                                                  bool is_reg_shift) {
+        ShiftResult result;
+        // Register shift by 0: preserve value and carry (different from immediate shift)
+        if (is_reg_shift && shift_val == 0) {
+            result.value = value;
+            result.carry_out = carry;
+        } else {
+            result = arm_shift[shift_type](value, shift_val, carry);
+        }
+        return result;
+    }
    
     // Helper function for PC+8 pipeline offset in data processing instructions
     // When R15 (PC) is used as an operand, the value read is PC+8 due to ARM7TDMI pipeline

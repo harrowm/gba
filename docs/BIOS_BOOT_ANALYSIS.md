@@ -325,6 +325,71 @@ The error must be in ONE of these places:
 
 **Next step**: Trace execution from VBlank wait exit to IME enable to find exactly where the control flow should diverge to return to 0xB4.
 
+## CRITICAL FINDING: BIOS Infinite Loop Pattern
+
+### The Loop That Never Returns
+Using Capstone to disassemble the entire function from 0x1928 to end of BIOS (0x3FFE):
+- **Total instructions**: 4,760
+- **Result**: NO matching `pop {r4, r5, r6, r7, pc}` return instruction found!
+- **End of disassembly**: Reaches 0x3FFE (end of BIOS) with only NOPs (`movs r0, r0`)
+
+**Conclusion**: The function at 0x1928 **never returns to 0x000000B4 in the traditional sense**.
+
+### The Repeating Pattern Before IRQ
+Just before IRQ fires, execution enters an infinite loop:
+
+```
+Pattern repeats ~30 times before IRQ:
+  0xD58 → BX to 0x1A28 (THUMB mode)
+  0x1A28 → (some code)
+  0x400 → BX to 0x77A (THUMB mode)  
+  0x77A → (some code)
+  Back to 0xD58...
+```
+
+**This is NOT a bug** - this pattern exists in the real BIOS which works on hardware.
+
+### Theory: BIOS Main Loop Waiting for Event
+The BIOS appears to enter a **main loop** that:
+1. Enables interrupts (IE=0x0001 for VBlank, IME=1)
+2. Enters infinite loop polling or waiting
+3. Expects IRQ to fire and be handled
+4. After IRQ handling, should exit loop and return to 0xB4
+
+**The problem**: When IRQ fires, the BIOS IRQ handler at 0x00000018 does:
+```assembly
+push {r0-r3, r12, lr}
+mov r0, #0x04000000
+adr lr, after_interrupt
+ldr pc, [r0, #-4]      ; Jump to [0x03FFFFFC] = user IRQ handler
+```
+
+If [0x03007FFC] is uninitialized (0xFFFFFFFF), this crashes.
+
+### Key Questions
+1. **Does real hardware initialize 0x03007FFC differently?**
+   - Our logs show NO writes to 0x03007FFC by BIOS
+   - ROM is supposed to initialize this, but ROM hasn't loaded yet
+   
+2. **Is the BIOS loop supposed to exit BEFORE IRQ fires?**
+   - Loop runs ~30 iterations before IRQ
+   - Maybe our timing is wrong and loop should exit earlier?
+   
+3. **Does real hardware prevent IRQ when [0x03007FFC] is invalid?**
+   - Hardware might check pointer validity
+   - Or BIOS IRQ handler might have safety check we're missing
+
+4. **Is this loop the actual "ROM loader wait loop"?**
+   - Maybe BIOS is waiting for ROM to do something
+   - Cartridge detection? DMA completion? Hardware signal?
+
+### What mGBA Does
+Need to investigate mGBA source code to see:
+- How they handle BIOS boot sequence
+- Do they skip/patch this loop?
+- Do they initialize 0x03007FFC with a default handler?
+- Do they have special timing that exits the loop earlier?
+
 ## Trace Analysis Commands
 
 ### Verify ROM Loader Never Executes
@@ -411,3 +476,116 @@ The function at 0x1928 never completes - it gets interrupted by IRQ before reach
 - **Improvement factor**: 138x
 - **Current state**: Waiting in VBlank loop (expected behavior)
 - **Estimated completion**: Next 1-2 frames (~280,000-560,000 cycles)
+
+## mGBA Research: How They Handle BIOS Boot
+
+### Key Finding: mGBA Uses BIOS Skip Mode By Default
+
+**Discovery from source code analysis:**
+
+mGBA has a `GBASkipBIOS()` function (in `src/gba/gba.c` lines 308-332) that **completely bypasses BIOS execution** and directly initializes the system AS IF the BIOS had already run.
+
+**What GBASkipBIOS() does:**
+```c
+void GBASkipBIOS(struct GBA* gba) {
+    struct ARMCore* cpu = gba->cpu;
+    if (cpu->gprs[ARM_PC] == BASE_RESET + WORD_SIZE_ARM) {
+        if (gba->memory.rom) {
+            cpu->gprs[ARM_PC] = GBA_BASE_ROM0;  // Jump directly to 0x08000000 (ROM)
+        } else if (gba->memory.wram[0x30]) {
+            cpu->gprs[ARM_PC] = GBA_BASE_EWRAM + 0xC0;
+        } else {
+            cpu->gprs[ARM_PC] = GBA_BASE_EWRAM;
+        }
+        gba->video.vcount = 0x7E;
+        gba->memory.io[GBA_REG(VCOUNT)] = 0x7E;
+        gba->memory.io[GBA_REG(POSTFLG)] = 1;
+        ARMWritePC(cpu);
+    }
+}
+```
+
+**Critical Observations:**
+- **Does NOT initialize 0x03007FFC** (user IRQ handler pointer)
+- **Does NOT explicitly set up stack pointers** in this function
+- **Simply jumps to ROM start** (0x08000000) or EWRAM
+- **Assumes ROM code will initialize everything** including interrupt handlers
+
+### When mGBA DOES Execute Real BIOS
+
+From `src/gba/core.c` lines 829-849:
+```c
+bool forceSkip = gba->mbVf || (core->opts.skipBios && (gba->romVf || gba->memory.rom));
+if (!forceSkip && (gba->romVf || gba->memory.rom) && gba->pristineRomSize >= 0xA0 && gba->biosVf) {
+    uint32_t crc = doCrc32(&gba->memory.rom[1], 0x9C);
+    if (crc != LOGO_CRC32) {
+        mLOG(STATUS, WARN, "Invalid logo, skipping BIOS");
+        forceSkip = true;
+    }
+}
+
+if (forceSkip) {
+    GBASkipBIOS(core->board);
+}
+```
+
+**So mGBA executes real BIOS only when:**
+1. User provides BIOS file
+2. User disables skip BIOS option
+3. ROM has valid Nintendo logo
+4. No multiboot mode
+
+### Hypothesis: Real GBA Hardware Behavior
+
+Based on our analysis and mGBA's skip logic, the likely real hardware sequence is:
+
+1. **BIOS runs initialization** at 0x1928
+2. **BIOS performs hardware setup**:
+   - Decompresses Nintendo logo
+   - Initializes hardware registers
+   - Sets up stack pointers
+   - **Possibly waits for hardware ready signals**
+3. **BIOS enables interrupts** (IE=0x0001, IME=1)
+4. **BIOS enters polling loop** (0xD58→0x1A28→0x400→0x77A)
+5. **Loop has an EXIT CONDITION** we're not satisfying:
+   - Could be polling a register that changes when ROM is ready
+   - Could be waiting for DMA completion
+   - Could be checking ROM presence via hardware detection
+   - Could be a timing-based mechanism (we execute too fast?)
+6. **Loop exits**, returns to 0xB4
+7. **ROM loader at 0xB4** jumps to 0x08000000 (ROM entry point)
+8. **ROM code** initializes 0x03007FFC BEFORE enabling interrupts
+
+### The Problem With Our Emulator
+
+**What happens in our emulator:**
+1. Execute BIOS loop very fast (~30 iterations)
+2. VBlank IRQ fires almost immediately (after ~170k instructions)
+3. BIOS IRQ handler at 0x18 jumps to [0x03007FFC]
+4. [0x03007FFC] = 0xFFFFFFFF (uninitialized memory)
+5. **CRASH attempting to execute at 0xFFFFFFFF**
+
+**What probably happens on real hardware:**
+1. BIOS loop **exits naturally** BEFORE first VBlank IRQ
+2. Returns to 0xB4 (ROM loader)
+3. ROM loader jumps to 0x08000000
+4. ROM entry point initializes system including 0x03007FFC
+5. ROM enables interrupts AFTER setting up handlers
+6. **No crash because handlers are properly initialized**
+
+### Key Insight
+
+**The BIOS doesn't write to 0x03007FFC** - this is confirmed by:
+- Our write logging shows no writes to this address by BIOS
+- mGBA's skip BIOS doesn't initialize it
+- This is USER IWRAM that ROM is supposed to initialize
+
+**The real problem:** The BIOS loop needs to EXIT before the first IRQ fires, but we don't know what makes it exit.
+
+### Next Steps
+
+1. **Disassemble the loop code** at 0xD58, 0x1A28, 0x400, 0x77A
+2. **Find the exit condition** - what register/memory is being polled?
+3. **Check if it's timing-based** - does it expect a certain number of cycles?
+4. **Look at DMA state** - is it waiting for DMA to finish?
+5. **Compare with other emulators** - how do they handle this?

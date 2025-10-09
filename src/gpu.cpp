@@ -106,6 +106,15 @@ void GPU::renderScanline() {
     uint16_t dispcnt = memory.read16(REG_DISPCNT);
     uint16_t mode = dispcnt & DISPCNT_MODE_MASK;
     
+    // Debug: Log DISPCNT value once per frame (on scanline 0)
+    static int dispcntLogCounter = 0;
+    if (currentScanline == 0 && dispcntLogCounter++ < 10) {
+        printf("[GPU] Scanline 0: DISPCNT=0x%04X, Mode=%d, BGs=%d%d%d%d, OBJ=%d\n",
+               dispcnt, mode,
+               (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
+               (dispcnt >> 12) & 1);
+    }
+    
     switch (mode) {
         case 0:
             renderMode0Scanline(currentScanline);
