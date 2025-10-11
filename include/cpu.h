@@ -8,6 +8,8 @@
 #include "thumb_cpu.h"
 #include "timing.h"
 #include "utility_macros.h"
+#include "instruction_tracer.h"
+#include "instruction_memory_tracer.h"
 #include <array>
 #include <cstdint>
 
@@ -74,6 +76,10 @@ private:
 
     ThumbCPU* thumbCPU; // Delegate for Thumb instructions
     ARMCPU* armCPU; // Delegate for ARM instructions
+    
+    // Instruction tracers for debugging
+    InstructionTracer tracer;
+    InstructionMemoryTracer memoryTracer;
 
     // Helper: get current mode
     Mode getMode() const { return static_cast<Mode>(cpsr & 0x1F); }
@@ -147,6 +153,27 @@ public:
 
     std::array<uint32_t, 16>& R() { return registers; }
     uint32_t& CPSR() { return cpsr; }
+    
+    // Instruction tracing for debugging
+    void enableTracing(const char* filename, uint32_t max_instructions = 1000) {
+        tracer.open(filename, max_instructions);
+    }
+    void enableMemoryTracing(const char* filename, uint32_t max_instructions = 5000) {
+        memoryTracer.open(filename, &memory, max_instructions);
+    }
+    void disableTracing() {
+        tracer.close();
+        memoryTracer.close();
+    }
+    bool isTracingEnabled() const {
+        return tracer.isEnabled();
+    }
+    bool isMemoryTracingComplete() const {
+        return memoryTracer.isComplete();
+    }
+    bool isMemoryTracingEnabled() const {
+        return memoryTracer.isEnabled();
+    }
     
     // SPSR (Saved Program Status Register) accessors
     uint32_t& SPSR() {

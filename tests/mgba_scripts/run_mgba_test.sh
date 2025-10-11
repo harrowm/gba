@@ -1,0 +1,1 @@
+/Applications/mGBA.app/Contents/MacOS/mGBA /Users/malcolm/gba/assets/roms/arm.gba -b /Users/malcolm/gba/assets/bios.bin -s /Users/malcolm/gba/tests/mgba_scripts/trace_bios.lua 

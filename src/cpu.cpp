@@ -119,6 +119,14 @@ void CPU::executeOneInstruction() {
     static uint64_t exec_count = 0;
     exec_count++;
     
+    // Trace instruction state BEFORE execution (like mGBA's GDB trace)
+    if (tracer.isEnabled()) {
+        tracer.traceInstruction(registers.data(), cpsr);
+    }
+    if (memoryTracer.isEnabled()) {
+        memoryTracer.traceInstruction(registers.data(), cpsr);
+    }
+    
     // Debug: Print first few calls to see if we're even getting here
     if (exec_count <= 5 || exec_count % 50000 == 0) {
         printf("[CPU::executeOneInstruction #%llu] PC=0x%08X CPSR=0x%08X T=%d\n",
@@ -168,22 +176,31 @@ bool CPU::checkPendingInterrupts() {
     
     // Check if any interrupts are pending
     bool has_pending = interruptController.hasPendingInterrupt();
-    if (has_pending && check_count++ < 5) {
-        uint16_t ie = memory.read16(0x04000200);
-        uint16_t ifReg = memory.read16(0x04000202);
-        printf("[CHECK_IRQ #%d] IME=%d, IRQ_disabled=%d, pending=%d IE=0x%04X IF=0x%04X => WILL CALL handleInterrupt!\n",
-               check_count, ime, irqDisabled, has_pending, ie, ifReg);
+    if (has_pending) {
+        check_count++;
+        // Print every 1000th IRQ to avoid spam, but show details
+        if (check_count % 1000 == 0) {
+            uint16_t ie = memory.read16(0x04000200);
+            uint16_t ifReg = memory.read16(0x04000202);
+            printf("[CHECK_IRQ #%d] IE=0x%04X IF=0x%04X (VBlank=%d HBlank=%d Timer0=%d)\n",
+                   check_count, ie, ifReg, (ifReg & 0x01), (ifReg & 0x02) >> 1, (ifReg & 0x08) >> 3);
+        }
     }
     return has_pending;
 }
 
 void CPU::handleInterrupt() {
+    static int irq_count = 0;
+    irq_count++;
+    
     DEBUG_INFO("CPU: Handling interrupt");
     
     // Save current CPSR before mode switch
     uint32_t old_cpsr = cpsr;
-    printf("[IRQ] handleInterrupt: CPSR before=0x%08X, PC=0x%08X\n", cpsr, registers[15]);
-    fflush(stdout);
+    if (irq_count <= 5) {
+        printf("[IRQ #%d] handleInterrupt: CPSR before=0x%08X, PC=0x%08X\n", irq_count, cpsr, registers[15]);
+        fflush(stdout);
+    }
     
     // Calculate return address
     // In ARM mode, PC+4 (current instruction + 8, then -4 for return)
@@ -197,26 +214,24 @@ void CPU::handleInterrupt() {
         returnAddress = registers[15] + 4;
     }
     
-    printf("[IRQ] Calculated return address=0x%08X\n", returnAddress);
+    if (irq_count <= 5) {
+        printf("[IRQ #%d] Calculated return address=0x%08X\n", irq_count, returnAddress);
+    }
     
     // Switch to IRQ mode (this handles register banking)
     setMode(IRQ);
-    printf("[IRQ] After setMode(IRQ): CPSR=0x%08X, LR=0x%08X\n", cpsr, registers[14]);
     
     // Save old CPSR to SPSR_irq
     SPSR() = old_cpsr;
     
     // Set LR_irq to return address
     registers[14] = returnAddress;
-    printf("[IRQ] After setting LR: LR=0x%08X\n", registers[14]);
     
     // Disable further interrupts (set I flag in CPSR)
     cpsr |= 0x80; // Set I flag (bit 7)
     
     // Switch to ARM mode (clear T flag in CPSR)
     cpsr &= ~FLAG_T;
-    
-    printf("[IRQ] Final CPSR=0x%08X before jump to 0x18\n", cpsr);
     
     // Set PC to IRQ vector (0x00000018)
     registers[15] = 0x00000018;
@@ -243,19 +258,10 @@ void CPU::reset() {
     banked_r13_und = banked_r14_und = 0;
     banked_r13_usr = banked_r14_usr = 0;
     
-    // Initialize stack pointers for different modes
-    // BIOS will set these up properly, but we initialize to safe values
-    setMode(IRQ);
-    registers[13] = 0x03007FA0; // IRQ stack
-    
-    setMode(SVC);
-    registers[13] = 0x03007FE0; // Supervisor stack
-    
-    setMode(SYS);
-    registers[13] = 0x03007F00; // System/User stack
-    
-    // Start in Supervisor mode with interrupts disabled
-    cpsr = 0x000000D3; // SVC mode (0x13) | IRQ disabled (bit 7) | FIQ disabled (bit 6)
+    // Start in System mode (like mGBA does for BIOS execution)
+    // The BIOS expects to start in System mode with sp initialized
+    cpsr = 0x0000001F; // System mode (0x1F), ARM mode (T=0)
+    registers[13] = 0x03007F00; // SP for System mode
     
     // Set PC to reset vector (0x00000000)
     // In a real GBA, the BIOS starts here

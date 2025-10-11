@@ -29,10 +29,12 @@ void printUsage(const char* programName) {
     printf("Arguments:\n");
     printf("  rom_path            Path to GBA ROM file (.gba)\n\n");
     printf("Options:\n");
-    printf("  -h, --help          Show this help message\n");
-    printf("  -t, --test-pattern  Use test pattern instead of ROM\n");
-    printf("  --skip-bios         Skip BIOS and jump directly to ROM (for homebrew ROMs)\n");
-    printf("  --trace-bios        Enable detailed BIOS execution tracing\n\n");
+    printf("  -h, --help               Show this help message\n");
+    printf("  -t, --test-pattern       Use test pattern instead of ROM\n");
+    printf("  --skip-bios              Skip BIOS and jump directly to ROM (for homebrew ROMs)\n");
+    printf("  --trace-bios             Enable detailed BIOS execution tracing\n");
+    printf("  --trace-instructions     Trace first 1000 instructions to /tmp/gba_instruction_trace.log\n");
+    printf("  --trace-memory           Trace first 5000 instructions with memory to /tmp/gba_memory_trace.log\n\n");
     printf("Examples:\n");
     printf("  %s game.gba                    # Load and run game.gba\n", programName);
     printf("  %s assets/roms/sonic.bin       # Load ROM from assets\n", programName);
@@ -57,6 +59,12 @@ int main(int argc, char* argv[]) {
     bool useTestPattern = false;
     
     bool skipBIOS = false;
+    bool enableInstructionTrace = false;
+    bool enableMemoryTrace = false;
+    const char* traceFile = "/tmp/gba_instruction_trace.log";
+    const char* memoryTraceFile = "/tmp/gba_memory_trace.log";
+    uint32_t maxTraceInstructions = 1000;
+    uint32_t maxMemoryTraceInstructions = 1000;
     
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -69,6 +77,12 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "--trace-bios") == 0) {
             g_trace_bios = true;
             printf("BIOS tracing enabled\n");
+        } else if (strcmp(argv[i], "--trace-instructions") == 0) {
+            enableInstructionTrace = true;
+            printf("Instruction tracing enabled - writing to %s\n", traceFile);
+        } else if (strcmp(argv[i], "--trace-memory") == 0) {
+            enableMemoryTrace = true;
+            printf("Memory tracing enabled - writing to %s\n", memoryTraceFile);
         } else if (argv[i][0] != '-') {
             // Assume it's a ROM path
             if (romPath != nullptr) {
@@ -104,8 +118,17 @@ int main(int argc, char* argv[]) {
             fillTestPattern(vram);
             printf("Test pattern loaded into VRAM\n");
         } else {
+            // Load BIOS first
+            const char* biosPath = "assets/bios.bin";
+            printf("\nLoading BIOS: %s\n", biosPath);
+            if (!gba.loadBIOS(biosPath)) {
+                fprintf(stderr, "Failed to load BIOS file (needed for proper boot)\n");
+                fprintf(stderr, "Hint: Place GBA BIOS at assets/bios.bin\n");
+                return 1;
+            }
+            
             // Load ROM from file
-            printf("\nLoading ROM: %s\n", romPath);
+            printf("Loading ROM: %s\n", romPath);
             if (!gba.loadROM(romPath)) {
                 fprintf(stderr, "Failed to load ROM file\n");
                 return 1;
@@ -119,6 +142,7 @@ int main(int argc, char* argv[]) {
             } else {
                 // BIOS is loaded - boot through it
                 printf("Booting through BIOS (PC will start at 0x00000000)\n");
+                printf("This will show Nintendo logo animation, then run ROM\n");
                 // Don't call skipBIOS() - let it run from 0x0
             }
         }
@@ -137,6 +161,17 @@ int main(int argc, char* argv[]) {
         // Get GPU and Memory references for rendering
         GPU& gpu = gba.getGPU();
         Memory& mem = gba.getMemory();
+        CPU& cpu = gba.getCPU();
+        
+        // Enable instruction tracing if requested
+        if (enableInstructionTrace) {
+            cpu.enableTracing(traceFile, maxTraceInstructions);
+            printf("Instruction tracing started - will trace %u instructions\n", maxTraceInstructions);
+        }
+        if (enableMemoryTrace) {
+            cpu.enableMemoryTracing(memoryTraceFile, maxMemoryTraceInstructions);
+            printf("Memory tracing started - will trace %u instructions\n", maxMemoryTraceInstructions);
+        }
         
         printf("\nStarting main loop...\n");
         printf("Press ESC or close window to quit\n\n");
@@ -150,6 +185,12 @@ int main(int argc, char* argv[]) {
             // This will trigger scanline rendering and V-Blank
             gba.runFrame();
             printf("[main loop] Returned from runFrame()\n");
+            
+            // Exit if memory tracing is complete
+            if (enableMemoryTrace && cpu.isMemoryTracingComplete()) {
+                printf("\n[main loop] Memory tracing complete - exiting\n");
+                break;
+            }
             
             // Get framebuffer pointer each frame (mode can change during execution)
             uint16_t* framebuffer = gpu.getFrameBuffer();

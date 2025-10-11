@@ -62,9 +62,16 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
                 dispstat = memory.read16(REG_DISPSTAT);
                 dispstat |= DISPSTAT_VBLANK;
                 memory.write16(REG_DISPSTAT, dispstat);
-                printf("[GPU] V-Blank flag set at cycle %llu\n", scheduler->getCurrentCycle());
+                
+                static int vblank_count = 0;
+                if (vblank_count++ < 5) {
+                    printf("[GPU] V-Blank #%d: DISPSTAT=0x%04X, IRQ_EN=%d, callback=%d at cycle %llu\n", 
+                           vblank_count, dispstat, (dispstat & DISPSTAT_VBLANK_IRQ_ENABLE) ? 1 : 0, 
+                           vblankCallback ? 1 : 0, scheduler->getCurrentCycle());
+                }
                 
                 if ((dispstat & DISPSTAT_VBLANK_IRQ_ENABLE) && vblankCallback) {
+                    printf("[GPU] Calling vblankCallback() #%d\n", vblank_count);
                     vblankCallback();
                 }
             } else if (currentScanline == 0) {
@@ -119,10 +126,20 @@ void GPU::renderScanline() {
         case 0:
             renderMode0Scanline(currentScanline);
             break;
+        case 1:
+        case 2:
+            // Mode 1: BG0, BG1 (regular), BG2 (affine)
+            // Mode 2: BG2, BG3 (affine)
+            // For now, use the same rendering as Mode 0 (will need proper affine support later)
+            renderMode0Scanline(currentScanline);
+            break;
         case 3:
             renderMode3Scanline(currentScanline);
             break;
-        // Modes 1, 2, 4, 5 not yet implemented
+        case 4:
+            renderMode4Scanline(currentScanline);
+            break;
+        // Mode 5 not yet implemented
         default:
             // Unknown mode - render blank
             clearScanlineToBackdrop(currentScanline);
@@ -147,19 +164,87 @@ void GPU::renderMode3Scanline(uint16_t scanline) {
     // but for basic Mode 3, the framebuffer is already in the correct format
 }
 
+void GPU::renderMode4Scanline(uint16_t scanline) {
+    if (scanline >= SCANLINES_VISIBLE) {
+        return; // Don't render during V-Blank
+    }
+    
+    // Mode 4: 240x160 @ 8bpp indexed color bitmap (requires BG2 enabled)
+    // Two frame buffers at 0x06000000 and 0x0600A000 (selected by DISPCNT bit 4)
+    // Each pixel is 1 byte (palette index 0-255)
+    // Output to tiledFramebuffer as RGB555
+    
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    
+    // Check if BG2 is enabled (bit 10)
+    bool bg2Enabled = (dispcnt & (1 << 10)) != 0;
+    if (!bg2Enabled) {
+        // BG2 not enabled, render backdrop
+        clearScanlineToBackdrop(scanline);
+        return;
+    }
+    
+    bool useSecondFrame = (dispcnt & (1 << 4)) != 0; // Bit 4: frame select
+    
+    uint8_t* vram = memory.getVRAM();
+    uint32_t frameOffset = useSecondFrame ? 0xA000 : 0x0000;
+    uint32_t scanlineOffset = scanline * 240; // 240 pixels per scanline, 1 byte each
+    
+    // Output scanline starts at tiledFramebuffer[scanline * 240]
+    uint16_t* output = &tiledFramebuffer[scanline * 240];
+    
+    // Debug: Check BOTH frame buffers for non-zero pixels
+    static int debugFrameCount = 0;
+    if (debugFrameCount < 3 && scanline == 76) {
+        printf("[Mode 4 Debug Frame %d] Scanline 76, useSecondFrame=%d\n", debugFrameCount, useSecondFrame);
+        
+        // Check both frame buffers
+        for (int frame = 0; frame < 2; frame++) {
+            uint32_t frameOff = frame ? 0xA000 : 0x0000;
+            int nonZeroCount = 0;
+            printf("  Frame %d (offset 0x%05X): ", frame, frameOff);
+            for (int i = 0; i < 240; i++) {
+                uint8_t idx = vram[frameOff + scanlineOffset + i];
+                if (idx != 0) {
+                    nonZeroCount++;
+                    if (nonZeroCount <= 10) {
+                        printf("[X%d=idx%d] ", i, idx);
+                    }
+                }
+            }
+            printf(" -> %d non-zero pixels\n", nonZeroCount);
+        }
+        debugFrameCount++;
+    }
+    
+    for (int x = 0; x < 240; x++) {
+        uint8_t paletteIndex = vram[frameOffset + scanlineOffset + x];
+        // Look up color in BG palette (8bpp mode uses full 256-color palette)
+        uint16_t color = readBGPaletteRaw(0, paletteIndex);
+        output[x] = color;
+    }
+}
+
 uint16_t* GPU::getFrameBuffer() {
     // Return appropriate framebuffer based on video mode
     uint16_t dispcnt = memory.read16(REG_DISPCNT);
     uint16_t mode = dispcnt & DISPCNT_MODE_MASK;
     
-    if (mode >= 3) {
-        // Bitmap modes (3, 4, 5): VRAM is the framebuffer
+    if (mode == 3) {
+        // Mode 3: Direct 16bpp bitmap in VRAM
         uint8_t* vram_ptr = memory.getVRAM();
         static int debugCount = 0;
         if (debugCount < 3) {
             printf("[GPU::getFrameBuffer] Mode %d, returning VRAM=%p\n", mode, (void*)vram_ptr);
             debugCount++;
         }
+        return reinterpret_cast<uint16_t*>(vram_ptr);
+    } else if (mode == 4) {
+        // Mode 4: 8bpp indexed, rendered to tiledFramebuffer
+        return tiledFramebuffer;
+    } else if (mode == 5) {
+        // Mode 5: 16bpp bitmap (160x128), VRAM is the framebuffer
+        uint8_t* vram_ptr = memory.getVRAM();
         return reinterpret_cast<uint16_t*>(vram_ptr);
     } else {
         // Tiled modes (0, 1, 2): use internal framebuffer

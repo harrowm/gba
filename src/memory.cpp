@@ -72,15 +72,22 @@ Memory::Memory(bool testMode) {
         for (uint32_t addr = 0x02000000; addr < 0x02040000; addr += BLOCK_SIZE)
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = wram + (addr - 0x02000000);
 
-        // --- IWRAM: 32KB at 0x03000000 ---
+        // --- IWRAM: 32KB at 0x03000000, mirrored throughout 0x03000000-0x03FFFFFF ---
         iwram = (uint8_t*)std::malloc(32 * 1024);
-        regionTable[0x03000000 / BLOCK_SIZE] = iwram;
+        // Mirror IWRAM every 64KB across the entire 16MB range
+        // Each 64KB block in the 0x03000000-0x03FFFFFF range should point to IWRAM
+        // but the actual IWRAM is only 32KB, so we need special handling in the read/write functions
+        for (uint32_t addr = 0x03000000; addr < 0x04000000; addr += BLOCK_SIZE) {
+            regionTable[addr / BLOCK_SIZE] = iwram;
+        }
 
         // --- I/O: 1KB at 0x04000000 ---
         io = (uint8_t*)std::malloc(1 * 1024);
         memset(io, 0, 1 * 1024);  // Zero-initialize IO memory
         regionTable[0x04000000 / BLOCK_SIZE] = io;
         // Initialize critical boot-related registers for clean BIOS boot
+        io[0x000] = 0x80; // DISPCNT low byte: Forced blank (bit 7) set on power-on
+        io[0x001] = 0x00; // DISPCNT high byte
         io[0x300] = 0x00; // POSTFLG: Boot Flag (0=First boot from power-on, 1=Further boot/reset)
         io[0x301] = 0x00; // HALTCNT: Power Down Control
         io[0x204] = 0x00; // WAITCNT: Game Pak Waitstate Control
@@ -141,6 +148,10 @@ inline uint8_t* get_region_base(uint8_t* const* regionTable, uint32_t address, u
     uint32_t block = (address & 0x0FFFFFFF) / Memory::BLOCK_SIZE;
     uint8_t* base = regionTable[block];
     offset = address % Memory::BLOCK_SIZE;
+    // IWRAM mirroring: 32KB at 0x03000000, mirrored every 32KB in 0x03000000-0x03FFFFFF
+    if (address >= 0x03000000 && address < 0x04000000 && base) {
+        offset = (address - 0x03000000) % 0x8000; // Mirror every 32KB
+    }
     // VRAM mirroring is handled by the base pointer mapping in the regionTable
     // Don't remap offset here - it causes out-of-bounds access
     // OAM mirroring: 0x07000000–0x07001FFF, 1KB mirrored in 8KB
@@ -272,6 +283,16 @@ void Memory::write16(uint32_t address, uint16_t value) {
         }
     }
     
+    // Debug palette writes
+    if (address >= 0x05000000 && address < 0x05000400) {
+        static int pal_count = 0;
+        if (pal_count++ < 10) {
+            uint32_t index = (address - 0x05000000) / 2;
+            printf("[Palette Write #%d] Index %d (addr=0x%08X): 0x%04X (R=%d, G=%d, B=%d)\n", 
+                   pal_count, index, address, value, value & 0x1F, (value >> 5) & 0x1F, (value >> 10) & 0x1F);
+        }
+    }
+    
     uint32_t rot = (address & 1) * 8;
     uint16_t val = (value << rot) | (value >> (16 - rot));
     uint32_t offset;
@@ -294,7 +315,11 @@ void Memory::write16(uint32_t address, uint16_t value) {
         uint16_t newIF = currentIF & ~val;  // Clear bits where value has 1
         base[offset] = newIF & 0xFF;
         base[(offset + 1) % Memory::BLOCK_SIZE] = (newIF >> 8) & 0xFF;
-        printf("[REG Write] IF acknowledge = 0x%04X, new IF = 0x%04X\n", val, newIF);
+        static int if_write_count = 0;
+        if (if_write_count++ < 10) {
+            printf("[REG Write #%d] IF acknowledge = 0x%04X, currentIF was = 0x%04X, new IF = 0x%04X\n", 
+                   if_write_count, val, currentIF, newIF);
+        }
         return;
     }
     
@@ -429,8 +454,16 @@ uint32_t Memory::read32(uint32_t address) const {
         }
     }
     
-    uint32_t rot = (address & 3) * 8;
+    // ARM7TDMI Misaligned Word Load (LDR):
+    // On ARM7TDMI, misaligned word loads:
+    // 1. Align address down to 4-byte boundary
+    // 2. Read the word from aligned address
+    // 3. Rotate the value RIGHT by (misalignment * 8) bits
+    // Example: LDR from 0x1003 (misaligned by 3):
+    //   - Reads from 0x1000
+    //   - Rotates result right by 24 bits
     uint32_t aligned_address = address & ~3u;  // Align to 4-byte boundary
+    uint32_t misalignment = address & 3u;       // Get misalignment (0-3)
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), aligned_address, offset);
     if (!base) return 0xFFFFFFFF;
@@ -438,6 +471,12 @@ uint32_t Memory::read32(uint32_t address) const {
         | (base[offset + 1] << 8)
         | (base[offset + 2] << 16)
         | (base[offset + 3] << 24);
+    
+    // Rotate right by misalignment * 8 bits
+    if (misalignment != 0) {
+        uint32_t rotate_amount = misalignment * 8;
+        val = (val >> rotate_amount) | (val << (32 - rotate_amount));
+    }
     // Debug: Log I/O register reads during BIOS loop
     if (address >= 0x04000000 && address < 0x04000400) {
         static int ioReadCount = 0;
@@ -450,7 +489,8 @@ uint32_t Memory::read32(uint32_t address) const {
     if (address == 0x080000B4) {
         printf("[Memory::read32] Read from 0x%08X: 0x%08X\n", address, val);
     }
-    return (val >> rot) | (val << (32 - rot));
+    
+    return val;  // No rotation on ARM7TDMI
 }
 
 // ARM7TDMI Unaligned Word Access (STR)
@@ -492,9 +532,24 @@ void Memory::write32(uint32_t address, uint32_t value) {
         }
     }
     
-    uint32_t rot = (address & 3) * 8;
-    uint32_t val = (value << rot) | (value >> (32 - rot));
+    // ARM7TDMI Misaligned Word Store (STR):
+    // On ARM7TDMI, misaligned word stores:
+    // 1. Align address down to 4-byte boundary
+    // 2. Rotate value LEFT by (misalignment * 8) bits
+    // 3. Write rotated value to aligned address
+    // Example: STR 0xAABBCCDD to 0x1003 (misaligned by 3):
+    //   - Rotates left by 24 bits: 0xDDAABBCC
+    //   - Writes to aligned 0x1000
     uint32_t aligned_address = address & ~3u;  // Align to 4-byte boundary
+    uint32_t misalignment = address & 3u;       // Get misalignment (0-3)
+    uint32_t val = value;
+    
+    // Rotate left by misalignment * 8 bits
+    if (misalignment != 0) {
+        uint32_t rotate_amount = misalignment * 8;
+        val = (val << rotate_amount) | (val >> (32 - rotate_amount));
+    }
+    
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, aligned_address, offset);
     if (!base) return;
@@ -502,6 +557,17 @@ void Memory::write32(uint32_t address, uint32_t value) {
     // Log writes that overlap IE/IF/IME registers
     if (aligned_address >= 0x04000200 && aligned_address <= 0x04000208) {
         printf("[REG Write32] Address=0x%08X Value=0x%08X (may write IE/IF/IME)\n", aligned_address, val);
+    }
+    
+    // Log writes to IRQ handler pointer area
+    // The BIOS IRQ dispatcher at 0x128 reads from [0x04000000-4] = 0x03FFFFFC
+    // BIOS also uses 0x03007FF0-0x03007FFC area during initialization
+    if (aligned_address == 0x03FFFFFC || (aligned_address >= 0x03007FF0 && aligned_address <= 0x03007FFC)) {
+        // Get current PC for debugging (requires CPU context)
+        printf("[IRQ HANDLER] Write32 to 0x%08X: value=0x%08X (IRQ handler pointer area)\n", aligned_address, val);
+        if (aligned_address == 0x03FFFFFC && (val < 0x02000000 || val > 0x0FFFFFFF)) {
+            printf("[IRQ HANDLER ERROR] Suspicious IRQ handler address 0x%08X written to 0x%08X!\n", val, aligned_address);
+        }
     }
     
     // Feature detection: Track display register writes in write32
@@ -681,6 +747,51 @@ bool Memory::loadROM(const char* filepath) {
     printf("ROM Title: %s\n", title);
     printf("Game Code: %.4s\n", rom + 0xAC);
     printf("Maker Code: %.2s\n", rom + 0xB0);
+    
+    return true;
+}
+
+bool Memory::loadBIOS(const char* filepath) {
+    FILE* biosFile = fopen(filepath, "rb");
+    if (!biosFile) {
+        fprintf(stderr, "Error: Failed to open BIOS file: %s\n", filepath);
+        return false;
+    }
+    
+    // Get file size
+    fseek(biosFile, 0, SEEK_END);
+    long fileSize = ftell(biosFile);
+    fseek(biosFile, 0, SEEK_SET);
+    
+    if (fileSize < 0) {
+        fprintf(stderr, "Error: Failed to determine BIOS file size\n");
+        fclose(biosFile);
+        return false;
+    }
+    
+    // GBA BIOS is exactly 16KB
+    if (fileSize != 16 * 1024) {
+        fprintf(stderr, "Warning: BIOS file is %ld bytes (expected 16384 bytes)\n", fileSize);
+        if (fileSize > 16 * 1024) {
+            fileSize = 16 * 1024;
+        }
+    }
+    
+    // Read BIOS into buffer
+    size_t read = fread(bios, 1, fileSize, biosFile);
+    fclose(biosFile);
+    
+    if (read != (size_t)fileSize) {
+        fprintf(stderr, "Error: Failed to read complete BIOS file (read %zu of %ld bytes)\n", read, fileSize);
+        return false;
+    }
+    
+    // Zero-fill remaining BIOS space if needed
+    if (read < 16 * 1024) {
+        memset(bios + read, 0, 16 * 1024 - read);
+    }
+    
+    printf("BIOS loaded: %zu bytes from %s\n", read, filepath);
     
     return true;
 }

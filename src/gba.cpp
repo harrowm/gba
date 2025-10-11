@@ -84,8 +84,15 @@ void GBA::skipBIOS() {
     // VCOUNT = 0x7E (126) - mimics being at end of VBlank
     memory.write8(0x04000006, 0x7E);
     
-    // POSTFLG = 1 - indicates BIOS has already run once
-    memory.write8(0x04000300, 0x01);
+    // POSTFLG = 0 - indicates first boot (ROM needs this to initialize text display)
+    // Note: Setting to 1 causes test ROM to skip text rendering setup
+    memory.write8(0x04000300, 0x00);
+    
+    // Disable interrupts initially - let ROM enable them when ready
+    // IME (Master interrupt enable) = 0
+    memory.write16(0x04000208, 0x0000);
+    // IE (Interrupt enable) = 0
+    memory.write16(0x04000200, 0x0000);
     
     // Set up other stack pointers that BIOS normally initializes
     uint32_t oldMode = cpu->CPSR();
@@ -102,7 +109,28 @@ void GBA::skipBIOS() {
     cpu->CPSR() = oldMode;
     cpu->setMode(CPU::SYS);
     
-    printf("[BIOS SKIP] Initialized: PC=0x08000000, VCOUNT=0x7E, POSTFLG=1, stacks set\n");
+    // Set up a default IRQ handler at 0x03FFFFFC
+    // The BIOS IRQ handler at 0x128 reads the handler pointer from [0x04000000-4] = 0x03FFFFFC
+    // ROM will replace this with its own handler if needed
+    // For now, create a handler that acknowledges the interrupt and returns:
+    //   MOV R0, #0x04000000   ; IO register base
+    //   ADD R0, R0, #0x200    ; Point to IF (0x04000202)
+    //   LDRH R1, [R0, #2]     ; Read IF
+    //   STRH R1, [R0, #2]     ; Write back to clear (write-to-clear)
+    //   BX LR                 ; Return from interrupt
+    uint32_t dummyHandlerAddr = 0x03007F00;
+    memory.write32(dummyHandlerAddr + 0, 0xE3A00301);  // MOV R0, #0x04000000
+    memory.write32(dummyHandlerAddr + 4, 0xE2800C02);  // ADD R0, R0, #0x200
+    memory.write32(dummyHandlerAddr + 8, 0xE1D010B2);  // LDRH R1, [R0, #2]
+    memory.write32(dummyHandlerAddr + 12, 0xE1C010B2); // STRH R1, [R0, #2]
+    memory.write32(dummyHandlerAddr + 16, 0xE12FFF1E); // BX LR
+    memory.write32(0x03FFFFFC, dummyHandlerAddr);      // IRQ handler pointer (correct address!)
+    
+    // Verify the write succeeded
+    uint32_t readBack = memory.read32(0x03FFFFFC);
+    printf("[BIOS SKIP] Initialized: PC=0x08000000, VCOUNT=0x7E, POSTFLG=0 (first boot), stacks set\n");
+    printf("[BIOS SKIP] IRQ handler: dummy handler at 0x%08X, pointer at 0x03FFFFFC\n", dummyHandlerAddr);
+    printf("[BIOS SKIP] Verification: read back 0x%08X from 0x03FFFFFC (should be 0x%08X)\n", readBack, dummyHandlerAddr);
     DEBUG_INFO("Skipped BIOS, jumping directly to ROM at 0x08000000");
 }
 
@@ -128,13 +156,8 @@ void GBA::runFrame() {
     uint64_t targetCycle = startCycle + CYCLES_PER_FRAME;
     printf("[GBA::runFrame #%d] Target cycle: %llu\n", frame_num, targetCycle);
     
-    // Auto-set POSTFLG after memory clear loop completes (BIOS doesn't do this itself)
-    // The BIOS checks POSTFLG at 0x74, then if 0, does initialization including
-    // memory clear at 0x120, then eventually jumps to ROM. We set POSTFLG=1
-    // immediately after the first memory clear completes so on next BIOS entry
-    // it will skip re-initialization.
-    static bool postflg_set = false;
-    static bool in_bios_loop = false;
+    // NOTE: Removed auto-set POSTFLG logic - let BIOS set it naturally
+    // The BIOS sets POSTFLG=1 itself when ready to jump to ROM
     static bool rom_entered = false;
     static bool in_rom = false;
     
@@ -223,21 +246,6 @@ void GBA::runFrame() {
         }
         
         last_pc = pc;
-        
-        // Detect entry into memory clear loop at 0x120
-        if (!postflg_set && pc >= 0x120 && pc <= 0x126) {
-            in_bios_loop = true;
-        }
-        
-        // Detect exit from memory clear loop (exits to address in LR=0x000000A0)
-        // When PC leaves the loop range and we were in the loop
-        if (!postflg_set && in_bios_loop && (pc < 0x120 || pc > 0x126)) {
-            // Memory clear completed - set POSTFLG so next BIOS reset won't re-initialize
-            memory.write8(0x04000300, 0x01);
-            postflg_set = true;
-            in_bios_loop = false;
-            printf("[POSTFLG] Auto-set to 0x01 after memory clear loop completion\n");
-        }
         
         cpu->executeOneInstruction();
         instructionCount++;

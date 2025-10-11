@@ -38,8 +38,9 @@ public:
     void runFrame();  // Run one frame (280,896 cycles)
     void stop() { running = false; }
     
-    // ROM loading
+    // ROM and BIOS loading
     bool loadROM(const char* filepath) { return memory.loadROM(filepath); }
+    bool loadBIOS(const char* filepath) { return memory.loadBIOS(filepath); }
     
     // Skip BIOS and jump directly to ROM (for simple test ROMs without proper headers)
     void skipBIOS();

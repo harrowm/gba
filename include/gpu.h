@@ -313,6 +313,7 @@ public:
     void renderScanline();
     void renderScanline(uint16_t scanline);  // New priority-aware renderer
     void renderMode3Scanline(uint16_t scanline);
+    void renderMode4Scanline(uint16_t scanline);  // Mode 4: 8bpp indexed bitmap
     void renderMode0Scanline(uint16_t scanline);  // Mode 0: 4 tiled backgrounds
     void renderBGScanline(int bgNum, uint16_t scanline);  // Render a single background scanline
     

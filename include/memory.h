@@ -39,8 +39,9 @@ public:
     // Get wait states for an address (for testing/debugging)
     uint32_t getWaitStates(uint32_t address, uint32_t accessWidth) const;
     
-    // ROM loading
+    // ROM and BIOS loading
     bool loadROM(const char* filepath);
+    bool loadBIOS(const char* filepath);
     
     // Direct access to memory regions (for GPU, DMA, etc.)
     uint8_t* getVRAM() { return vram; }

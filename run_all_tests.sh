@@ -55,8 +55,11 @@ run_suite() {
             failed=$(echo "$output" | grep "FAILED" | grep -oE '[0-9]+' | head -1)
             FAILED_TESTS=$((FAILED_TESTS + failed))
             TOTAL_TESTS=$((TOTAL_TESTS + failed))
-            echo "  ⚠️  $failed tests failed"
-            FAILED_SUITES+=("$name ($failed failures)")
+            # Only report failures if the count is actually greater than 0
+            if [ "$failed" -gt 0 ]; then
+                echo "  ⚠️  $failed tests failed"
+                FAILED_SUITES+=("$name ($failed failures)")
+            fi
         fi
         
         # If no test results found, consider it a failure

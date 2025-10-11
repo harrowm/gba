@@ -804,9 +804,23 @@ void ThumbCPU::thumb_str_word(uint16_t instruction) {
 
     // Calculate the address to store to
     uint32_t address = parentCPU.R()[rn] + parentCPU.R()[rm];
+    
+    // Get the value to store
+    uint32_t value = parentCPU.R()[rd];
+    
+    // Debug logging for BIOS execution
+    uint32_t pc = parentCPU.R()[15];
+    if (pc < 0x4000) {
+        printf("[THUMB STR DEBUG] PC=0x%08X | rd=%d rn=%d rm=%d | R[%d]=0x%08X R[%d]=0x%08X R[%d]=0x%08X | address=0x%08X value=0x%08X\n",
+               pc, rd, rn, rm, 
+               rd, parentCPU.R()[rd],
+               rn, parentCPU.R()[rn],
+               rm, parentCPU.R()[rm],
+               address, value);
+    }
 
     // Perform the store operation using memory_write_32
-    parentCPU.getMemory().write32(address, parentCPU.R()[rd]);
+    parentCPU.getMemory().write32(address, value);
 
     DEBUG_INFO("Executing Thumb STR (word): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
