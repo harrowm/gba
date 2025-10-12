@@ -39,6 +39,9 @@ public:
     // Get wait states for an address (for testing/debugging)
     uint32_t getWaitStates(uint32_t address, uint32_t accessWidth) const;
     
+    // Temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
+    void setDisableWaitCycles(bool disable) { disableWaitCycles = disable; }
+    
     // ROM and BIOS loading
     bool loadROM(const char* filepath);
     bool loadBIOS(const char* filepath);
@@ -73,6 +76,9 @@ private:
     
     // DMA controller for DMA register handling
     DMAController* dmaController = nullptr;
+    
+    // Flag to temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
+    mutable bool disableWaitCycles = false;
     
     // Helper to add wait state cycles
     void addWaitCycles(uint32_t address, uint32_t accessWidth) const;

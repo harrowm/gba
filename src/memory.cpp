@@ -681,11 +681,16 @@ uint32_t Memory::calculateWaitStates(uint32_t address, uint32_t accessWidth) con
 }
 
 void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
+    // Skip wait cycles if disabled (e.g., during tracer reads)
+    if (disableWaitCycles) {
+        return;
+    }
+    
     if (scheduler) {
         uint32_t cycles = calculateWaitStates(address, accessWidth);
-        // Advance scheduler by wait state cycles
-        uint64_t targetCycle = scheduler->getCurrentCycle() + cycles;
-        scheduler->runUntil(targetCycle);
+        // Just advance the cycle counter, don't process events
+        // Events will be processed after each instruction by GBA::runFrame()
+        scheduler->advanceCycles(cycles);
     }
 }
 

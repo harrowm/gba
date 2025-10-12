@@ -1206,10 +1206,26 @@ void ThumbCPU::thumb_stmia(uint16_t instruction) {
     uint8_t rn = (instruction >> 8) & 0x07; // Base register (bits 8-10)
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
+    // TEMPORARY DEBUG for all STM instructions
+    static int stm_count = 0;
+    if (stm_count < 5 || instruction == 0xC0CA) {
+        printf("[STM #%d] PC=0x%08X instruction=0x%04X rn=%d reglist=0x%02X\n", 
+               stm_count, parentCPU.R()[15] - 2, instruction, rn, register_list);
+        printf("[STM #%d] BEFORE: r0=0x%08X r1=0x%08X r2=0x%08X r3=0x%08X\n",
+               stm_count, parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+    }
+    stm_count++;
+
     // Store multiple registers to memory
     uint32_t address = parentCPU.R()[rn];
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
+            static int stm_count_inner = 0;
+            if (stm_count_inner < 20 || instruction == 0xC0CA) {
+                printf("[STM #%d] Writing R%d=0x%08X to address 0x%08X\n", 
+                       stm_count_inner, i, parentCPU.R()[i], address);
+            }
+            stm_count_inner++;
             parentCPU.getMemory().write32(address, parentCPU.R()[i]); // Write register to memory
             DEBUG_INFO("Storing R" + std::to_string(i) + " to [0x" + std::to_string(address) + "]");
             address += 4; // Increment address by 4
@@ -1217,7 +1233,16 @@ void ThumbCPU::thumb_stmia(uint16_t instruction) {
     }
 
     // Update the base register
+    uint32_t old_rn = parentCPU.R()[rn];
     parentCPU.R()[rn] = address;
+    
+    static int stm_count_after = 0;
+    if (stm_count_after < 5 || instruction == 0xC0CA) {
+        printf("[STM #%d] Updated R%d from 0x%08X to 0x%08X\n", stm_count_after, rn, old_rn, address);
+        printf("[STM #%d] AFTER: r0=0x%08X r1=0x%08X r2=0x%08X r3=0x%08X\n",
+               stm_count_after, parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+    }
+    stm_count_after++;
 }
 
 void ThumbCPU::thumb_ldmia(uint16_t instruction) {
@@ -1454,7 +1479,13 @@ void ThumbCPU::executeOneInstruction() {
     }
     
     uint32_t pc = parentCPU.R()[15];
+    
+    // Fetch instruction without charging wait cycles
+    // ARM7TDMI has 3-stage pipeline: Fetch happens in parallel with previous instruction's execution
+    // Only the execute stage costs cycles
+    parentCPU.getMemory().setDisableWaitCycles(true);
     uint16_t instruction = parentCPU.getMemory().read16(pc);
+    parentCPU.getMemory().setDisableWaitCycles(false);
     
     // BIOS tracing for THUMB instructions
     bool pc_in_bios = (pc < 0x4000);

@@ -4,6 +4,17 @@
 #include <algorithm>
 
 void Scheduler::runUntil(uint64_t targetCycle) {
+    // Prevent re-entrant calls (events callbacks might trigger more cycle advances)
+    if (processingEvents) {
+        // Just update the target cycle - events will be processed when we return
+        if (currentCycle < targetCycle) {
+            currentCycle = targetCycle;
+        }
+        return;
+    }
+    
+    processingEvents = true;
+    
     while (!eventQueue.empty() && eventQueue.top().triggerCycle <= targetCycle) {
         auto event = eventQueue.top();
         eventQueue.pop();
@@ -23,6 +34,8 @@ void Scheduler::runUntil(uint64_t targetCycle) {
     if (currentCycle < targetCycle) {
         currentCycle = targetCycle;
     }
+    
+    processingEvents = false;
 }
 
 void Scheduler::schedule(uint32_t cyclesFromNow, std::function<void()> callback, 
@@ -92,6 +105,13 @@ uint64_t Scheduler::getCyclesUntilNextEvent() const {
     return nextEventCycle - currentCycle;
 }
 
+uint64_t Scheduler::getNextEventCycle() const {
+    if (eventQueue.empty()) {
+        return UINT64_MAX;
+    }
+    return eventQueue.top().triggerCycle;
+}
+
 uint64_t Scheduler::getCyclesUntilEvent(EventType type) const {
     uint64_t minCycles = UINT64_MAX;
     
@@ -117,4 +137,10 @@ void Scheduler::reset() {
     while (!eventQueue.empty()) {
         eventQueue.pop();
     }
+}
+
+void Scheduler::advanceCycles(uint32_t cycles) {
+    // Just advance the cycle counter without processing events
+    // Events will be processed by runUntil() called from GBA::runFrame()
+    currentCycle += cycles;
 }

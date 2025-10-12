@@ -10,7 +10,7 @@ import sys
 GDB_HOST = 'localhost'
 GDB_PORT = 2345
 OUTPUT_FILE = '/tmp/mgba_memory_trace.log'
-MAX_INSTRUCTIONS = 1000
+MAX_INSTRUCTIONS = 50000
 
 # Key memory locations to monitor (address, name, size in bytes)
 MEMORY_LOCATIONS = {

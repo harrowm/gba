@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
     const char* traceFile = "/tmp/gba_instruction_trace.log";
     const char* memoryTraceFile = "/tmp/gba_memory_trace.log";
     uint32_t maxTraceInstructions = 1000;
-    uint32_t maxMemoryTraceInstructions = 1000;
+    uint32_t maxMemoryTraceInstructions = 50000;
     
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -180,17 +180,19 @@ int main(int argc, char* argv[]) {
         
         // Main loop
         while (!display.shouldQuit()) {
-            printf("[main loop] About to call runFrame(), frame %d\n", frameCount);
             // Run one frame of emulation (280,896 cycles)
             // This will trigger scanline rendering and V-Blank
             gba.runFrame();
-            printf("[main loop] Returned from runFrame()\n");
             
             // Exit if memory tracing is complete
             if (enableMemoryTrace && cpu.isMemoryTracingComplete()) {
                 printf("\n[main loop] Memory tracing complete - exiting\n");
                 break;
             }
+            
+            // Memory barrier to prevent compiler optimization bugs
+            // Without this, optimized builds can corrupt GPU object references
+            std::atomic_thread_fence(std::memory_order_seq_cst);
             
             // Get framebuffer pointer each frame (mode can change during execution)
             uint16_t* framebuffer = gpu.getFrameBuffer();

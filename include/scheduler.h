@@ -64,6 +64,9 @@ public:
     
     // Get cycles until next event of specific type
     uint64_t getCyclesUntilEvent(EventType type) const;
+    
+    // Get the absolute cycle of the next event (UINT64_MAX if none)
+    uint64_t getNextEventCycle() const;
 
     // Get current global cycle count
     uint64_t getCurrentCycle() const { return currentCycle; }
@@ -80,8 +83,8 @@ public:
     // Reset the scheduler (e.g., on reset)
     void reset();
 
-    // Advance cycle counter without processing events (use with caution)
-    void advanceCycles(uint32_t cycles) { currentCycle += cycles; }
+    // Advance cycles - will process events if not already processing
+    void advanceCycles(uint32_t cycles);
     
     // Set cycle counter to specific value (use for frame timing corrections)
     void setCurrentCycle(uint64_t cycle) { currentCycle = cycle; }
@@ -90,4 +93,5 @@ private:
     uint64_t currentCycle;
     uint64_t eventsProcessed;
     std::priority_queue<ScheduledEvent, std::vector<ScheduledEvent>, std::greater<ScheduledEvent>> eventQueue;
+    bool processingEvents = false;  // Guard against re-entrant calls
 };

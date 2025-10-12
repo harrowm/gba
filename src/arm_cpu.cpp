@@ -40,7 +40,13 @@ void ARMCPU::execute(uint32_t cycles) {
         }
 
         uint32_t pc = parentCPU.R()[15]; // Get current PC
-        uint32_t instruction = parentCPU.getMemory().read32(pc); // Fetch instruction
+        
+        // Fetch instruction without charging wait cycles
+        // ARM7TDMI has 3-stage pipeline: Fetch happens in parallel with previous instruction's execution
+        // Only the execute stage costs cycles
+        parentCPU.getMemory().setDisableWaitCycles(true);
+        uint32_t instruction = parentCPU.getMemory().read32(pc);
+        parentCPU.getMemory().setDisableWaitCycles(false);
 
         executeInstruction(pc, instruction);
         if (exception_taken) {
@@ -69,7 +75,12 @@ void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
         
         // Fetch next instruction to determine its cycle cost
         uint32_t pc = parentCPU.R()[15];
+        
+        // Fetch without charging wait cycles (pipelined)
+        parentCPU.getMemory().setDisableWaitCycles(true);
         uint32_t instruction = parentCPU.getMemory().read32(pc);
+        parentCPU.getMemory().setDisableWaitCycles(false);
+        
         uint32_t instruction_cycles = calculateInstructionCycles(instruction);
         
         // Use debug macros for detailed instruction logging
@@ -334,7 +345,11 @@ void ARMCPU::executeOneInstruction() {
     }
     
     uint32_t pc = parentCPU.R()[15];
+    
+    // Fetch instruction without charging wait cycles (pipelined - happens during previous instruction's execution)
+    parentCPU.getMemory().setDisableWaitCycles(true);
     uint32_t instruction = parentCPU.getMemory().read32(pc);
+    parentCPU.getMemory().setDisableWaitCycles(false);
     
     // Detect infinite loop (b . or 0xEAFFFFFE) - used by test ROMs to indicate completion
     static bool infinite_loop_detected = false;

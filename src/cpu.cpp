@@ -124,7 +124,8 @@ void CPU::executeOneInstruction() {
         tracer.traceInstruction(registers.data(), cpsr);
     }
     if (memoryTracer.isEnabled()) {
-        memoryTracer.traceInstruction(registers.data(), cpsr);
+        uint64_t current_cycle = scheduler ? scheduler->getCurrentCycle() : 0;
+        memoryTracer.traceInstruction(registers.data(), cpsr, current_cycle);
     }
     
     // Debug: Print first few calls to see if we're even getting here
@@ -258,14 +259,17 @@ void CPU::reset() {
     banked_r13_und = banked_r14_und = 0;
     banked_r13_usr = banked_r14_usr = 0;
     
-    // Start in System mode (like mGBA does for BIOS execution)
-    // The BIOS expects to start in System mode with sp initialized
-    cpsr = 0x0000001F; // System mode (0x1F), ARM mode (T=0)
-    registers[13] = 0x03007F00; // SP for System mode
+    // ARM7TDMI hardware resets to Supervisor mode with interrupts disabled
+    // This is the TRUE hardware reset behavior per ARM architecture spec
+    // The GBA BIOS will then set up stack pointers and switch modes as needed
+    cpsr = 0x000000D3; // SVC mode (0x13) | IRQ disabled (bit 7) | FIQ disabled (bit 6)
+    
+    // Stack pointers start at 0 - BIOS will initialize them
+    // Do NOT pre-initialize sp here!
     
     // Set PC to reset vector (0x00000000)
-    // In a real GBA, the BIOS starts here
+    // This is the BIOS entry point
     registers[15] = 0x00000000;
     
-    DEBUG_INFO("CPU: Reset complete, PC=0x00000000");
+    DEBUG_INFO("CPU: Reset complete in Supervisor mode, PC=0x00000000");
 }

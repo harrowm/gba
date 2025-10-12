@@ -166,7 +166,8 @@ void GBA::runFrame() {
     static bool timing_logged = false;
     
     // Execute CPU instructions until we reach the target cycle
-    // The CPU will interleave with scheduler events (DMA, timers, GPU)
+    // Following mGBA's architecture: process events between instructions
+    // This ensures events only fire at safe points after system initialization
     while (scheduler.getCurrentCycle() < targetCycle) {
         uint32_t pc = cpu->R()[15];
         uint64_t cycleBeforeInstr = scheduler.getCurrentCycle();
@@ -247,10 +248,30 @@ void GBA::runFrame() {
         
         last_pc = pc;
         
+        // OPTION 3: Cycle-driven execution with event checking
+        // Get the cycle of the next scheduled event before executing
+        uint64_t nextEventCycle = scheduler.getNextEventCycle();
+        
+        // Execute the instruction (this will advance cycles based on instruction + memory timing)
+        // Typical GBA instruction cost breakdown:
+        //   - IME check: 1 cycle (reading 0x04000208 to check if interrupts enabled)
+        //   - Instruction fetch: 1 cycle (reading instruction from memory)
+        //   - Execution: 1-3 cycles (depending on instruction type)
+        //   - Data access: 0-2 cycles (if instruction reads/writes memory)
+        // Average: 3-5 cycles per instruction
         cpu->executeOneInstruction();
         instructionCount++;
         
         uint64_t cycleAfterInstr = scheduler.getCurrentCycle();
+        
+        // Check if we passed any events during instruction execution
+        // If the next event was scheduled between cycleBeforeInstr and cycleAfterInstr,
+        // we need to process it now to ensure correct timing
+        if (nextEventCycle <= cycleAfterInstr && nextEventCycle != UINT64_MAX) {
+            // We passed an event! Process all events up to current cycle
+            scheduler.runUntil(cycleAfterInstr);
+        }
+        
         uint64_t cyclesAdvanced = cycleAfterInstr - cycleBeforeInstr;
         
         // Log first 10 instructions and their cycle impact
@@ -259,7 +280,6 @@ void GBA::runFrame() {
                    instructionCount, pc, cycleBeforeInstr, cycleAfterInstr, cyclesAdvanced);
         }
         
-        // Scheduler will process any events that trigger during CPU execution
     }
     
     uint64_t loopEndCycle = scheduler.getCurrentCycle();
@@ -272,10 +292,8 @@ void GBA::runFrame() {
     }
     
     // Process remaining scheduler events up to target cycle
-    // DISABLED: This was causing VBlank to fire before BIOS initialization completes
-    // because scheduler would fast-forward even though CPU barely executed.
-    // TODO: Re-enable this with proper synchronization once BIOS boot is working.
-    // scheduler.runUntil(targetCycle);
+    // This ensures GPU events fire at correct cycle boundaries
+    scheduler.runUntil(targetCycle);
     
     // CRITICAL FIX: The loop above will overshoot the target by executing one more
     // instruction after we've already reached targetCycle. This is because we check

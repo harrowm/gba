@@ -5,6 +5,9 @@
 #include <cstdio>
 #include "memory.h"
 
+// Forward declaration
+class Scheduler;
+
 class InstructionMemoryTracer {
 private:
     FILE* trace_file;
@@ -81,7 +84,7 @@ public:
         return instruction_count >= max_instructions;
     }
     
-    void traceInstruction(uint32_t* regs, uint32_t cpsr) {
+    void traceInstruction(uint32_t* regs, uint32_t cpsr, uint64_t current_cycle = 0) {
         if (!isEnabled()) {
             return;
         }
@@ -89,7 +92,11 @@ public:
         instruction_count++;
         
         fprintf(trace_file, "\n======================================================================\n");
-        fprintf(trace_file, "Instruction #%llu\n", instruction_count);
+        fprintf(trace_file, "Instruction #%llu", instruction_count);
+        if (current_cycle > 0) {
+            fprintf(trace_file, " (Cycle: %llu)", current_cycle);
+        }
+        fprintf(trace_file, "\n");
         fprintf(trace_file, "======================================================================\n");
         
         // Print PC
@@ -131,7 +138,9 @@ public:
                 cpsr, N, Z, C, V, I, F, T, mode_name);
         
         // Read and print key memory locations
+        // Disable wait cycles during tracer reads to avoid triggering scheduler events
         fprintf(trace_file, "\nMemory:\n");
+        memory->setDisableWaitCycles(true);
         for (const auto& loc : MEMORY_LOCATIONS) {
             uint32_t value;
             if (loc.size == 1) {
@@ -145,6 +154,7 @@ public:
                 fprintf(trace_file, "  [%-12s] 0x%08X = 0x%08X\n", loc.name, loc.address, value);
             }
         }
+        memory->setDisableWaitCycles(false);
         
         // Stop tracing after max instructions
         if (instruction_count >= max_instructions) {

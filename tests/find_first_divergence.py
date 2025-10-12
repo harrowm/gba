@@ -71,7 +71,11 @@ def main():
     first_divergence = None
     
     # Scan through instructions
-    for instr_num in range(1, 500):
+    for instr_num in range(1, 44580):
+        # Print progress every 100 instructions
+        if instr_num % 100 == 0:
+            print(f"Comparing instruction #{instr_num}...", flush=True)
+        
         # Find in mGBA trace
         mgba_regs = None
         mgba_pc = None
@@ -121,8 +125,8 @@ def main():
             }
             break
         
-        # Print progress every 50 instructions
-        if instr_num % 50 == 0:
+        # Print progress every 1000 instructions
+        if instr_num % 1000 == 0:
             print(f"  Checked up to instruction #{instr_num} - all match so far")
     
     if first_divergence:
@@ -177,7 +181,7 @@ def main():
             print(f"  r{reg['num']}")
         
     else:
-        print("\nNo divergence found in first 500 instructions!")
+        print("\nNo divergence found in first 1000 instructions!")
 
 if __name__ == '__main__':
     main()
