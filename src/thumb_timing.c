@@ -3,8 +3,23 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Get sequential access cycles based on PC region
+static uint32_t get_seq_cycles_for_pc(uint32_t pc) {
+    uint8_t region = (pc >> 24) & 0xFF;
+    if (region == 0x00) return 1;      // BIOS - 1 cycle sequential
+    if (region == 0x02) return 6;      // EWRAM - 6 cycles sequential (32-bit)
+    if (region == 0x03) return 1;      // IWRAM - 1 cycle sequential
+    if (region >= 0x08 && region <= 0x0D) return 3;  // ROM - 3 cycles sequential (16-bit)
+    return 1;  // Default
+}
+
 // Calculate cycles for a Thumb instruction before execution
 uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, uint32_t* registers) {
+    // ARM7TDMI Pipeline Model:
+    // The 3-stage pipeline (Fetch -> Decode -> Execute) runs in parallel.
+    // While instruction N executes, instruction N+1 is decoded and N+2 is fetched.
+    // Therefore, we only charge the INTERNAL execution cycles, not the fetch.
+    // Exception: Pipeline breaks (branches) require 2 cycles to refill.
     uint32_t cycles = 0;
     
     // Identify instruction format and calculate base cycles
@@ -125,7 +140,7 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
         cycles = 1;
     }
     
-    return cycles;
+    return cycles; // Return only internal execution cycles (fetch happens in parallel)
 }
 
 // Calculate multiply cycles based on operand value

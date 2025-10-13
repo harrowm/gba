@@ -179,14 +179,8 @@ uint32_t ThumbCPU::calculateInstructionCycles(uint16_t instruction) {
     uint32_t pc = parentCPU.R()[15];
     uint32_t base_cycles = thumb_calculate_instruction_cycles(instruction, pc, registers);
     
-    // For conditional branches, check if branch will be taken
-    if ((instruction & THUMB_FORMAT_MASK_BRANCH_COND) == THUMB_FORMAT_VAL_BRANCH_COND) {
-        uint8_t condition = (instruction >> 8) & 0xF;
-        if (condition != 0xF) { // Not SWI
-            bool taken = thumb_is_branch_taken(instruction, parentCPU.CPSR());
-            return taken ? THUMB_CYCLES_BRANCH_TAKEN : THUMB_CYCLES_BRANCH_COND;
-        }
-    }
+    // For conditional branches, the timing function already handles both taken and not-taken cases
+    // and includes the proper prefetch cost, so we just use the base_cycles as-is
     
     return base_cycles;
 }

@@ -80,11 +80,26 @@ private:
     // Flag to temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
     mutable bool disableWaitCycles = false;
     
+    // Wait state tables (matching mGBA's model)
+    // These track non-sequential and sequential access times for each memory region
+    // Index is the high byte of the address (address >> 24)
+    uint8_t waitstatesNonseq32[256] = {0};
+    uint8_t waitstatesNonseq16[256] = {0};
+    uint8_t waitstatesSeq32[256] = {0};
+    uint8_t waitstatesSeq16[256] = {0};
+    
     // Helper to add wait state cycles
     void addWaitCycles(uint32_t address, uint32_t accessWidth) const;
     
     // Calculate wait states for different memory regions
     uint32_t calculateWaitStates(uint32_t address, uint32_t accessWidth) const;
+    
+    // Initialize wait state tables
+    void initWaitStateTables();
+    
+    // Get sequential and non-sequential wait states for an address
+    uint32_t getNonseqWaitStates(uint32_t address, uint32_t accessWidth) const;
+    uint32_t getSeqWaitStates(uint32_t address, uint32_t accessWidth) const;
 };
 
 #endif // MEMORY_H

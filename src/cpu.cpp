@@ -271,5 +271,14 @@ void CPU::reset() {
     // This is the BIOS entry point
     registers[15] = 0x00000000;
     
+    // ARM7TDMI 3-stage pipeline must be filled on startup
+    // This costs 2 cycles: one for each of the first two fetches
+    // (matching mGBA's ARMWritePC behavior: 2 + activeNonseqCycles32 + activeSeqCycles32)
+    // For BIOS region, waitstates are 0, so this is just 2 cycles
+    if (scheduler) {
+        scheduler->advanceCycles(2);
+        DEBUG_INFO("CPU: Added 2 cycles for pipeline fill at reset");
+    }
+    
     DEBUG_INFO("CPU: Reset complete in Supervisor mode, PC=0x00000000");
 }

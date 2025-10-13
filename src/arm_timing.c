@@ -10,9 +10,9 @@ static const uint8_t arm_instruction_cycles_lut[256] = {
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
     // 0x20-0x3F: Data processing with register operand 2  
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-    // 0x40-0x7F: Single data transfer
-    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+    // 0x40-0x7F: Single data transfer (LDR/STR) - 1 cycle prefetch, memory cycles added separately
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
     // 0x80-0x9F: Block data transfer
     4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
     // 0xA0-0xBF: Branch
@@ -24,15 +24,37 @@ static const uint8_t arm_instruction_cycles_lut[256] = {
     3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
 };
 
+// Get sequential access cycles for PC location (for prefetch)
+static uint32_t get_seq_cycles_for_pc(uint32_t pc) {
+    uint8_t region = (pc >> 24) & 0xFF;
+    switch (region) {
+        case 0x00: return 1; // BIOS - 1 cycle sequential
+        case 0x02: return 3; // EWRAM - 3 cycles sequential for 32-bit
+        case 0x03: return 1; // IWRAM - 1 cycle sequential
+        case 0x08:
+        case 0x09:
+        case 0x0A:
+        case 0x0B:
+        case 0x0C:
+        case 0x0D: return 3; // ROM - 3 cycles sequential (default wait state)
+        default: return 1; // Other regions default to 1
+    }
+}
+
 // Calculate cycles for an ARM instruction before execution
 uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uint32_t* registers, uint32_t cpsr) {
-    UNUSED(pc);
+    // ARM7TDMI Pipeline Model:
+    // The 3-stage pipeline (Fetch -> Decode -> Execute) runs in parallel.
+    // While instruction N executes, instruction N+1 is decoded and N+2 is fetched.
+    // Therefore, we only charge the INTERNAL execution cycles, not the fetch.
+    // Exception: Pipeline breaks (branches, PC writes) require 2 cycles to refill.
+    
     // Fast-path optimization for ARM_COND_AL (always execute) - most common case
     ARMCondition condition = (ARMCondition)ARM_GET_CONDITION(instruction);
     if (condition != ARM_COND_AL) {
-        // Check condition - if not met, instruction takes 1 cycle (fetch only)
+        // Check condition - if not met, instruction takes 1 cycle (just the execute slot)
         if (!arm_check_condition(condition, cpsr)) {
-            return 1; // Instruction not executed, just fetched
+            return 1; // Failed condition: 1 cycle to evaluate, fetch happened in parallel
         }
     }
     
@@ -40,63 +62,75 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
     uint32_t lut_index = (instruction >> 20) & 0xFF; // Bits 27-20
     uint32_t base_cycles = arm_instruction_cycles_lut[lut_index];
     
-    // For simple cases, return the lookup table result
+    // For simple cases, return the base cycles
     uint32_t format = ARM_GET_FORMAT(instruction);
     if (format == 0x5) { // Branch - simple case
-        return ARM_CYCLES_BRANCH;
+        // Branch: 1 cycle internal + 2 cycles for pipeline refill = 3 total
+        return 3;
     }
     if (format == 0x6 || format == 0x7) { // Coprocessor/SWI - check for SWI
         if ((instruction & 0x0F000000) == 0x0F000000) {
-            return ARM_CYCLES_SWI;
+            return 3; // SWI: 1 cycle internal + 2 cycles pipeline refill
         }
-        return ARM_CYCLES_COPROCESSOR;
+        return 1; // Coprocessor: just 1 cycle (not implemented, treat as NOP)
     }
     
     // Complex cases that need detailed analysis
-    uint32_t cycles = 0;
+    uint32_t extra_cycles = 0;
     
     // ARM instruction decoding based on bits 27-25 and secondary decoding
     if (format == 0x0 || format == 0x1) {
         // 00x: Data processing and misc instructions
         if ((instruction & 0x0FB00FF0) == 0x01000090) {
             // Single Data Swap (SWP)
-            cycles = ARM_CYCLES_SINGLE_TRANSFER + 1;
+            extra_cycles = 1; // +1 cycle for swap operation
         } else if ((instruction & 0x0FC000F0) == 0x00000090) {
             // Multiply instructions - this requires register value lookup
-            cycles = ARM_CYCLES_MULTIPLY_BASE;
+            extra_cycles = ARM_CYCLES_MULTIPLY_BASE;
             uint32_t rm = ARM_GET_RM(instruction);
-            cycles += arm_get_multiply_cycles(registers[rm]);
+            extra_cycles += arm_get_multiply_cycles(registers[rm]);
         } else if ((instruction & 0x0E000000) == 0x00000000) {
-            // Data processing - start with base cycle count
-            cycles = ARM_CYCLES_DATA_PROCESSING;
-            // Add extra cycle if shift amount is specified by register
-            if (!ARM_GET_IMMEDIATE_FLAG(instruction) && ARM_GET_REG_SHIFT_FLAG(instruction)) {
-                cycles += ARM_CYCLES_SHIFT_BY_REG;
+            // Data processing - 1 cycle base
+            extra_cycles = 0;
+            
+            // Check for MSR/MRS (PSR transfer) instructions
+            // MSR: bits 27-26=00, bits 24-23=10, bit 21=1, bits 19-16=0xF (or other patterns)
+            // MRS: bits 27-26=00, bits 24-23=00, bit 21=0, bits 19-16=0xF
+            bool is_psr_transfer = ((instruction & 0x0FB00000) == 0x01000000) ||  // MRS
+                                   ((instruction & 0x0FB00000) == 0x01200000);     // MSR
+            
+            if (!is_psr_transfer) {
+                // Add extra cycle if shift amount is specified by register
+                if (!ARM_GET_IMMEDIATE_FLAG(instruction) && ARM_GET_REG_SHIFT_FLAG(instruction)) {
+                    extra_cycles += ARM_CYCLES_SHIFT_BY_REG;
+                }
+                // Check for PC as destination - adds pipeline refill cycles
+                uint32_t rd = ARM_GET_RD(instruction);
+                if (rd == 15) {
+                    extra_cycles += 2; // Pipeline refill for PC modification
+                }
             }
-            // Check for PC as destination - adds pipeline flush cycles
-            uint32_t rd = ARM_GET_RD(instruction);
-            if (rd == 15) {
-                cycles += 2; // Additional cycles for PC modification
-            }
+            // PSR transfer instructions (MSR/MRS) take 1 cycle base only
         } else {
-            cycles = 1; // Unknown, treat as 1 cycle
+            extra_cycles = 0; // Unknown, treat as 1 cycle base
         }
     } else if (format == 0x2 || format == 0x3) {
-        // 01x: Single data transfer - memory access timing varies
-        cycles = ARM_CYCLES_SINGLE_TRANSFER;
-        bool is_byte = (instruction >> 22) & 1;
-        cycles += is_byte ? 1 : 2; // Memory access timing
+        // 01x: Single data transfer (LDR/STR)
+        // 1 cycle base - memory wait cycles will be added by memory.cpp
+        extra_cycles = 0;
     } else if (format == 0x4) {
-        // 100: Block data transfer - depends on register count
+        // 100: Block data transfer (LDM/STM)
+        // Count registers and charge per register
+        // Memory wait cycles will be added by memory.cpp for each access
         uint16_t register_list = instruction & 0xFFFF;
         uint32_t num_registers = arm_count_registers(register_list);
-        cycles = ARM_CYCLES_BLOCK_TRANSFER_BASE + (num_registers * ARM_CYCLES_TRANSFER_REG) + 1;
+        extra_cycles = num_registers * ARM_CYCLES_TRANSFER_REG;
     } else {
-        // Fallback to lookup table value for unknown cases
-        cycles = base_cycles;
+        // Fallback: 1 cycle base
+        extra_cycles = 0;
     }
     
-    return cycles;
+    return 1 + extra_cycles; // 1 cycle base (internal execution) + extra cycles
 }
 
 // Check if ARM condition is satisfied
