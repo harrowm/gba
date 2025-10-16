@@ -4,9 +4,11 @@
 #include "timing.h"
 #include "thumb_timing.h"
 #include "utility_macros.h"
+#include "scheduler.h"
 #include <sstream>
 #include <iomanip>
 #include <capstone/capstone.h>
+#include <stdio.h>
 
 // BIOS tracing flag (shared with ARM)
 extern bool g_trace_bios;
@@ -177,10 +179,8 @@ uint32_t ThumbCPU::calculateInstructionCycles(uint16_t instruction) {
     }
     
     uint32_t pc = parentCPU.R()[15];
-    uint32_t base_cycles = thumb_calculate_instruction_cycles(instruction, pc, registers);
-    
-    // For conditional branches, the timing function already handles both taken and not-taken cases
-    // and includes the proper prefetch cost, so we just use the base_cycles as-is
+    uint32_t cpsr = parentCPU.CPSR();
+    uint32_t base_cycles = thumb_calculate_instruction_cycles(instruction, pc, registers, cpsr);
     
     return base_cycles;
 }
@@ -1565,6 +1565,13 @@ void ThumbCPU::executeOneInstruction() {
     // Calculate how many cycles this instruction will take
     uint32_t instruction_cycles = calculateInstructionCycles(instruction);
     
+    // DEBUG: Log cycle advance for PC 0x120 and 0x122
+    if (pc == 0x120 || pc == 0x122) {
+        uint64_t before_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
+        fprintf(stderr, "[THUMB_EXEC] PC=0x%04x Instr=0x%04x Calc_cycles=%d Before_exec_cycle=%llu\n", 
+                pc, instruction, instruction_cycles, before_cycle);
+    }
+    
     // Increment PC before execution (Thumb instructions do this)
     parentCPU.R()[15] += 2;
     
@@ -1572,8 +1579,22 @@ void ThumbCPU::executeOneInstruction() {
     uint8_t opcode = instruction >> 8;
     (this->*thumb_instruction_table[opcode])(instruction);
     
+    // DEBUG: Log after execution
+    if (pc == 0x120 || pc == 0x122) {
+        uint64_t after_exec_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
+        fprintf(stderr, "[THUMB_EXEC] PC=0x%04x After_exec_cycle=%llu (exec added %llu)\n", 
+                pc, after_exec_cycle, after_exec_cycle - (parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() - instruction_cycles : 0));
+    }
+    
     // Advance scheduler by instruction execution cycles
     // Note: Memory access cycles are already handled by memory.cpp addWaitCycles()
     // This adds the CPU execution cycles on top of memory wait states
     parentCPU.advanceCycles(instruction_cycles);
+    
+    // DEBUG: Log after advancing base cycles
+    if (pc == 0x120 || pc == 0x122) {
+        uint64_t final_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
+        fprintf(stderr, "[THUMB_EXEC] PC=0x%04x Final_cycle=%llu (advanced by %d)\n\n", 
+                pc, final_cycle, instruction_cycles);
+    }
 }

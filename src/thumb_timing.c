@@ -2,6 +2,7 @@
 #include "timing.h"
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 // Get sequential access cycles based on PC region
 static uint32_t get_seq_cycles_for_pc(uint32_t pc) {
@@ -14,13 +15,16 @@ static uint32_t get_seq_cycles_for_pc(uint32_t pc) {
 }
 
 // Calculate cycles for a Thumb instruction before execution
-uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, uint32_t* registers) {
+uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, uint32_t* registers, uint32_t cpsr) {
     // ARM7TDMI Pipeline Model:
     // The 3-stage pipeline (Fetch -> Decode -> Execute) runs in parallel.
     // While instruction N executes, instruction N+1 is decoded and N+2 is fetched.
     // Therefore, we only charge the INTERNAL execution cycles, not the fetch.
     // Exception: Pipeline breaks (branches) require 2 cycles to refill.
     uint32_t cycles = 0;
+    
+    // Suppress unused parameter warning
+    (void)registers;
     
     // Identify instruction format and calculate base cycles
     if ((instruction & THUMB_FORMAT_MASK_SHIFT_IMM) == THUMB_FORMAT_VAL_SHIFT_IMM) {
@@ -30,6 +34,11 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
     } else if ((instruction & THUMB_FORMAT_MASK_ADD_SUB) == THUMB_FORMAT_VAL_ADD_SUB) {
         // Format 2: Add/subtract register/immediate
         cycles = THUMB_CYCLES_ADD_SUB_IMM;
+        
+        // DEBUG: Log timing for PC 0x122
+        if (pc == 0x120 || pc == 0x122) {
+            fprintf(stderr, "[THUMB_TIMING] PC=0x%04x Instr=0x%04x Format2 cycles=%d\n", pc, instruction, cycles);
+        }
         
     } else if ((instruction & THUMB_FORMAT_MASK_MOV_CMP_ADD_SUB) == THUMB_FORMAT_VAL_MOV_CMP_ADD_SUB) {
         // Format 3: MOV/CMP/ADD/SUB immediate
@@ -63,35 +72,38 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
         
     } else if ((instruction & THUMB_FORMAT_MASK_PC_REL) == THUMB_FORMAT_VAL_PC_REL) {
         // Format 6: PC-relative load
-        cycles = THUMB_CYCLES_PC_REL_LOAD;
-        // Add memory access cycles for loading from calculated address
-        uint32_t address = (pc & 0xFFFFFFFC) + ((instruction & 0xFF) << 2);
-        cycles += timing_calculate_memory_cycles(address, 4);
+        // Like ARM LDR: 1 internal + 1 address calculation
+        cycles = THUMB_CYCLES_PC_REL_LOAD + 1;
+        // Memory access cycles will be added by memory.cpp during execution
         
     } else if ((instruction & THUMB_FORMAT_MASK_LOAD_STORE_REG) == THUMB_FORMAT_VAL_LOAD_STORE_REG) {
-        // Format 7/8: Load/store with register offset
+        // Format 7/8: Load/store with register offset  
+        // Base internal cycle only - memory wait cycles added during execution
         cycles = THUMB_CYCLES_REG_OFFSET;
-        // Add memory access cycles
-        uint8_t access_size = ((instruction >> 10) & 0x1) ? 1 : 4; // Byte or word
-        if ((instruction >> 11) & 0x1) { // Sign-extended loads
-            access_size = ((instruction >> 10) & 0x1) ? 2 : 1; // Halfword or signed byte
+        // Memory access cycles will be added by memory.cpp during execution
+        
+        // DEBUG: Log timing for PC 0x120
+        if (pc == 0x120 || pc == 0x122) {
+            fprintf(stderr, "[THUMB_TIMING] PC=0x%04x Instr=0x%04x Format7/8 cycles=%d\n", pc, instruction, cycles);
         }
-        // We'd need the calculated address to get exact timing, use average
-        cycles += (access_size == 1) ? 1 : (access_size == 2) ? 1 : 2;
         
     } else if ((instruction & THUMB_FORMAT_MASK_LOAD_STORE_IMM) == THUMB_FORMAT_VAL_LOAD_STORE_IMM) {
         // Format 9: Load/store with immediate offset
+        // Base internal cycle only - memory wait cycles added during execution
         cycles = THUMB_CYCLES_IMM_OFFSET;
-        uint8_t access_size = ((instruction >> 12) & 0x1) ? 1 : 4; // Byte or word
-        cycles += (access_size == 1) ? 1 : 2;
+        // Memory access cycles will be added by memory.cpp during execution
         
     } else if ((instruction & THUMB_FORMAT_MASK_LOAD_STORE_HALF) == THUMB_FORMAT_VAL_LOAD_STORE_HALF) {
         // Format 10: Load/store halfword
-        cycles = THUMB_CYCLES_IMM_OFFSET + 1; // Halfword access
+        // Like ARM LDR/STR: 1 internal + 1 address calculation
+        cycles = THUMB_CYCLES_IMM_OFFSET + 1;
+        // Memory access cycles will be added by memory.cpp during execution
         
     } else if ((instruction & THUMB_FORMAT_MASK_SP_REL) == THUMB_FORMAT_VAL_SP_REL) {
         // Format 11: SP-relative load/store
-        cycles = THUMB_CYCLES_SP_REL + 2; // SP-relative typically accesses stack (WRAM)
+        // Like ARM LDR/STR: 1 internal + 1 address calculation  
+        cycles = THUMB_CYCLES_SP_REL + 1;
+        // Memory access cycles will be added by memory.cpp during execution
         
     } else if ((instruction & THUMB_FORMAT_MASK_LOAD_ADDR) == THUMB_FORMAT_VAL_LOAD_ADDR) {
         // Format 12: Load address
@@ -122,9 +134,36 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
             // SWI
             cycles = THUMB_CYCLES_SWI;
         } else {
-            // We can't determine if branch is taken without CPU state, assume not taken
-            // The actual emulator should check condition and adjust
-            cycles = THUMB_CYCLES_BRANCH_COND;
+            // Check if condition is satisfied using CPSR flags
+            // Extract flags from CPSR
+            bool N = (cpsr >> 31) & 1;
+            bool Z = (cpsr >> 30) & 1;
+            bool C = (cpsr >> 29) & 1;
+            bool V = (cpsr >> 28) & 1;
+            
+            bool condition_met = false;
+            switch (condition) {
+                case 0x0: condition_met = Z; break;              // EQ (equal)
+                case 0x1: condition_met = !Z; break;             // NE (not equal)
+                case 0x2: condition_met = C; break;              // CS/HS (carry set)
+                case 0x3: condition_met = !C; break;             // CC/LO (carry clear)
+                case 0x4: condition_met = N; break;              // MI (negative)
+                case 0x5: condition_met = !N; break;             // PL (positive or zero)
+                case 0x6: condition_met = V; break;              // VS (overflow)
+                case 0x7: condition_met = !V; break;             // VC (no overflow)
+                case 0x8: condition_met = C && !Z; break;        // HI (unsigned higher)
+                case 0x9: condition_met = !C || Z; break;        // LS (unsigned lower or same)
+                case 0xA: condition_met = (N == V); break;       // GE (signed greater or equal)
+                case 0xB: condition_met = (N != V); break;       // LT (signed less than)
+                case 0xC: condition_met = !Z && (N == V); break; // GT (signed greater)
+                case 0xD: condition_met = Z || (N != V); break;  // LE (signed less or equal)
+                case 0xE: condition_met = true; break;           // AL (always)
+                default: condition_met = false; break;
+            }
+            
+            // If branch is taken, it costs 3 cycles (1 internal + 2 pipeline refill)
+            // If not taken, it costs 1 cycle (just execute and continue)
+            cycles = condition_met ? THUMB_CYCLES_BRANCH_TAKEN : THUMB_CYCLES_BRANCH_COND;
         }
         
     } else if ((instruction & THUMB_FORMAT_MASK_BRANCH) == THUMB_FORMAT_VAL_BRANCH) {

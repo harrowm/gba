@@ -689,25 +689,20 @@ void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
     }
     
     if (scheduler) {
-        // mGBA's cycle model: data_access_cycles = nonseq_cycles - seq_cycles
-        // This accounts for the ARM7TDMI pipeline where:
-        // - The instruction prefetch already costs 1 + seq_cycles
-        // - Data accesses add only the EXTRA time beyond sequential access
+        // ARM7TDMI memory access timing:
+        // Data accesses (LDR/STR) cost 1I + 1N cycles where:
+        // - 1I = internal cycle (counted in arm_timing.c base cycles)
+        // - 1N = nonsequential memory access cycle (counted here)
+        //
+        // The instruction prefetch happens in parallel and doesn't add cycles.
+        // We charge the full nonsequential wait state for data accesses.
         //
         // Examples:
-        // - BIOS: nonseq=1, seq=1 → 1-1 = 0 extra cycles (access is "free")
-        // - IWRAM: nonseq=1, seq=1 → 1-1 = 0 extra cycles
-        // - EWRAM 32-bit: nonseq=6, seq=6 → 6-6 = 0 extra cycles (wait states same for seq/nonseq)
-        // - ROM 32-bit: nonseq=5, seq=3 → 5-3 = 2 extra cycles
-        //
-        // This matches mGBA exactly and gives us proper cycle-accurate timing!
-        uint32_t nonseq = getNonseqWaitStates(address, accessWidth);
-        uint32_t seq = getSeqWaitStates(address, accessWidth);
-        int32_t extraCycles = nonseq - seq;
-        
-        if (extraCycles > 0) {
-            scheduler->advanceCycles(extraCycles);
-        }
+        // - BIOS/I/O: nonseq=1 → +1 cycle (total 2 with base internal)
+        // - IWRAM: nonseq=1 → +1 cycle (total 2)
+        // - ROM 32-bit: nonseq=5 → +5 cycles (total 6)
+        uint32_t waitCycles = getNonseqWaitStates(address, accessWidth);
+        scheduler->advanceCycles(waitCycles);
     }
 }
 

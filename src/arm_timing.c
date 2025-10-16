@@ -116,8 +116,9 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
         }
     } else if (format == 0x2 || format == 0x3) {
         // 01x: Single data transfer (LDR/STR)
-        // 1 cycle base - memory wait cycles will be added by memory.cpp
-        extra_cycles = 0;
+        // 1 cycle internal + 1 cycle for address calculation = 2 cycles base
+        // Memory wait cycles will be added by memory.cpp
+        extra_cycles = 1;
     } else if (format == 0x4) {
         // 100: Block data transfer (LDM/STM)
         // Count registers and charge per register
