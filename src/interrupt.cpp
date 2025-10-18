@@ -1,5 +1,6 @@
 #include "interrupt.h"
 #include "memory.h"
+#include "scheduler.h"
 #include "debug.h"
 
 void InterruptController::requestInterrupt(uint16_t irqFlag) {
@@ -22,9 +23,31 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
     
     DEBUG_INFO("Interrupt requested: 0x" + debug_to_hex_string(irqFlag, 4));
     
-    // Check if this interrupt should trigger CPU interrupt
-    if (hasPendingInterrupt() && irqCallback) {
-        irqCallback();
+    // Schedule IRQ trigger with latency (like mGBA's GBATestIRQ)
+    // Only schedule if interrupts are enabled and not already scheduled
+    if (scheduler && hasPendingInterrupt()) {
+        if (!scheduler->hasEventsOfType(EventType::IRQ_TRIGGER)) {
+            static int schedule_count = 0;
+            schedule_count++;
+            if (schedule_count <= 10) {
+                printf("[IRQ SCHEDULE #%d] Scheduling IRQ_TRIGGER event with %d cycle delay\n", 
+                       schedule_count, IRQ_LATENCY_CYCLES);
+            }
+            scheduler->schedule(IRQ_LATENCY_CYCLES, [this]() {
+                static int trigger_count = 0;
+                trigger_count++;
+                if (trigger_count <= 10) {
+                    printf("[IRQ TRIGGER #%d] Event fired, checking pending interrupts\n", trigger_count);
+                }
+                // At trigger time, check IME and I flag, then call CPU
+                if (hasPendingInterrupt() && irqCallback) {
+                    if (trigger_count <= 10) {
+                        printf("[IRQ TRIGGER #%d] Calling irqCallback\n", trigger_count);
+                    }
+                    irqCallback();
+                }
+            }, EventType::IRQ_TRIGGER);
+        }
     }
 }
 

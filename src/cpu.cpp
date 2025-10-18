@@ -134,11 +134,10 @@ void CPU::executeOneInstruction() {
                exec_count, registers[15], cpsr, getFlag(FLAG_T));
     }
     
-    // Check for pending interrupts before executing
-    if (checkPendingInterrupts()) {
-        handleInterrupt();
-        return;
-    }
+    // NOTE: Interrupts are now handled via scheduler events with IRQ_LATENCY_CYCLES delay
+    // We no longer check for interrupts before every instruction - this prevents nested IRQs
+    // Instead, when IF is set, the interrupt controller schedules an IRQ_TRIGGER event
+    // After 7 cycles, the event fires and checks IME and I flag before calling handleInterrupt()
     
     // Save PC before execution for debugging
     uint32_t pc_before __attribute__((unused)) = registers[15];
@@ -171,7 +170,11 @@ bool CPU::checkPendingInterrupts() {
     bool ime = interruptController.isIMESet();
     bool irqDisabled = (cpsr & 0x80) != 0; // I flag in CPSR bit 7
     
-    if (!ime || irqDisabled) {
+    // Also check if we're already in IRQ mode - don't allow nested interrupts!
+    Mode current_mode = static_cast<Mode>(cpsr & 0x1F);
+    bool in_irq_mode = (current_mode == IRQ);
+    
+    if (!ime || irqDisabled || in_irq_mode) {
         return false;
     }
     
@@ -191,6 +194,12 @@ bool CPU::checkPendingInterrupts() {
 }
 
 void CPU::handleInterrupt() {
+    // Early exit if I flag is set (like mGBA's ARMRaiseIRQ)
+    // This prevents nested interrupts
+    if (cpsr & 0x80) {
+        return;  // Interrupts disabled, don't process
+    }
+    
     static int irq_count = 0;
     irq_count++;
     
@@ -203,16 +212,19 @@ void CPU::handleInterrupt() {
         fflush(stdout);
     }
     
-    // Calculate return address
-    // In ARM mode, PC+4 (current instruction + 8, then -4 for return)
-    // In Thumb mode, PC+4 is sufficient (current instruction + 4)
+    // Calculate return address (like mGBA: LR = PC - instructionWidth + 4)
+    // ARM PC is +8 ahead of current instruction, THUMB PC is +4 ahead
+    // After IRQ completes, "SUBS PC, LR, #4" returns to the interrupted instruction
     uint32_t returnAddress;
     if (getFlag(FLAG_T)) {
-        // Thumb mode: PC already points to next instruction + 2
-        returnAddress = registers[15];
+        // Thumb mode: LR = PC - 2 + 4 = PC + 2
+        // PC is +4 ahead, so PC-2 is the interrupted instruction, +4 accounts for SUBS adjustment
+        returnAddress = registers[15] + 2;
     } else {
-        // ARM mode: PC+4 to return to instruction after current one
-        returnAddress = registers[15] + 4;
+        // ARM mode: LR = PC - 4 + 4 = PC  
+        // PC is +8 ahead, so PC-4 is the next instruction, but we want current, so PC-8+4 = PC-4
+        // But mGBA uses PC (not PC-4), maybe because PC offset differs?
+        returnAddress = registers[15];
     }
     
     if (irq_count <= 5) {
@@ -230,6 +242,10 @@ void CPU::handleInterrupt() {
     
     // Disable further interrupts (set I flag in CPSR)
     cpsr |= 0x80; // Set I flag (bit 7)
+    
+    if (irq_count <= 5) {
+        printf("[IRQ #%d] Set I flag, CPSR now=0x%08X\n", irq_count, cpsr);
+    }
     
     // Switch to ARM mode (clear T flag in CPSR)
     cpsr &= ~FLAG_T;

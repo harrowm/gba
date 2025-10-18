@@ -6,6 +6,7 @@
 #include "debug.h"
 #include "timing.h"
 #include "arm_timing.h"
+#include "scheduler.h"
 
 // Global flag for BIOS tracing
 bool g_trace_bios = false;
@@ -40,6 +41,33 @@ void ARMCPU::execute(uint32_t cycles) {
         }
 
         uint32_t pc = parentCPU.R()[15]; // Get current PC
+        
+        // Track invalid PC values
+        if (pc >= 0x10000000) {
+            uint64_t current_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
+            printf("[ARM ERROR] Invalid PC=0x%08X detected! Cycle=%llu\n", pc, current_cycle);
+            printf("  R0-R7: %08X %08X %08X %08X %08X %08X %08X %08X\n",
+                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+                   parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7]);
+            printf("  R8-R15: %08X %08X %08X %08X %08X %08X %08X %08X\n",
+                   parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
+                   parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[15]);
+            printf("  CPSR: %08X\n", parentCPU.CPSR());
+            // Only log first occurrence
+            static bool logged_invalid = false;
+            if (!logged_invalid) {
+                logged_invalid = true;
+            } else {
+                exit(1);
+            }
+        }
+        
+        // Log when we enter ROM space
+        static bool in_rom = false;
+        if (!in_rom && pc >= 0x08000000 && pc < 0x0E000000) {
+            printf("\n*** ENTERING ROM CODE at PC=0x%08X ***\n\n", pc);
+            in_rom = true;
+        }
         
         // Fetch instruction without charging wait cycles
         // ARM7TDMI has 3-stage pipeline: Fetch happens in parallel with previous instruction's execution

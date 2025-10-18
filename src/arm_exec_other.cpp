@@ -172,6 +172,16 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     }
     if (writeback && reg_count > 0) {
         uint32_t new_base = up ? base + reg_count * 4 : base - reg_count * 4;
+        
+        // Debug: Log writeback for VRAM addresses
+        if (base >= 0x06000000 && base < 0x06018000) {
+            static int vram_stm_count = 0;
+            if (vram_stm_count < 20) {
+                printf("[STM VRAM #%d @PC=0x%08X] R%d writeback: 0x%08X -> 0x%08X (delta=%d)\n",
+                       vram_stm_count++, parentCPU.R()[15], rn, base, new_base, (int32_t)(new_base - base));
+            }
+        }
+        
         parentCPU.R()[rn] = new_base;
     }
     if (!r15_updated) parentCPU.R()[15] += 4; // Increment PC for next instruction

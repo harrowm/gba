@@ -35,11 +35,6 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
         // Format 2: Add/subtract register/immediate
         cycles = THUMB_CYCLES_ADD_SUB_IMM;
         
-        // DEBUG: Log timing for PC 0x122
-        if (pc == 0x120 || pc == 0x122) {
-            fprintf(stderr, "[THUMB_TIMING] PC=0x%04x Instr=0x%04x Format2 cycles=%d\n", pc, instruction, cycles);
-        }
-        
     } else if ((instruction & THUMB_FORMAT_MASK_MOV_CMP_ADD_SUB) == THUMB_FORMAT_VAL_MOV_CMP_ADD_SUB) {
         // Format 3: MOV/CMP/ADD/SUB immediate
         uint8_t op = (instruction >> 11) & 0x3;
@@ -81,11 +76,6 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
         // Base internal cycle only - memory wait cycles added during execution
         cycles = THUMB_CYCLES_REG_OFFSET;
         // Memory access cycles will be added by memory.cpp during execution
-        
-        // DEBUG: Log timing for PC 0x120
-        if (pc == 0x120 || pc == 0x122) {
-            fprintf(stderr, "[THUMB_TIMING] PC=0x%04x Instr=0x%04x Format7/8 cycles=%d\n", pc, instruction, cycles);
-        }
         
     } else if ((instruction & THUMB_FORMAT_MASK_LOAD_STORE_IMM) == THUMB_FORMAT_VAL_LOAD_STORE_IMM) {
         // Format 9: Load/store with immediate offset

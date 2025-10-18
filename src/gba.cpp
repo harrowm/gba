@@ -23,11 +23,15 @@ GBA::GBA(bool testMode)
     
     // Wire up interrupt controller
     interruptController.setMemory(&memory);
+    interruptController.setScheduler(&scheduler);
     
-    // Setup interrupt callback (CPU will handle interrupt on next instruction)
-    interruptController.setIRQCallback([]() {
-        // Set CPU IRQ flag - actual handling happens in CPU execution
-        DEBUG_INFO("IRQ callback triggered");
+    // Setup interrupt callback (CPU will handle interrupt when scheduled event fires)
+    interruptController.setIRQCallback([this]() {
+        // This is called by the scheduled IRQ_TRIGGER event after IRQ_LATENCY_CYCLES
+        // Check the CPU's I flag before raising IRQ (like mGBA's _triggerIRQ)
+        if (!(cpu->CPSR() & 0x80)) {  // I flag is bit 7
+            cpu->handleInterrupt();
+        }
     });
     
     // Setup GPU callbacks

@@ -25,17 +25,23 @@ constexpr uint32_t REG_IE  = 0x04000200;  // Interrupt Enable
 constexpr uint32_t REG_IF  = 0x04000202;  // Interrupt Request/Acknowledge
 constexpr uint32_t REG_IME = 0x04000208;  // Interrupt Master Enable
 
+// Interrupt latency in cycles (like mGBA's GBA_IRQ_DELAY)
+constexpr uint32_t IRQ_LATENCY_CYCLES = 7;
+
 class Memory;  // Forward declaration
+class Scheduler;  // Forward declaration
 
 class InterruptController {
 private:
     Memory* memory;
+    Scheduler* scheduler;
     std::function<void()> irqCallback;  // Callback to CPU when interrupt fires
 
 public:
-    InterruptController() : memory(nullptr) {}
+    InterruptController() : memory(nullptr), scheduler(nullptr) {}
     
     void setMemory(Memory* mem) { memory = mem; }
+    void setScheduler(Scheduler* sched) { scheduler = sched; }
     void setIRQCallback(std::function<void()> callback) { irqCallback = callback; }
     
     // Request an interrupt (sets IF bit)

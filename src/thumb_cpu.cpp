@@ -282,6 +282,17 @@ void ThumbCPU::thumb_add_offset(uint16_t instruction) {
     uint32_t op1 = parentCPU.R()[rs];
     uint32_t result = op1 + offset;
 
+    // Debug logging for 0x0122
+    uint32_t pc = parentCPU.R()[15];
+    if (pc == 0x0124) { // PC is already incremented by 2 at this point
+        static int add_count = 0;
+        if (add_count < 10) {
+            printf("[ADDS @0x0122] instr=0x%04x rd=%d rs=%d offset=%d | R[%d]=0x%08X + %d = 0x%08X\n",
+                   instruction, rd, rs, offset, rs, op1, offset, result);
+            add_count++;
+        }
+    }
+
     // Update the destination register
     parentCPU.R()[rd] = result;
 
@@ -802,16 +813,16 @@ void ThumbCPU::thumb_str_word(uint16_t instruction) {
     // Get the value to store
     uint32_t value = parentCPU.R()[rd];
     
-    // Debug logging for BIOS execution
-    uint32_t pc = parentCPU.R()[15];
-    if (pc < 0x4000) {
-        printf("[THUMB STR DEBUG] PC=0x%08X | rd=%d rn=%d rm=%d | R[%d]=0x%08X R[%d]=0x%08X R[%d]=0x%08X | address=0x%08X value=0x%08X\n",
-               pc, rd, rn, rm, 
-               rd, parentCPU.R()[rd],
-               rn, parentCPU.R()[rn],
-               rm, parentCPU.R()[rm],
-               address, value);
-    }
+    // Debug logging disabled for performance
+    // uint32_t pc = parentCPU.R()[15];
+    // if (pc < 0x4000) {
+    //     printf("[THUMB STR DEBUG] PC=0x%08X | rd=%d rn=%d rm=%d | R[%d]=0x%08X R[%d]=0x%08X R[%d]=0x%08X | address=0x%08X value=0x%08X\n",
+    //            pc, rd, rn, rm, 
+    //            rd, parentCPU.R()[rd],
+    //            rn, parentCPU.R()[rn],
+    //            rm, parentCPU.R()[rm],
+    //            address, value);
+    // }
 
     // Perform the store operation using memory_write_32
     parentCPU.getMemory().write32(address, value);
@@ -1474,6 +1485,40 @@ void ThumbCPU::executeOneInstruction() {
     
     uint32_t pc = parentCPU.R()[15];
     
+    // Count executions at PC=0x120
+    static uint64_t count_0x120 = 0;
+    static uint64_t count_0x122 = 0;
+    static uint64_t count_0x124 = 0;
+    static bool logged_counts = false;
+    
+    if (pc == 0x120) count_0x120++;
+    if (pc == 0x122) count_0x122++;
+    if (pc == 0x124) count_0x124++;
+    
+    // After 5 seconds (at ~16.78MHz, that's ~84M cycles), log the counts
+    uint64_t current_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
+    if (!logged_counts && current_cycle > 84000000) {
+        printf("\n=== EXECUTION COUNTS AFTER ~5 SECONDS ===\n");
+        printf("PC=0x0120 executed: %llu times\n", count_0x120);
+        printf("PC=0x0122 executed: %llu times\n", count_0x122);
+        printf("PC=0x0124 executed: %llu times\n", count_0x124);
+        printf("Current cycle: %llu\n", current_cycle);
+        printf("If 0x120 count >> 128 iterations expected, we have an infinite loop!\n");
+        printf("=========================================\n\n");
+        logged_counts = true;
+    }
+    
+    // Track invalid PC values
+    if (pc >= 0x10000000) {
+        printf("[THUMB ERROR] Invalid PC=0x%08X detected! Cycle=%llu\n", pc, current_cycle);
+        printf("  R0-R7: %08X %08X %08X %08X %08X %08X %08X %08X\n",
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+               parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7]);
+        printf("  R8-R15: %08X %08X %08X %08X %08X %08X %08X %08X\n",
+               parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
+               parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[15]);
+    }
+    
     // Fetch instruction without charging wait cycles
     // ARM7TDMI has 3-stage pipeline: Fetch happens in parallel with previous instruction's execution
     // Only the execute stage costs cycles
@@ -1565,13 +1610,6 @@ void ThumbCPU::executeOneInstruction() {
     // Calculate how many cycles this instruction will take
     uint32_t instruction_cycles = calculateInstructionCycles(instruction);
     
-    // DEBUG: Log cycle advance for PC 0x120 and 0x122
-    if (pc == 0x120 || pc == 0x122) {
-        uint64_t before_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
-        fprintf(stderr, "[THUMB_EXEC] PC=0x%04x Instr=0x%04x Calc_cycles=%d Before_exec_cycle=%llu\n", 
-                pc, instruction, instruction_cycles, before_cycle);
-    }
-    
     // Increment PC before execution (Thumb instructions do this)
     parentCPU.R()[15] += 2;
     
@@ -1579,22 +1617,8 @@ void ThumbCPU::executeOneInstruction() {
     uint8_t opcode = instruction >> 8;
     (this->*thumb_instruction_table[opcode])(instruction);
     
-    // DEBUG: Log after execution
-    if (pc == 0x120 || pc == 0x122) {
-        uint64_t after_exec_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
-        fprintf(stderr, "[THUMB_EXEC] PC=0x%04x After_exec_cycle=%llu (exec added %llu)\n", 
-                pc, after_exec_cycle, after_exec_cycle - (parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() - instruction_cycles : 0));
-    }
-    
     // Advance scheduler by instruction execution cycles
     // Note: Memory access cycles are already handled by memory.cpp addWaitCycles()
     // This adds the CPU execution cycles on top of memory wait states
     parentCPU.advanceCycles(instruction_cycles);
-    
-    // DEBUG: Log after advancing base cycles
-    if (pc == 0x120 || pc == 0x122) {
-        uint64_t final_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
-        fprintf(stderr, "[THUMB_EXEC] PC=0x%04x Final_cycle=%llu (advanced by %d)\n\n", 
-                pc, final_cycle, instruction_cycles);
-    }
 }

@@ -19,6 +19,7 @@ enum class EventType {
     VIDEO_SCANLINE,
     DMA_TRANSFER,
     AUDIO_SAMPLE,
+    IRQ_TRIGGER,  // IRQ trigger event (with latency)
     CUSTOM
 };
 
