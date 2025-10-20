@@ -58,8 +58,8 @@ dkms.conf
 /assets/bios.bin
 /assets/roms/*
 
-# Trace files (keep compressed traces, ignore uncompressed)
+# Trace files (keep README, ignore large trace files)
 traces/*.log
+traces/*.log.gz
 traces/*_trace.txt
-!traces/*.gz
 !traces/README.md
