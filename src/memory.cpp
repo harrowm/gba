@@ -245,11 +245,27 @@ uint16_t Memory::read16(uint32_t address) const {
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
     if (!base) return 0xFFFF;
     uint16_t val = base[offset] | (base[(offset + 1) % Memory::BLOCK_SIZE] << 8);
+    
+    // Log IF register reads to debug the 0x0080 vs 0x0001 issue
+    if (address == 0x04000202) {
+        static int if_read_count = 0;
+        if (if_read_count++ < 20) {
+            uint16_t result = (val >> rot) | (val << (16 - rot));
+            printf("[IF READ #%d] addr=0x%08X offset=0x%X val=0x%04X rot=%d result=0x%04X\n",
+                   if_read_count, address, offset, val, rot, result);
+        }
+    }
+    
     return (val >> rot) | (val << (16 - rot));
 }
 
 void Memory::write16(uint32_t address, uint16_t value) {
     addWaitCycles(address, 16);
+    
+    // Log writes to BIOS work RAM for interrupt tracking
+    if (address >= 0x03007F00 && address <= 0x03007FFC) {
+        printf("[IRQ HANDLER] Write16 to 0x%08X: value=0x%04X (BIOS work area)\n", address, value);
+    }
     
     // Handle DMA register writes (word count and control only)
     if (dmaController) {
@@ -561,12 +577,13 @@ void Memory::write32(uint32_t address, uint32_t value) {
         printf("[REG Write32] Address=0x%08X Value=0x%08X (may write IE/IF/IME)\n", aligned_address, val);
     }
     
-    // Log writes to IRQ handler pointer area
+    // Log writes to IRQ handler pointer area AND interrupt acknowledge flags
     // The BIOS IRQ dispatcher at 0x128 reads from [0x04000000-4] = 0x03FFFFFC
     // BIOS also uses 0x03007FF0-0x03007FFC area during initialization
-    if (aligned_address == 0x03FFFFFC || (aligned_address >= 0x03007FF0 && aligned_address <= 0x03007FFC)) {
+    // IMPORTANT: 0x03007FF8 = IntrCheck flag (BIOS writes interrupt bits here)
+    if (aligned_address == 0x03FFFFFC || (aligned_address >= 0x03007F00 && aligned_address <= 0x03007FFC)) {
         // Get current PC for debugging (requires CPU context)
-        printf("[IRQ HANDLER] Write32 to 0x%08X: value=0x%08X (IRQ handler pointer area)\n", aligned_address, val);
+        printf("[IRQ HANDLER] Write32 to 0x%08X: value=0x%08X (IRQ/BIOS work area)\n", aligned_address, val);
         if (aligned_address == 0x03FFFFFC && (val < 0x02000000 || val > 0x0FFFFFFF)) {
             printf("[IRQ HANDLER ERROR] Suspicious IRQ handler address 0x%08X written to 0x%08X!\n", val, aligned_address);
         }

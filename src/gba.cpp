@@ -256,6 +256,48 @@ void GBA::runFrame() {
         // Get the cycle of the next scheduled event before executing
         uint64_t nextEventCycle = scheduler.getNextEventCycle();
         
+        // Detect BIOS IntrWait loop (0x340-0x380) - this busy-waits for interrupts
+        // Real GBA would HALT the CPU; we simulate by fast-forwarding to next event
+        bool in_intrwait_loop = (pc >= 0x340 && pc <= 0x380);
+        static int intrwait_loop_count = 0;
+        static int first_print_count = 0;
+        
+        if (in_intrwait_loop) {
+            intrwait_loop_count++;
+            // Print first few times we detect the loop
+            if (first_print_count < 3) {
+                printf("[INTRWAIT DETECT] PC=0x%08X, count=%d\n", pc, intrwait_loop_count);
+                first_print_count++;
+            }
+            // After a few iterations, fast-forward through events until something changes IF
+            if (intrwait_loop_count > 10 && nextEventCycle != UINT64_MAX) {
+                // Keep fast-forwarding through events until IF becomes non-zero
+                // This simulates the CPU being halted while interrupts accumulate
+                uint16_t current_if = memory.read16(0x04000202); // Read IF register
+                if (current_if == 0) {
+                    // No interrupts pending yet - skip to next event and process it
+                    uint64_t cycles_to_skip = nextEventCycle - cycleBeforeInstr;
+                    if (cycles_to_skip > 0) {
+                        static int skip_count = 0;
+                        if (skip_count < 10) {
+                            printf("[INTRWAIT HALT] CPU halted, fast-forwarding %llu cycles to next event\n", 
+                                   cycles_to_skip);
+                            skip_count++;
+                        }
+                        cpu->advanceCycles(cycles_to_skip);
+                        scheduler.runUntil(nextEventCycle);
+                        // Don't reset counter - keep halting until IF != 0
+                    }
+                } else {
+                    // Interrupt pending - exit halt state
+                    printf("[INTRWAIT RESUME] IF=0x%04X, exiting halt\n", current_if);
+                    intrwait_loop_count = 0;
+                }
+            }
+        } else {
+            intrwait_loop_count = 0;
+        }
+        
         // Execute the instruction (this will advance cycles based on instruction + memory timing)
         // Typical GBA instruction cost breakdown:
         //   - IME check: 1 cycle (reading 0x04000208 to check if interrupts enabled)

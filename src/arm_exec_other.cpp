@@ -92,7 +92,14 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
+            if (ldm_count <= 10 && parentCPU.R()[15] < 0x4000) {
+                printf("    Loading R%d from 0x%08X...", i, addr);
+                fflush(stdout);
+            }
             parentCPU.R()[i] = parentCPU.getMemory().read32(addr);
+            if (ldm_count <= 10 && parentCPU.R()[15] < 0x4000) {
+                printf(" = 0x%08X\n", parentCPU.R()[i]);
+            }
             if (i == 15) {
                 r15_updated = true;
             }

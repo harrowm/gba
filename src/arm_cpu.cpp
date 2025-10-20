@@ -190,11 +190,21 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     
     // Detailed BIOS tracing
     if (g_trace_bios && pc_in_bios) {
-        uint32_t cpsr = parentCPU.CPSR();
-        bool is_thumb = (cpsr & 0x20) != 0;
-        const char* mode_str = is_thumb ? "THUMB" : "ARM";
+        // Read key I/O registers
+        uint16_t ie = parentCPU.getMemory().read16(0x04000200);
+        uint16_t irq_flags = parentCPU.getMemory().read16(0x04000202);
+        uint32_t ime = parentCPU.getMemory().read32(0x04000208);
         
-        // Disassemble instruction
+        // Print in mGBA-compatible compact format
+        printf("[%llu][ARM] PC=0x%08X | R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R5=%08X R6=%08X R7=%08X R8=%08X R9=%08X R10=%08X R11=%08X R12=%08X SP=%08X LR=%08X | IE=%04X IF=%04X IME=%08X\n",
+               instruction_count, pc,
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+               parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7],
+               parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
+               parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14],
+               ie, irq_flags, ime);
+        
+        // Optional: Add disassembly on second line
         if (capstone_handle) {
             cs_insn* insn;
             size_t count = cs_disasm(capstone_handle,
@@ -202,10 +212,7 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
                                      sizeof(instruction),
                                      pc, 1, &insn);
             if (count > 0) {
-                printf("[BIOS:%s] 0x%08X: %-8s %-30s | R0-R3=%08X %08X %08X %08X | LR=%08X\n",
-                       mode_str, pc, insn[0].mnemonic, insn[0].op_str,
-                       parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
-                       parentCPU.R()[14]);
+                printf("     ; %s %s\n", insn[0].mnemonic, insn[0].op_str);
                 cs_free(insn, count);
             }
         }
@@ -254,6 +261,39 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
             printf("     -> Stack contents: [0x%08X]=0x%08X, [0x%08X]=0x%08X\n",
                    sp, parentCPU.getMemory().read32(sp),
                    sp+4, parentCPU.getMemory().read32(sp+4));
+        }
+    }
+    
+    // TRACE IntrWait check function (0x358-0x374) to understand what it's checking  
+    static int intrwait_trace_count = 0;
+    if (in_bios && pc >= 0x358 && pc <= 0x374) {
+        if (intrwait_trace_count < 10 || (intrwait_trace_count % 100000 == 0)) {
+            intrwait_trace_count++;
+            printf("[INTRWAIT #%d] PC=0x%08X | R0=0x%08X R1=0x%08X R2=0x%08X R12=0x%08X\n",
+                   intrwait_trace_count, pc, 
+                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[12]);
+            
+            // At 0x358: Show when r12 is set
+            if (pc == 0x358) {
+                printf("        -> 0x358: MOV r12, #0x4000000\n");
+            }
+            // At 0x360: LDRH r2, [r12, #0xb8] - show what address we're reading from
+            if (pc == 0x360) {
+                printf("        -> 0x360: Will read from [0x%08X + offset]\n", parentCPU.R()[12]);
+            }
+            // At 0x364: ANDS r0, r1, r2 - show the test
+            if (pc == 0x364) {
+                printf("        -> 0x364: Test R1 & R2 = 0x%08X & 0x%08X = 0x%08X (Z=%d)\n",
+                       parentCPU.R()[1], parentCPU.R()[2], 
+                       parentCPU.R()[1] & parentCPU.R()[2],
+                       ((parentCPU.R()[1] & parentCPU.R()[2]) == 0) ? 1 : 0);
+            }
+            // At 0x374: BX lr - show return
+            if (pc == 0x374) {
+                printf("        -> 0x374: BX LR, returning to 0x%08X\n", parentCPU.R()[14]);
+            }
+        } else {
+            intrwait_trace_count++;
         }
     }
     

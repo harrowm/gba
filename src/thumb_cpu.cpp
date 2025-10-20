@@ -51,21 +51,33 @@ void ThumbCPU::execute(uint32_t cycles) {
         
         // BIOS tracing for THUMB instructions
         bool pc_in_bios = (current_pc < 0x4000);
-        if (pc_in_bios && g_trace_bios && capstone_handle) {
-            cs_insn* insn;
-            size_t count = cs_disasm(capstone_handle,
-                                     reinterpret_cast<const uint8_t*>(&instruction),
-                                     sizeof(instruction),
-                                     current_pc, 1, &insn);
-            if (count > 0) {
-                printf("[%llu][THUMB] PC=0x%08X: %-8s %-20s | R0=%08X R1=%08X R2=%08X R3=%08X | LR=%08X\n",
-                       thumb_instruction_count++,
-                       current_pc,
-                       insn[0].mnemonic,
-                       insn[0].op_str,
-                       parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
-                       parentCPU.R()[14]);
-                cs_free(insn, count);
+        if (pc_in_bios && g_trace_bios) {
+            // Read key I/O registers
+            uint16_t ie = parentCPU.getMemory().read16(0x04000200);
+            uint16_t irq_flags = parentCPU.getMemory().read16(0x04000202);
+            uint32_t ime = parentCPU.getMemory().read32(0x04000208);
+            
+            // Print in mGBA-compatible compact format
+            printf("[%llu][THUMB] PC=0x%08X | R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R5=%08X R6=%08X R7=%08X R8=%08X R9=%08X R10=%08X R11=%08X R12=%08X SP=%08X LR=%08X | IE=%04X IF=%04X IME=%08X\n",
+                   thumb_instruction_count++,
+                   current_pc,
+                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+                   parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7],
+                   parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
+                   parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14],
+                   ie, irq_flags, ime);
+            
+            // Optional: Add disassembly on second line
+            if (capstone_handle) {
+                cs_insn* insn;
+                size_t count = cs_disasm(capstone_handle,
+                                         reinterpret_cast<const uint8_t*>(&instruction),
+                                         sizeof(instruction),
+                                         current_pc, 1, &insn);
+                if (count > 0) {
+                    printf("     ; %s %s\n", insn[0].mnemonic, insn[0].op_str);
+                    cs_free(insn, count);
+                }
             }
         }
         
@@ -1530,19 +1542,28 @@ void ThumbCPU::executeOneInstruction() {
     bool pc_in_bios = (pc < 0x4000);
     if (pc_in_bios && g_trace_bios && capstone_handle) {
         cs_insn* insn;
+        // Read key I/O registers
+        uint16_t ie = parentCPU.getMemory().read16(0x04000200);
+        uint16_t irq_flags = parentCPU.getMemory().read16(0x04000202);
+        uint32_t ime = parentCPU.getMemory().read32(0x04000208);
+        
+        // Print in mGBA-compatible compact format
+        printf("[%llu][THUMB] PC=0x%08X | R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R5=%08X R6=%08X R7=%08X R8=%08X R9=%08X R10=%08X R11=%08X R12=%08X SP=%08X LR=%08X | IE=%04X IF=%04X IME=%08X\n",
+               thumb_instruction_count++,
+               pc,
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+               parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7],
+               parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
+               parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14],
+               ie, irq_flags, ime);
+        
+        // Optional: Add disassembly on second line
         size_t count = cs_disasm(capstone_handle,
                                  reinterpret_cast<const uint8_t*>(&instruction),
                                  sizeof(instruction),
                                  pc, 1, &insn);
         if (count > 0) {
-            printf("[%llu][THUMB-BIOS] PC=0x%08X: %-8s %-20s | R0=%08X R1=%08X R2=%08X R3=%08X | LR=%08X | INSTR=0x%04X\n",
-                   thumb_instruction_count++,
-                   pc,
-                   insn[0].mnemonic,
-                   insn[0].op_str,
-                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
-                   parentCPU.R()[14],
-                   instruction);
+            printf("     ; %s %s\n", insn[0].mnemonic, insn[0].op_str);
             cs_free(insn, count);
         }
     }

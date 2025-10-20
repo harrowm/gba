@@ -129,10 +129,13 @@ void CPU::executeOneInstruction() {
     }
     
     // Debug: Print first few calls to see if we're even getting here
-    if (exec_count <= 5 || exec_count % 50000 == 0) {
+    static uint32_t last_pc = 0;
+    if (exec_count <= 5 || exec_count % 50000 == 0 || 
+        (last_pc == 0x18 || registers[15] == 0x18 || registers[15] < 0x100)) {
         printf("[CPU::executeOneInstruction #%llu] PC=0x%08X CPSR=0x%08X T=%d\n",
                exec_count, registers[15], cpsr, getFlag(FLAG_T));
     }
+    last_pc = registers[15];
     
     // NOTE: Interrupts are now handled via scheduler events with IRQ_LATENCY_CYCLES delay
     // We no longer check for interrupts before every instruction - this prevents nested IRQs
@@ -252,6 +255,11 @@ void CPU::handleInterrupt() {
     
     // Set PC to IRQ vector (0x00000018)
     registers[15] = 0x00000018;
+    
+    if (irq_count <= 5) {
+        printf("[IRQ #%d] Set PC to IRQ vector 0x00000018\n", irq_count);
+        fflush(stdout);
+    }
     
     DEBUG_INFO("CPU: Interrupt handled, jumped to IRQ vector 0x00000018, return address = 0x" + 
                debug_to_hex_string(returnAddress, 8));
