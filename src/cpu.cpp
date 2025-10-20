@@ -10,7 +10,12 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     armCPU = new ARMCPU(*this);     // Pass itself as the parent reference
     std::fill(std::begin(registers), std::end(registers), 0); // Reset all registers to zero using std::fill
     DEBUG_LOG("Thumb and ARM instances created, CPU registers initialized to zero");
-    cpsr = 0; // Sets us up in ARM mode and little endian by default
+    
+    // Match mGBA's initial state for easier trace comparison
+    // Note: BIOS will set these properly around instruction 100-200, but matching mGBA's
+    // initial values eliminates early spurious differences in trace comparisons
+    cpsr = 0x1F; // System mode (0x1F), ARM mode, IRQ/FIQ enabled
+    registers[13] = 0x03007F00; // SP initialized to top of IWRAM (mGBA default)
 
     // Initialize all banked registers to zero
     banked_r8_fiq = banked_r9_fiq = banked_r10_fiq = banked_r11_fiq = banked_r12_fiq = 0;
@@ -283,13 +288,12 @@ void CPU::reset() {
     banked_r13_und = banked_r14_und = 0;
     banked_r13_usr = banked_r14_usr = 0;
     
-    // ARM7TDMI hardware resets to Supervisor mode with interrupts disabled
-    // This is the TRUE hardware reset behavior per ARM architecture spec
-    // The GBA BIOS will then set up stack pointers and switch modes as needed
-    cpsr = 0x000000D3; // SVC mode (0x13) | IRQ disabled (bit 7) | FIQ disabled (bit 6)
-    
-    // Stack pointers start at 0 - BIOS will initialize them
-    // Do NOT pre-initialize sp here!
+    // Match mGBA's initial state for easier trace comparison
+    // Note: Real ARM7TDMI hardware starts in SVC mode (0xD3), but mGBA starts in System mode (0x1F)
+    // BIOS will set proper modes around instruction 100-200, but matching mGBA's initial
+    // values eliminates early spurious differences in trace comparisons
+    cpsr = 0x0000001F; // System mode (0x1F), ARM mode, IRQ/FIQ enabled (to match mGBA)
+    registers[13] = 0x03007F00; // SP initialized to top of IWRAM (matches mGBA default)
     
     // Set PC to reset vector (0x00000000)
     // This is the BIOS entry point

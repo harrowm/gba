@@ -12,6 +12,8 @@
 
 // BIOS tracing flag (shared with ARM)
 extern bool g_trace_bios;
+extern bool g_trace_all;
+extern uint32_t g_trace_max_instructions;
 static uint64_t thumb_instruction_count = 0;
 
 // Define the static constexpr members
@@ -46,26 +48,35 @@ void ThumbCPU::execute(uint32_t cycles) {
         
         // HACK - do we need to model the cpu pipeline?
         uint32_t current_pc = parentCPU.R()[15];
+        if (thumb_instruction_count < 3) {
+            printf("[THUMB DEBUG #%llu] Read current_pc=0x%08X from R[15], FLAG_T=%d\n",
+                   thumb_instruction_count, current_pc, parentCPU.getFlag(CPU::FLAG_T));
+            printf("  R[14]=0x%08X, R[15]=0x%08X\n", parentCPU.R()[14], parentCPU.R()[15]);
+        }
         uint16_t instruction = parentCPU.getMemory().read16(current_pc); // Fetch instruction
         uint8_t opcode = instruction >> 8;
         
         // BIOS tracing for THUMB instructions
         bool pc_in_bios = (current_pc < 0x4000);
-        if (pc_in_bios && g_trace_bios) {
+        bool should_trace = (g_trace_bios && pc_in_bios) || (g_trace_all && thumb_instruction_count <= g_trace_max_instructions);
+        
+        if (should_trace) {
             // Read key I/O registers
             uint16_t ie = parentCPU.getMemory().read16(0x04000200);
             uint16_t irq_flags = parentCPU.getMemory().read16(0x04000202);
             uint32_t ime = parentCPU.getMemory().read32(0x04000208);
             
-            // Print in mGBA-compatible compact format
-            printf("[%llu][THUMB] PC=0x%08X | R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R5=%08X R6=%08X R7=%08X R8=%08X R9=%08X R10=%08X R11=%08X R12=%08X SP=%08X LR=%08X | IE=%04X IF=%04X IME=%08X\n",
-                   thumb_instruction_count++,
+            // Print in mGBA-compatible compact format (matches the format from the trace script)
+            printf("PC:%08X R00:%08X R01:%08X R02:%08X R03:%08X R04:%08X R05:%08X R06:%08X R07:%08X R08:%08X R09:%08X R10:%08X R11:%08X R12:%08X R13:%08X R14:%08X R15:%08X CPSR:%08X | IE:%04X IF:%04X IME:%08X\n",
                    current_pc,
                    parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
                    parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7],
                    parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
-                   parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14],
+                   parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[15],
+                   parentCPU.CPSR(),
                    ie, irq_flags, ime);
+            
+            thumb_instruction_count++;
             
             // Optional: Add disassembly on second line
             if (capstone_handle) {
@@ -1538,16 +1549,55 @@ void ThumbCPU::executeOneInstruction() {
     uint16_t instruction = parentCPU.getMemory().read16(pc);
     parentCPU.getMemory().setDisableWaitCycles(false);
     
-    // BIOS tracing for THUMB instructions
+    // BIOS tracing for THUMB instructions (matching ARM trace logic)
+    extern uint32_t g_trace_max_instructions;
+    static uint64_t thumb_trace_count = 0;
+    
     bool pc_in_bios = (pc < 0x4000);
-    if (pc_in_bios && g_trace_bios && capstone_handle) {
+    bool should_trace = (g_trace_bios && pc_in_bios) || (g_trace_all && thumb_trace_count < g_trace_max_instructions);
+    
+    if (should_trace) {
+        // Read key I/O registers
+        uint16_t ie = parentCPU.getMemory().read16(0x04000200);
+        uint16_t irq_flags = parentCPU.getMemory().read16(0x04000202);
+        uint32_t ime = parentCPU.getMemory().read32(0x04000208);
+        
+        // Print in mGBA-compatible compact format (matching ARM format)
+        printf("PC:%08X R00:%08X R01:%08X R02:%08X R03:%08X R04:%08X R05:%08X R06:%08X R07:%08X R08:%08X R09:%08X R10:%08X R11:%08X R12:%08X R13:%08X R14:%08X R15:%08X CPSR:%08X | IE:%04X IF:%04X IME:%08X\n",
+               pc,
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+               parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7],
+               parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
+               parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[15],
+               parentCPU.CPSR(),
+               ie, irq_flags, ime);
+        
+        thumb_trace_count++;
+        
+        // Optional: Add disassembly on second line
+        if (capstone_handle) {
+            cs_insn* insn;
+            size_t count = cs_disasm(capstone_handle,
+                                     reinterpret_cast<const uint8_t*>(&instruction),
+                                     sizeof(instruction),
+                                     pc, 1, &insn);
+            if (count > 0) {
+                printf("     ; %s %s\n", insn[0].mnemonic, insn[0].op_str);
+                cs_free(insn, count);
+            }
+        }
+        thumb_instruction_count++;
+    }
+    
+    // Legacy BIOS trace format (kept for compatibility with old debug code)
+    if (pc_in_bios && g_trace_bios && !should_trace && capstone_handle) {
         cs_insn* insn;
         // Read key I/O registers
         uint16_t ie = parentCPU.getMemory().read16(0x04000200);
         uint16_t irq_flags = parentCPU.getMemory().read16(0x04000202);
         uint32_t ime = parentCPU.getMemory().read32(0x04000208);
         
-        // Print in mGBA-compatible compact format
+        // Print in old format
         printf("[%llu][THUMB] PC=0x%08X | R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R5=%08X R6=%08X R7=%08X R8=%08X R9=%08X R10=%08X R11=%08X R12=%08X SP=%08X LR=%08X | IE=%04X IF=%04X IME=%08X\n",
                thumb_instruction_count++,
                pc,

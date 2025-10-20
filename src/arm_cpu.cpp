@@ -10,6 +10,9 @@
 
 // Global flag for BIOS tracing
 bool g_trace_bios = false;
+// Global flag for tracing all instructions (not just BIOS)
+bool g_trace_all = false;
+uint32_t g_trace_max_instructions = 50000;
 
 
 // Secondary decode function for ambiguous region (data processing/MUL/MLA overlap)
@@ -189,19 +192,22 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     bool pc_in_ewram = (pc >= 0x02000000 && pc < 0x02040000);
     
     // Detailed BIOS tracing
-    if (g_trace_bios && pc_in_bios) {
+    bool should_trace = (g_trace_bios && pc_in_bios) || (g_trace_all && instruction_count <= g_trace_max_instructions);
+    
+    if (should_trace) {
         // Read key I/O registers
         uint16_t ie = parentCPU.getMemory().read16(0x04000200);
         uint16_t irq_flags = parentCPU.getMemory().read16(0x04000202);
         uint32_t ime = parentCPU.getMemory().read32(0x04000208);
         
-        // Print in mGBA-compatible compact format
-        printf("[%llu][ARM] PC=0x%08X | R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R5=%08X R6=%08X R7=%08X R8=%08X R9=%08X R10=%08X R11=%08X R12=%08X SP=%08X LR=%08X | IE=%04X IF=%04X IME=%08X\n",
-               instruction_count, pc,
+        // Print in mGBA-compatible compact format (matches the format from the trace script)
+        printf("PC:%08X R00:%08X R01:%08X R02:%08X R03:%08X R04:%08X R05:%08X R06:%08X R07:%08X R08:%08X R09:%08X R10:%08X R11:%08X R12:%08X R13:%08X R14:%08X R15:%08X CPSR:%08X | IE:%04X IF:%04X IME:%08X\n",
+               pc,
                parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
                parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7],
                parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
-               parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14],
+               parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[15],
+               parentCPU.CPSR(),
                ie, irq_flags, ime);
         
         // Optional: Add disassembly on second line

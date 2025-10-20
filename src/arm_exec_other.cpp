@@ -328,6 +328,9 @@ void ARMCPU::exec_arm_bx_possible(uint32_t instruction) {
     if ((instruction & 0x0FFFFFF0) == 0x012FFF10) {
         // BX: Branch and Exchange
         uint32_t rm = instruction & 0xF;
+        printf("[BX DECODE] Instruction=0x%08X, rm_bits=0x%X (should be register number)\n", instruction, rm);
+        printf("[BX DEBUG] R0=0x%08X R1=0x%08X ... R14=0x%08X R15=0x%08X\n",
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[14], parentCPU.R()[15]);
         uint32_t target = parentCPU.R()[rm];
         bool thumb = target & 1;
         printf("[BX EXEC] PC=0x%08X, target_reg=R%d, target=0x%08X, thumb=%d\n",
@@ -335,9 +338,11 @@ void ARMCPU::exec_arm_bx_possible(uint32_t instruction) {
         
         if (thumb) {
             // THUMB mode: clear bit 0 (halfword align)
-            parentCPU.R()[15] = target & ~1u;
+            uint32_t new_pc = target & ~1u;
+            printf("[BX THUMB] target=0x%08X, new_pc=0x%08X (target & ~1u)\n", target, new_pc);
+            parentCPU.R()[15] = new_pc;
             parentCPU.setFlag(CPU::FLAG_T);
-            printf("[BX] Switched to THUMB mode, new PC=0x%08X\n", parentCPU.R()[15]);
+            printf("[BX] Switched to THUMB mode, new PC=0x%08X, actual R[15]=0x%08X\n", new_pc, parentCPU.R()[15]);
         } else {
             // ARM mode: clear bits 0 and 1 (word align to 4 bytes)
             parentCPU.R()[15] = target & ~3u;

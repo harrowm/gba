@@ -48,8 +48,10 @@ void printUsage(const char* programName) {
     printf("  - Commercial ROMs may boot through BIOS (experimental)\n");
 }
 
-// External trace flag from arm_cpu.cpp
+// External trace flags from arm_cpu.cpp
 extern bool g_trace_bios;
+extern bool g_trace_all;
+extern uint32_t g_trace_max_instructions;
 
 int main(int argc, char* argv[]) {
     printf("GBA Emulator Starting...\n");
@@ -77,6 +79,13 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "--trace-bios") == 0) {
             g_trace_bios = true;
             printf("BIOS tracing enabled\n");
+        } else if (strcmp(argv[i], "--trace-all") == 0) {
+            g_trace_all = true;
+            // Check if next argument is a number
+            if (i + 1 < argc && isdigit(argv[i + 1][0])) {
+                g_trace_max_instructions = atoi(argv[++i]);
+            }
+            printf("All-instruction tracing enabled (max %u instructions)\n", g_trace_max_instructions);
         } else if (strcmp(argv[i], "--trace-instructions") == 0) {
             enableInstructionTrace = true;
             printf("Instruction tracing enabled - writing to %s\n", traceFile);
