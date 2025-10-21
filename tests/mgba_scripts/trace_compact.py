@@ -10,7 +10,7 @@ import sys
 
 GDB_HOST = 'localhost'
 GDB_PORT = 2345
-MAX_INSTRUCTIONS = 200000
+MAX_INSTRUCTIONS = int(sys.argv[1]) if len(sys.argv) > 1 else 200000
 
 def send_gdb_command(sock, cmd):
     """Send a GDB command and return response"""

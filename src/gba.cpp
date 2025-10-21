@@ -62,6 +62,28 @@ GBA::GBA(bool testMode)
     // Reset CPU to initial state (PC starts at 0x00000000 - BIOS entry point)
     cpu->reset();
     
+    // Initialize I/O registers to power-on defaults (matches mGBA's GBAIOInit)
+    // See docs/sound_register_initialization.md for details
+    memory.write16(0x04000000, 0x0080);    // DISPCNT: Forced blank enabled
+    memory.write16(0x04000130, 0x03FF);    // KEYINPUT: All keys released (bits 0-9 = 1)
+    memory.write16(0x04000088, 0x0200);    // SOUNDBIAS: Default audio bias (PWM center at 0x200)
+    memory.write16(0x04000020, 0x0100);    // BG2PA: Affine matrix A (identity, 1.0 in 8.8 fixed point)
+    memory.write16(0x04000026, 0x0100);    // BG2PD: Affine matrix D (identity, 1.0 in 8.8 fixed point)
+    memory.write16(0x04000030, 0x0100);    // BG3PA: Affine matrix A (identity, 1.0 in 8.8 fixed point)
+    memory.write16(0x04000036, 0x0100);    // BG3PD: Affine matrix D (identity, 1.0 in 8.8 fixed point)
+    memory.write16(0x04000134, 0x8000);    // RCNT: SIO Mode Select (general purpose mode)
+    
+    // Reset scheduler to cycle 0 after initialization writes
+    // mGBA doesn't charge cycles for power-on register initialization
+    // This ensures our first instruction starts at the same cycle as mGBA
+    uint64_t init_cycles = scheduler.getCurrentCycle();
+    if (init_cycles > 0) {
+        printf("[GBA INIT] Resetting scheduler from cycle %llu to 0 (initialization overhead)\n", init_cycles);
+        scheduler.reset();
+        // Re-setup GPU timing at cycle 0
+        gpu->setupTiming(&scheduler);
+    }
+    
     DEBUG_INFO("GBA initialized with scheduler, CPU, GPU, timers, DMA, and interrupts wired");
     DEBUG_INFO("CPU will boot from BIOS at 0x00000000");
 }
@@ -85,8 +107,8 @@ void GBA::skipBIOS() {
     cpu->CPSR() = 0x0000001F;
     
     // Initialize hardware registers (following mGBA's approach)
-    // VCOUNT = 0x7E (126) - mimics being at end of VBlank
-    memory.write8(0x04000006, 0x7E);
+    // VCOUNT = 0 - starts at scanline 0
+    memory.write8(0x04000006, 0x00);
     
     // POSTFLG = 0 - indicates first boot (ROM needs this to initialize text display)
     // Note: Setting to 1 causes test ROM to skip text rendering setup
@@ -273,6 +295,7 @@ void GBA::runFrame() {
             if (intrwait_loop_count > 10 && nextEventCycle != UINT64_MAX) {
                 // Keep fast-forwarding through events until IF becomes non-zero
                 // This simulates the CPU being halted while interrupts accumulate
+                // NOTE: This read should NOT charge wait cycles (it's a halt check, not real execution)
                 uint16_t current_if = memory.read16(0x04000202); // Read IF register
                 if (current_if == 0) {
                     // No interrupts pending yet - skip to next event and process it

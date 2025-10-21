@@ -35,12 +35,15 @@ public:
     // Direct I/O write (bypasses special handling like write-to-clear)
     // Used by hardware components to set registers
     void writeDirectIO(uint32_t address, uint16_t value);
+    
+    // Direct I/O read (bypasses wait cycle counting)
+    // Used by tracer and debugging code that shouldn't affect timing
+    uint8_t readDirectIO8(uint32_t address) const;
+    uint16_t readDirectIO16(uint32_t address) const;
+    uint32_t readDirectIO32(uint32_t address) const;
 
     // Get wait states for an address (for testing/debugging)
     uint32_t getWaitStates(uint32_t address, uint32_t accessWidth) const;
-    
-    // Temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
-    void setDisableWaitCycles(bool disable) { disableWaitCycles = disable; }
     
     // ROM and BIOS loading
     bool loadROM(const char* filepath);

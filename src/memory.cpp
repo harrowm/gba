@@ -439,6 +439,37 @@ void Memory::writeDirectIO(uint32_t address, uint16_t value) {
     base[(offset + 1) % Memory::BLOCK_SIZE] = (value >> 8) & 0xFF;
 }
 
+// Direct I/O reads (bypass wait cycle counting)
+// Used by tracer and debugging code that shouldn't affect timing
+uint8_t Memory::readDirectIO8(uint32_t address) const {
+    uint32_t offset;
+    uint8_t* base = get_region_base(this->regionTable, address, offset);
+    if (!base) return 0xFF;
+    return base[offset];
+}
+
+uint16_t Memory::readDirectIO16(uint32_t address) const {
+    uint32_t offset;
+    uint8_t* base = get_region_base(this->regionTable, address, offset);
+    if (!base) return 0xFFFF;
+    
+    uint8_t low = base[offset];
+    uint8_t high = base[(offset + 1) % Memory::BLOCK_SIZE];
+    return low | (high << 8);
+}
+
+uint32_t Memory::readDirectIO32(uint32_t address) const {
+    uint32_t offset;
+    uint8_t* base = get_region_base(this->regionTable, address, offset);
+    if (!base) return 0xFFFFFFFF;
+    
+    uint8_t b0 = base[offset];
+    uint8_t b1 = base[(offset + 1) % Memory::BLOCK_SIZE];
+    uint8_t b2 = base[(offset + 2) % Memory::BLOCK_SIZE];
+    uint8_t b3 = base[(offset + 3) % Memory::BLOCK_SIZE];
+    return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+}
+
 // ARM7TDMI Unaligned Word Access (LDR)
 // Reference: ARM7TDMI Technical Reference Manual, Section 6.3 (Memory Interface)
 // https://developer.arm.com/documentation/ddi0210/c/

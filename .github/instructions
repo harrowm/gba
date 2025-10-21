@@ -318,6 +318,7 @@ uint32_t address = pc_base + (offset << 2);            // Add scaled offset
 - Memory map documentation (in `docs/memory_map.md`)
 - Timing reference (in `docs/timing_reference.md`)
 - **mGBA Trace Collection Guide** (in `docs/mgba_trace_collection.md`) - How to collect and analyze instruction traces from mGBA for debugging
+- **Debugging Tools Guide** (in `docs/debugging_tools.md`) - Python virtual environment, Capstone disassembler usage, and trace comparison tools
 
 ## Code Organization
 - `src/` - Source implementation files

@@ -137,24 +137,21 @@ public:
         fprintf(trace_file, "cpsr=0x%08X [N=%d Z=%d C=%d V=%d I=%d F=%d T=%d] Mode: %s\n",
                 cpsr, N, Z, C, V, I, F, T, mode_name);
         
-        // Read and print key memory locations
-        // Disable wait cycles during tracer reads to avoid triggering scheduler events
+        // Read and print key memory locations (use direct I/O to avoid affecting timing)
         fprintf(trace_file, "\nMemory:\n");
-        memory->setDisableWaitCycles(true);
         for (const auto& loc : MEMORY_LOCATIONS) {
             uint32_t value;
             if (loc.size == 1) {
-                value = memory->read8(loc.address);
+                value = memory->readDirectIO8(loc.address);
                 fprintf(trace_file, "  [%-12s] 0x%08X = 0x%02X\n", loc.name, loc.address, value);
             } else if (loc.size == 2) {
-                value = memory->read16(loc.address);
+                value = memory->readDirectIO16(loc.address);
                 fprintf(trace_file, "  [%-12s] 0x%08X = 0x%04X\n", loc.name, loc.address, value);
             } else {
-                value = memory->read32(loc.address);
+                value = memory->readDirectIO32(loc.address);
                 fprintf(trace_file, "  [%-12s] 0x%08X = 0x%08X\n", loc.name, loc.address, value);
             }
         }
-        memory->setDisableWaitCycles(false);
         
         // Stop tracing after max instructions
         if (instruction_count >= max_instructions) {

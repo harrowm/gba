@@ -45,7 +45,23 @@ killall mgba
 
 ## Trace Script Configuration
 
-The trace script (`tests/mgba_scripts/trace_with_memory.py`) can be configured:
+### Compact Format Script (`trace_compact.py`)
+
+The compact trace script accepts a command-line parameter for instruction count:
+
+```bash
+# Collect 500,000 instructions
+python3 tests/mgba_scripts/trace_compact.py 500000 > /tmp/mgba_trace_500k.log 2>&1
+
+# Collect default 200,000 instructions
+python3 tests/mgba_scripts/trace_compact.py > /tmp/mgba_trace_200k.log 2>&1
+```
+
+**Note:** The command-line parameter is required. The script reads `sys.argv[1]` to determine how many instructions to collect.
+
+### Verbose Format Script (`trace_with_memory.py`)
+
+The verbose trace script can be configured by editing the file:
 
 ```python
 GDB_HOST = 'localhost'

@@ -20,6 +20,14 @@ GPU::GPU(Memory& mem)
 
 // Helper to schedule one complete scanline
 void GPU::scheduleScanline(Scheduler* scheduler) {
+    static int schedule_count = 0;
+    uint64_t currentCycle = scheduler->getCurrentCycle();
+    if (schedule_count < 10) {
+        printf("[GPU SCHEDULE] Scanline %d scheduled at cycle %llu (HDRAW ends at %llu)\n",
+               currentScanline, currentCycle, currentCycle + CYCLES_HDRAW);
+        schedule_count++;
+    }
+    
     // Schedule H-Draw completion
     scheduler->schedule(CYCLES_HDRAW, [this, scheduler]() {
         // H-Draw complete, enter H-Blank
@@ -93,7 +101,8 @@ void GPU::setupTiming(Scheduler* scheduler) {
         return;
     }
     
-    DEBUG_INFO("Setting up GPU video timing with scheduler");
+    uint64_t currentCycle = scheduler->getCurrentCycle();
+    printf("[GPU SETUP] Setting up GPU video timing at cycle %llu\n", currentCycle);
     scheduleScanline(scheduler);
 }
 

@@ -61,10 +61,10 @@ void ThumbCPU::execute(uint32_t cycles) {
         bool should_trace = (g_trace_bios && pc_in_bios) || (g_trace_all && thumb_instruction_count <= g_trace_max_instructions);
         
         if (should_trace) {
-            // Read key I/O registers
-            uint16_t ie = parentCPU.getMemory().read16(0x04000200);
-            uint16_t irq_flags = parentCPU.getMemory().read16(0x04000202);
-            uint32_t ime = parentCPU.getMemory().read32(0x04000208);
+            // Read key I/O registers (use direct I/O to avoid affecting timing)
+            uint16_t ie = parentCPU.getMemory().readDirectIO16(0x04000200);
+            uint16_t irq_flags = parentCPU.getMemory().readDirectIO16(0x04000202);
+            uint32_t ime = parentCPU.getMemory().readDirectIO32(0x04000208);
             
             // Print in mGBA-compatible compact format (matches the format from the trace script)
             printf("PC:%08X R00:%08X R01:%08X R02:%08X R03:%08X R04:%08X R05:%08X R06:%08X R07:%08X R08:%08X R09:%08X R10:%08X R11:%08X R12:%08X R13:%08X R14:%08X R15:%08X CPSR:%08X | IE:%04X IF:%04X IME:%08X\n",
@@ -1545,9 +1545,7 @@ void ThumbCPU::executeOneInstruction() {
     // Fetch instruction without charging wait cycles
     // ARM7TDMI has 3-stage pipeline: Fetch happens in parallel with previous instruction's execution
     // Only the execute stage costs cycles
-    parentCPU.getMemory().setDisableWaitCycles(true);
-    uint16_t instruction = parentCPU.getMemory().read16(pc);
-    parentCPU.getMemory().setDisableWaitCycles(false);
+    uint16_t instruction = parentCPU.getMemory().readDirectIO16(pc);
     
     // BIOS tracing for THUMB instructions (matching ARM trace logic)
     extern uint32_t g_trace_max_instructions;
