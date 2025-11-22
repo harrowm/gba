@@ -174,17 +174,43 @@ void GBA::run() {
 void GBA::runFrame() {
     static int frame_num = 0;
     frame_num++;
-    printf("[GBA::runFrame #%d] Starting frame\n", frame_num);
-    
-    // One frame = 280,896 cycles (228 scanlines * 1232 cycles)
+    // Print progress every 1000 frames
+        if (frame_num % 60 == 0) {
+            uint32_t pc = cpu->R()[15];
+            uint32_t lr = cpu->R()[14];
+            uint32_t ime = memory.readDirectIO32(0x04000208);
+            uint16_t ie = memory.readDirectIO16(0x04000200);
+            uint16_t irq_if = memory.readDirectIO16(0x04000202);
+            uint8_t postflg = memory.readDirectIO8(0x03007FFA);  // POSTFLG register
+            uint32_t irq_handler = memory.readDirectIO32(0x03007FFC);  // User IRQ handler address
+            printf("[Frame %d] Cycle: %llu, PC: 0x%08X, LR: 0x%08X, POSTFLG=0x%02X, IRQ_HANDLER=0x%08X, IME=%d, IE=0x%04X, IF=0x%04X\n", 
+                   frame_num, scheduler.getCurrentCycle(), pc, lr, postflg, irq_handler, ime, ie, irq_if);
+            
+            // Check if we've entered ROM
+            if (pc >= 0x08000000) {
+                printf("***** ENTERED ROM AT FRAME %d, CYCLE %llu *****\n", frame_num, scheduler.getCurrentCycle());
+            }
+        }
+        
+        // Track ROM entry even outside frame checkpoints
+        static bool rom_entered = false;
+        if (!rom_entered && cpu->R()[15] >= 0x08000000) {
+            rom_entered = true;
+            printf("\n========== ROM ENTRY ==========\n");
+            printf("Frame: %d\n", frame_num);
+            printf("Cycle: %llu\n", scheduler.getCurrentCycle());
+            printf("PC: 0x%08X\n", cpu->R()[15]);
+            printf("LR: 0x%08X\n", cpu->R()[14]);
+            printf("SP: 0x%08X\n", cpu->R()[13]);
+            printf("================================\n\n");
+        }    // One frame = 280,896 cycles (228 scanlines * 1232 cycles)
     uint64_t startCycle = scheduler.getCurrentCycle();
-    printf("[GBA::runFrame #%d] Got start cycle: %llu\n", frame_num, startCycle);
+    // printf("[GBA::runFrame #%d] Got start cycle: %llu\n", frame_num, startCycle);
     uint64_t targetCycle = startCycle + CYCLES_PER_FRAME;
-    printf("[GBA::runFrame #%d] Target cycle: %llu\n", frame_num, targetCycle);
+    // printf("[GBA::runFrame #%d] Target cycle: %llu\n", frame_num, targetCycle);
     
     // NOTE: Removed auto-set POSTFLG logic - let BIOS set it naturally
     // The BIOS sets POSTFLG=1 itself when ready to jump to ROM
-    static bool rom_entered = false;
     static bool in_rom = false;
     
     uint64_t loopStartCycle = scheduler.getCurrentCycle();
@@ -246,16 +272,17 @@ void GBA::runFrame() {
         last_region = region;
         
         // Periodic execution report (every 50k instructions)
-        if (total_instructions - last_report_cycle >= 50000) {
-            printf("\n[EXEC REPORT Frame %d] After %llu instructions:\n", frame_num, total_instructions);
-            // Show top execution regions
-            for (int i = 0; i < 256; i++) {
-                if (pc_counts[i] > 1000) {
-                    printf("  Region 0x%02X____: %u instructions\n", i, pc_counts[i]);
-                }
-            }
-            last_report_cycle = total_instructions;
-        }
+        // DISABLED for performance
+        // if (total_instructions - last_report_cycle >= 50000) {
+        //     printf("\n[EXEC REPORT Frame %d] After %llu instructions:\n", frame_num, total_instructions);
+        //     // Show top execution regions
+        //     for (int i = 0; i < 256; i++) {
+        //         if (pc_counts[i] > 1000) {
+        //             printf("  Region 0x%02X____: %u instructions\n", i, pc_counts[i]);
+        //         }
+        //     }
+        //     last_report_cycle = total_instructions;
+        // }
         
         // Track ROM entry specifically  
         bool pc_in_rom = (pc >= 0x08000000 && pc < 0x0E000000);
@@ -280,25 +307,35 @@ void GBA::runFrame() {
         
         // Detect BIOS IntrWait loop (0x340-0x380) - this busy-waits for interrupts
         // Real GBA would HALT the CPU; we simulate by fast-forwarding to next event
-        bool in_intrwait_loop = (pc >= 0x340 && pc <= 0x380);
-        static int intrwait_loop_count = 0;
+        // IntrWait HALT detection: PC=0x344 is the HALT instruction (writes to HALTCNT)
+        bool at_intrwait_halt = (pc == 0x344);
+        bool in_intrwait = (pc >= 0x330 && pc <= 0x380); // Track if we're anywhere in IntrWait
+        static int intrwait_halt_count = 0; // Count how many times we hit the HALT at 0x344
+        static bool irq_triggered_this_intrwait = false; // Track if we've already triggered IRQ
+        static bool was_in_intrwait_last_cycle = false; // Track if we were in IntrWait last instruction
         static int first_print_count = 0;
         
-        if (in_intrwait_loop) {
-            intrwait_loop_count++;
-            // Print first few times we detect the loop
+        // Reset when we enter IntrWait fresh (transition from outside to inside)
+        if (in_intrwait && !was_in_intrwait_last_cycle) {
+            intrwait_halt_count = 0;
+            irq_triggered_this_intrwait = false;
+        }
+        was_in_intrwait_last_cycle = in_intrwait;
+        
+        if (at_intrwait_halt) {
+            intrwait_halt_count++;
+            // Print first few times we detect the halt
             if (first_print_count < 3) {
-                printf("[INTRWAIT DETECT] PC=0x%08X, count=%d\n", pc, intrwait_loop_count);
+                printf("[INTRWAIT DETECT] PC=0x%08X, halt_count=%d\n", pc, intrwait_halt_count);
                 first_print_count++;
             }
-            // After a few iterations, fast-forward through events until something changes IF
-            if (intrwait_loop_count > 10 && nextEventCycle != UINT64_MAX) {
-                // Keep fast-forwarding through events until IF becomes non-zero
-                // This simulates the CPU being halted while interrupts accumulate
-                // NOTE: This read should NOT charge wait cycles (it's a halt check, not real execution)
+            // After a few HALT iterations, fast-forward through events until IF becomes non-zero
+            if (intrwait_halt_count > 3 && nextEventCycle != UINT64_MAX) {
+                static uint16_t last_if_value = 0; // Track IF value from previous check
                 uint16_t current_if = memory.read16(0x04000202); // Read IF register
+                
                 if (current_if == 0) {
-                    // No interrupts pending yet - skip to next event and process it
+                    // No interrupt pending - fast-forward to next event
                     uint64_t cycles_to_skip = nextEventCycle - cycleBeforeInstr;
                     if (cycles_to_skip > 0) {
                         static int skip_count = 0;
@@ -309,16 +346,19 @@ void GBA::runFrame() {
                         }
                         cpu->advanceCycles(cycles_to_skip);
                         scheduler.runUntil(nextEventCycle);
-                        // Don't reset counter - keep halting until IF != 0
                     }
+                    last_if_value = 0;
+                } else if (last_if_value == 0 && current_if != 0) {
+                    // Transition from IF=0 to IF!=0 - trigger IRQ ONCE
+                    printf("[INTRWAIT RESUME] IF=0x%04X (was 0x%04X), triggering IRQ once\n", current_if, last_if_value);
+                    cpu->handleInterrupt();
+                    last_if_value = current_if; // Remember we've processed this
                 } else {
-                    // Interrupt pending - exit halt state
-                    printf("[INTRWAIT RESUME] IF=0x%04X, exiting halt\n", current_if);
-                    intrwait_loop_count = 0;
+                    // IF is still set (another VBlank arrived) - don't re-trigger, just continue execution
+                    // The BIOS IRQ handler will eventually clear IF, and we'll detect the next transition
+                    last_if_value = current_if;
                 }
             }
-        } else {
-            intrwait_loop_count = 0;
         }
         
         // Execute the instruction (this will advance cycles based on instruction + memory timing)

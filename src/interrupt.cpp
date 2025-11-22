@@ -10,11 +10,9 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
     }
     
     // Read current IF register (without wait cycles - internal operation)
-    memory->setDisableWaitCycles(true);
-    uint16_t currentIF = memory->read16(REG_IF);
-    uint16_t ieVal = memory->read16(REG_IE);
-    uint16_t imeVal = memory->read16(REG_IME);
-    memory->setDisableWaitCycles(false);
+    uint16_t currentIF = memory->readDirectIO16(REG_IF);
+    uint16_t ieVal = memory->readDirectIO16(REG_IE);
+    uint16_t imeVal = memory->readDirectIO32(REG_IME);
     
     // Set the interrupt request flag
     currentIF |= irqFlag;
@@ -33,12 +31,15 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
         }
     }
     uint64_t currentCycle = scheduler ? scheduler->getCurrentCycle() : 0;
-    fprintf(stderr, "[GBA IRQ] %s raised at cycle %llu, IF=0x%04X, IE=0x%04X, IME=0x%04X\n",
-            irq_bit >= 0 ? irq_names[irq_bit] : "UNKNOWN",
-            currentCycle,
-            currentIF,
-            ieVal,
-            imeVal);
+    // Disable HBlank spam, only log VBlank
+    if (irq_bit == 0) {  // VBlank only
+        fprintf(stderr, "[GBA IRQ] %s raised at cycle %llu, IF=0x%04X, IE=0x%04X, IME=0x%04X\n",
+                irq_bit >= 0 ? irq_names[irq_bit] : "UNKNOWN",
+                currentCycle,
+                currentIF,
+                ieVal,
+                imeVal);
+    }
     
     DEBUG_INFO("Interrupt requested: 0x" + debug_to_hex_string(irqFlag, 4));
     
@@ -75,10 +76,8 @@ bool InterruptController::isIMESet() const {
         return false;
     }
     
-    // Disable wait cycles for interrupt register read (like mGBA - these are instant)
-    memory->setDisableWaitCycles(true);
-    uint16_t imeVal = memory->read16(REG_IME);
-    memory->setDisableWaitCycles(false);
+    // Direct read without wait cycles (like mGBA - these are instant)
+    uint16_t imeVal = memory->readDirectIO16(REG_IME);
     
     return (imeVal & 0x0001) != 0;
 }
@@ -93,11 +92,9 @@ bool InterruptController::hasPendingInterrupt() const {
         return false;  // Master interrupt disabled
     }
     
-    // Disable wait cycles for interrupt register reads
-    memory->setDisableWaitCycles(true);
-    uint16_t ieVal = memory->read16(REG_IE);
-    uint16_t ifVal = memory->read16(REG_IF);
-    memory->setDisableWaitCycles(false);
+    // Direct read without wait cycles
+    uint16_t ieVal = memory->readDirectIO16(REG_IE);
+    uint16_t ifVal = memory->readDirectIO16(REG_IF);
     
     // Check if any enabled interrupts are pending
     return (ieVal & ifVal) != 0;

@@ -77,6 +77,23 @@ void ARMCPU::execute(uint32_t cycles) {
         // Only the execute stage costs cycles
         uint32_t instruction = parentCPU.getMemory().readDirectIO32(pc);
 
+        // Debug IntrWait function (0x330-0x378)
+        if (pc >= 0x330 && pc <= 0x378) {
+            printf("\n[IntrWait TRACE] PC=0x%08X, instruction=0x%08X\n", pc, instruction);
+            printf("  R0=0x%08X R1=0x%08X R2=0x%08X R3=0x%08X\n",
+                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+            printf("  R4=0x%08X R12=0x%08X LR=0x%08X PC=0x%08X\n",
+                   parentCPU.R()[4], parentCPU.R()[12], parentCPU.R()[14], parentCPU.R()[15]);
+            printf("  CPSR=0x%08X (Z=%d N=%d C=%d V=%d)\n",
+                   parentCPU.CPSR(),
+                   parentCPU.getFlag(CPU::FLAG_Z), parentCPU.getFlag(CPU::FLAG_N),
+                   parentCPU.getFlag(CPU::FLAG_C), parentCPU.getFlag(CPU::FLAG_V));
+            uint16_t ie = parentCPU.getMemory().readDirectIO16(0x04000200);
+            uint16_t if_reg = parentCPU.getMemory().readDirectIO16(0x04000202);
+            uint8_t ime = parentCPU.getMemory().readDirectIO8(0x04000208);
+            printf("  IE=0x%04X IF=0x%04X IME=0x%02X\n", ie, if_reg, ime);
+        }
+
         executeInstruction(pc, instruction);
         if (exception_taken) {
             break;
@@ -269,7 +286,7 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     // TRACE IntrWait check function (0x358-0x374) to understand what it's checking  
     static int intrwait_trace_count = 0;
     if (in_bios && pc >= 0x358 && pc <= 0x374) {
-        if (intrwait_trace_count < 10 || (intrwait_trace_count % 100000 == 0)) {
+        if (intrwait_trace_count < 200 || (intrwait_trace_count % 100000 == 0)) {
             intrwait_trace_count++;
             printf("[INTRWAIT #%d] PC=0x%08X | R0=0x%08X R1=0x%08X R2=0x%08X R12=0x%08X\n",
                    intrwait_trace_count, pc, 

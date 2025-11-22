@@ -353,40 +353,42 @@ _00000300:
 _00000328:
     mov r0, #1
     mov r1, #1
-_00000330:
-    push {r4, lr}
-    mov r3, #0
-    mov r4, #1
-    cmp r0, #0
-    blne sub_00000358
-_00000344:
-    strb r3, [r12, #0x301]
-    bl sub_00000358
-    beq _00000344
-    pop {r4, lr}
-    bx lr
+_00000330:                         @ IntrWait: Wait for interrupt(s)
+                                @ r0 = discard old flags if non-zero
+                                @ r1 = interrupt mask to wait for
+    push {r4, lr}               @ Save r4 and return address
+    mov r3, #0                  @ r3 = 0 (for IME disable)
+    mov r4, #1                  @ r4 = 1 (for IME enable)
+    cmp r0, #0                  @ Check if we should discard old flags
+    blne sub_00000358           @ If r0 != 0, clear pending interrupts first
+_00000344:                      @ Main wait loop (THIS IS WHERE WE'RE STUCK!)
+    strb r3, [r12, #0x301]      @ Write 0 to 0x04000301 (IME high byte? or halt?)
+    bl sub_00000358             @ Check for interrupt and clear flags
+    beq _00000344               @ If no matching interrupt found, loop back
+    pop {r4, lr}                @ Restore r4 and return address
+    bx lr                       @ Return to caller
 
     ARM_FUNC_START sub_00000358
-sub_00000358: @ 0x00000358
-    mov r12, #0x4000000
-    strb r3, [r12, #0x208]
-    ldrh r2, [r12, #-8]
-    ands r0, r1, r2
-    eorne r2, r2, r0
-    strhne r2, [r12, #-8]
-    strb r4, [r12, #0x208]
-    bx lr
-_00000378:
-    mov r0, #0
-    mov r3, #0
-_00000380:
-    mov r12, #0xdf
-    ldm r3!, {r2}
-    msr cpsr_fc, r12
-    add r0, r0, r2
-    lsrs r1, r3, #0xe
-    beq _00000380
-    bx lr
+sub_00000358: @ 0x00000358      @ Helper: Check interrupt and clear flags
+    mov r12, #0x4000000         @ r12 = I/O base (0x04000000)
+    strb r3, [r12, #0x208]      @ IME = 0 (disable interrupts)
+    ldrh r2, [r12, #-8]         @ r2 = read IF register (0x04000202 - 0x08 = 0x03FFFFFA? NO: -8 from r12 = 0x03FFFFF8, halfword = 0x03FFFFFA? Actually 0x4000000-8=0x3FFFFF8, ldrh loads from word-aligned so 0x03FFFFF8 → reads 0x04000200/0x04000202)
+    ands r0, r1, r2             @ r0 = r1 & IF (check if any requested interrupts pending)
+    eorne r2, r2, r0            @ If match found, r2 ^= r0 (clear the matched bits)
+    strhne r2, [r12, #-8]       @ If match found, write back to IF (acknowledge)
+    strb r4, [r12, #0x208]      @ IME = 1 (re-enable interrupts)
+    bx lr                       @ Return (Z flag set if no match)
+_00000378:                      @ Start of different function (checksum?)
+    mov r0, #0                  @ r0 = 0 (accumulator)
+    mov r3, #0                  @ r3 = 0 (memory pointer)
+_00000380:                      @ Checksum loop
+    mov r12, #0xdf              @ r12 = 0xdf (switch to System mode)
+    ldm r3!, {r2}               @ Load word from [r3], r3 += 4
+    msr cpsr_fc, r12            @ Switch CPU mode to System (0xdf)
+    add r0, r0, r2              @ Accumulate checksum
+    lsrs r1, r3, #0xe           @ r1 = r3 >> 14 (check if done)
+    beq _00000380               @ If not done, loop
+    bx lr                       @ Return
     .byte 0x00, 0x28, 0x00, 0xDC
     .byte 0x40, 0x42, 0x70, 0x47
 

@@ -150,9 +150,18 @@ inline uint8_t* get_region_base(uint8_t* const* regionTable, uint32_t address, u
     uint32_t block = (address & 0x0FFFFFFF) / Memory::BLOCK_SIZE;
     uint8_t* base = regionTable[block];
     offset = address % Memory::BLOCK_SIZE;
+    uint32_t original_offset = offset;
+    
     // IWRAM mirroring: 32KB at 0x03000000, mirrored every 32KB in 0x03000000-0x03FFFFFF
     if (address >= 0x03000000 && address < 0x04000000 && base) {
         offset = (address - 0x03000000) % 0x8000; // Mirror every 32KB
+        
+        // Debug: Log mirroring for IntrWait check address
+        static int mirror_log_count = 0;
+        if ((address == 0x03FFFFF8 || (address >= 0x03007FF8 && address <= 0x03007FFC)) && mirror_log_count++ < 20) {
+            printf("[IWRAM MIRROR] addr=0x%08X → block=%u orig_offset=0x%X final_offset=0x%X (maps to 0x%08X)\n",
+                   address, block, original_offset, offset, 0x03000000 + offset);
+        }
     }
     // VRAM mirroring is handled by the base pointer mapping in the regionTable
     // Don't remap offset here - it causes out-of-bounds access
@@ -256,6 +265,16 @@ uint16_t Memory::read16(uint32_t address) const {
         }
     }
     
+    // Log IntrWait's read from 0x03FFFFF8 (mirrors to 0x03007FF8)
+    if (address == 0x03FFFFF8 || address == 0x03007FF8) {
+        static int intrwait_read_count = 0;
+        if (intrwait_read_count++ < 50) {
+            uint16_t result = (val >> rot) | (val << (16 - rot));
+            printf("[INTRWAIT READ16 #%d] addr=0x%08X → offset=0x%X val=0x%04X rot=%d result=0x%04X\n",
+                   intrwait_read_count, address, offset, val, rot, result);
+        }
+    }
+    
     return (val >> rot) | (val << (16 - rot));
 }
 
@@ -325,6 +344,15 @@ void Memory::write16(uint32_t address, uint16_t value) {
     // Log writes to IME register (Interrupt Master Enable)
     if (address == 0x04000208) {  // REG_IME
         printf("[REG Write] IME (Interrupt Master Enable) = 0x%04X\n", val);
+    }
+    
+    // Log writes to IntrWait check location at 0x03007FF8 (can be written via 0x03FFFFF8)
+    if (address == 0x03007FF8 || address == 0x03FFFFF8) {
+        static int intrwait_write_count = 0;
+        if (intrwait_write_count++ < 50) {
+            printf("[INTRWAIT WRITE16 #%d] addr=0x%08X val=0x%04X (BIOS should write IF copy here)\n",
+                   intrwait_write_count, address, val);
+        }
     }
     
     // Special handling for IF register (write 1 to clear)

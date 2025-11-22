@@ -125,18 +125,13 @@ void CPU::executeOneInstruction() {
     exec_count++;
     
     // Trace instruction state BEFORE execution (like mGBA's GDB trace)
-    // CRITICAL: Disable wait cycles during tracer reads - they're for debugging only
-    // and shouldn't affect cycle counting
+    // Tracers use readDirectIO internally now, so no need to disable wait cycles
     if (tracer.isEnabled()) {
-        memory.setDisableWaitCycles(true);
         tracer.traceInstruction(registers.data(), cpsr);
-        memory.setDisableWaitCycles(false);
     }
     if (memoryTracer.isEnabled()) {
         uint64_t current_cycle = scheduler ? scheduler->getCurrentCycle() : 0;
-        memory.setDisableWaitCycles(true);
         memoryTracer.traceInstruction(registers.data(), cpsr, current_cycle);
-        memory.setDisableWaitCycles(false);
     }
     
     // Debug: Print first few calls to see if we're even getting here
