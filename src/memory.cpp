@@ -336,7 +336,7 @@ void Memory::write16(uint32_t address, uint16_t value) {
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
     
-    // Log writes to ALL VRAM (Nintendo logo investigation)
+    // Log writes to OBJ VRAM and OBJ Palette (Nintendo logo investigation)
     if (address >= 0x06000000 && address < 0x06018000) {
         static int vram_writes = 0;
         if (vram_writes++ < 200) {
@@ -348,6 +348,18 @@ void Memory::write16(uint32_t address, uint16_t value) {
                 printf("[BG VRAM Write #%d] addr=0x%08X (offset 0x%06X) val=0x%04X\n",
                        vram_writes, address, address - 0x06000000, val);
             }
+        }
+    }
+    
+    // Log writes to OBJ Palette RAM
+    if (address >= 0x05000200 && address < 0x05000400) {
+        static int pal_writes = 0;
+        if (pal_writes++ < 100) {
+            uint32_t colorNum = (address - 0x05000200) / 2;
+            uint32_t paletteNum = colorNum / 16;
+            uint32_t colorInPal = colorNum % 16;
+            printf("[OBJ PALETTE Write #%d] addr=0x%08X Pal%d[%d] = 0x%04X\n",
+                   pal_writes, address, paletteNum, colorInPal, val);
         }
     }
     

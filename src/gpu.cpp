@@ -5,6 +5,7 @@
 #include "utility_macros.h"
 #include <cstdint>
 #include <cstring>
+#include <set>
 
 GPU::GPU(Memory& mem) 
     : memory(mem), currentScanline(0), inVBlank(false), inHBlank(false) {
@@ -132,28 +133,41 @@ void GPU::renderScanline() {
                    (dispcnt >> 12) & 1);
         }
         
-        // Debug: Log OAM for OBJ 7 and 8 every frame
-        for (int objNum = 7; objNum <= 8; objNum++) {
-            uint32_t oamAddr = OAM_BASE + (objNum * 8);
-            uint16_t attr0 = memory.read16(oamAddr + 0);
-            uint16_t attr1 = memory.read16(oamAddr + 2);
-            uint16_t attr2 = memory.read16(oamAddr + 4);
-            
-            int y = attr0 & 0xFF;
-            int mode = (attr0 >> 8) & 0x3; // 0=Normal, 1=Semi-Transparent, 2=Obj Window
-            int gfxMode = (attr0 >> 10) & 0x3; // 0=Normal, 1=Affine, 2=Hidden, 3=Affine Double
-            int shape = (attr0 >> 14) & 0x3; // 0=Square, 1=Horizontal, 2=Vertical
-            
-            int x = attr1 & 0x1FF;
-            int size = (attr1 >> 14) & 0x3;
-            
-            int tile = attr2 & 0x3FF;
-            int priority = (attr2 >> 10) & 0x3;
-            int palette = (attr2 >> 12) & 0xF;
-            
-            printf("[OAM] OBJ%d: Pos=(%d,%d) Mode=%d GfxMode=%d Shape=%d Size=%d Tile=%d Prio=%d Pal=%d\n",
-                   objNum, x, y, mode, gfxMode, shape, size, tile, priority, palette);
+        // Debug: Log OAM for all visible sprites to identify the sweeping highlight
+        static int oamLogFrames = 0;
+        if (oamLogFrames >= 60 && oamLogFrames < 260) { // Log frames 60-260 (when animation happens)
+            if ((oamLogFrames - 60) % 10 == 0) { // Log every 10th frame
+                printf("\n[OAM FRAME %d]\n", oamLogFrames);
+                for (int objNum = 0; objNum < 16; objNum++) { // Check first 16 sprites
+                    uint32_t oamAddr = OAM_BASE + (objNum * 8);
+                    uint16_t attr0 = memory.read16(oamAddr + 0);
+                    uint16_t attr1 = memory.read16(oamAddr + 2);
+                    uint16_t attr2 = memory.read16(oamAddr + 4);
+                    
+                    // Check if sprite is enabled (not disabled by bit 9 when not affine)
+                    bool isAffine = (attr0 & (1 << 8)) != 0;
+                    bool isDisabled = !isAffine && ((attr0 & (1 << 9)) != 0);
+                    if (isDisabled) continue;
+                    
+                    int y = attr0 & 0xFF;
+                    int objMode = (attr0 >> 10) & 0x3; // 0=Normal, 1=Semi-Transparent, 2=Obj Window, 3=Prohibited
+                    int gfxMode = (attr0 >> 8) & 0x3; // 0=Normal, 1=Affine, 2=Disabled, 3=Affine Double-Size
+                    int shape = (attr0 >> 14) & 0x3; // 0=Square, 1=Horizontal, 2=Vertical
+                    
+                    int x = attr1 & 0x1FF;
+                    int size = (attr1 >> 14) & 0x3;
+                    
+                    int tile = attr2 & 0x3FF;
+                    int priority = (attr2 >> 10) & 0x3;
+                    int palette = (attr2 >> 12) & 0xF;
+                    
+                    // Log all sprites regardless of Y position to catch animation
+                    printf("  OBJ%d: X=%3d Y=%3d ObjMode=%d GfxMode=%d Shape=%d Size=%d Tile=%d Prio=%d Pal=%d\n",
+                           objNum, x, y, objMode, gfxMode, shape, size, tile, priority, palette);
+                }
+            }
         }
+        oamLogFrames++;
     }
     
     // Initialize sprite ordering buffer
@@ -1462,6 +1476,17 @@ void GPU::renderScanline(uint16_t scanline) {
         secondLayerTypeBuffer[i] = 5;  // 5 = Backdrop
     }
     
+    // 1.5. TWO-PASS SPRITE RENDERING - Pass 1: Preprocess all sprites
+    // This collects all sprite pixels into spriteLayer BEFORE compositing
+    // Enables correct semi-transparent blending with final backgrounds
+    bool mapping1D = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
+    WindowControl emptyWinCtrl = {};
+    emptyWinCtrl.winOut = 0x3F;  // All layers visible by default
+    
+    if (dispcnt & DISPCNT_OBJ_ENABLE) {
+        preprocessSprites(scanline, mapping1D, windowsEnabled ? winCtrl : emptyWinCtrl);
+    }
+    
     // 2. Render each priority level (back to front: 3 → 0)
     for (int priority = 3; priority >= 0; priority--) {
         // Render BGs with this priority (BG3 → BG0)
@@ -1506,31 +1531,13 @@ void GPU::renderScanline(uint16_t scanline) {
             }
         }
         
-        // Render sprites with this priority
+        // TWO-PASS SPRITE RENDERING - Pass 2: Composite sprites at this priority
+        // Sprites were already preprocessed before the priority loop
+        // Now composite them onto lineBuffer with proper blending
         if (dispcnt & DISPCNT_OBJ_ENABLE) {
-            static int spriteDebugCount = 0;
-            if (scanline == 102 && priority == 2 && spriteDebugCount++ < 5) {
-                printf("[SPRITE DEBUG] Scanline %d Priority %d: About to render sprites\n", scanline, priority);
-            }
-            // Track which pixels existed before rendering sprites
-            uint16_t oldLineBuffer[240];
-            for (int x = 0; x < 240; x++) {
-                oldLineBuffer[x] = lineBuffer[x];
-            }
-            
-            if (windowsEnabled) {
-                renderSpritesWithPriorityAndWindow(priority, scanline, lineBuffer, 
-                                                    priorityBuffer, layerTypeBuffer,
-                                                    secondLayerBuffer, secondLayerTypeBuffer, winCtrl);
-            } else {
-                // Use window-aware rendering even without windows for semi-transparent sprite support
-                // Pass empty window control (all pixels visible)
-                WindowControl emptyWinCtrl = {};
-                emptyWinCtrl.winOut = 0x3F;  // All layers visible outside windows
-                renderSpritesWithPriorityAndWindow(priority, scanline, lineBuffer, 
-                                                    priorityBuffer, layerTypeBuffer,
-                                                    secondLayerBuffer, secondLayerTypeBuffer, emptyWinCtrl);
-            }
+            postprocessSprites(priority, scanline, lineBuffer, priorityBuffer, layerTypeBuffer,
+                              secondLayerBuffer, secondLayerTypeBuffer, 
+                              windowsEnabled ? winCtrl : emptyWinCtrl);
         }
     }
     
@@ -2321,9 +2328,6 @@ void GPU::renderNormalSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
             if (existingPrio == layerPriority && existingObj < objNum) continue;
         }
         
-        // Update order layer (even for transparent pixels)
-        spriteOrderLayer[screenX] = (objNum << 24) | (layerPriority << 16) | 1;
-        
         int pixelX = obj.hFlip ? (obj.width - 1 - spritePixelX) : spritePixelX;
         int tileX = pixelX / 8;
         int pixelInTileX = pixelX % 8;
@@ -2343,9 +2347,13 @@ void GPU::renderNormalSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
             colorIndex = (pixelInTileX & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
         }
         
+        // Skip transparent pixels - don't update order layer
         if (colorIndex == 0) {
             continue;
         }
+        
+        // Update order layer AFTER confirming pixel is non-transparent
+        spriteOrderLayer[screenX] = (objNum << 24) | (layerPriority << 16) | 1;
         
         uint16_t paletteIndex;
         if (obj.paletteMode) {
@@ -2462,9 +2470,6 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
             if (existingPrio == layerPriority && existingObj < objNum) continue;
         }
         
-        // Update order layer
-        spriteOrderLayer[screenX] = (objNum << 24) | (layerPriority << 16) | 1;
-        
         int relX = spritePixelX - renderWidth / 2;
         int relY = rowInSprite - renderHeight / 2;
         
@@ -2499,9 +2504,13 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
             colorIndex = (pixelX & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
         }
         
+        // Skip transparent pixels - don't update order layer
         if (colorIndex == 0) {
             continue;
         }
+        
+        // Update order layer AFTER confirming pixel is non-transparent
+        spriteOrderLayer[screenX] = (objNum << 24) | (layerPriority << 16) | 1;
         
         uint16_t paletteIndex;
         if (obj.paletteMode) {
@@ -2626,4 +2635,233 @@ void GPU::applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer,
             // BLEND_MODE_OFF - do nothing
             break;
     }
+}
+
+/**
+ * Pass 1: Preprocess all sprites into spriteLayer buffer
+ * This is the first pass of mgba's two-pass sprite rendering
+ * - Processes ALL sprites (127->0) regardless of priority
+ * - Writes to spriteLayer instead of lineBuffer
+ * - NO blending happens here - just collect sprite pixels
+ * - Handles sprite ordering (lower OBJ# overwrites higher OBJ#)
+ * - Even transparent pixels update order flags
+ */
+void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowControl& winCtrl) {
+    
+    // Initialize spriteLayer to FLAG_UNWRITTEN
+    for (int i = 0; i < 240; i++) {
+        spriteLayer[i] = FLAG_UNWRITTEN;
+    }
+    
+    // Process all sprites from 127 to 0 (lower number = higher priority)
+    for (int objNum = 127; objNum >= 0; objNum--) {
+        OBJAttributes obj = readOBJAttributes(objNum);
+        
+
+        
+        // Skip if not visible
+        if (!obj.visible) {
+            continue;
+        }
+        
+        // Skip prohibited mode
+        if (obj.objMode == OBJ_MODE_PROHIBITED) {
+            continue;
+        }
+        
+        // Check if sprite is on this scanline
+        if (!isSpriteOnScanline(obj, scanline)) {
+            continue;
+        }
+        
+        // Calculate sprite Y position and row within sprite
+        int spriteY = (obj.y < 160) ? obj.y : (obj.y - 256);
+        int rowInSprite = scanline - spriteY;
+        
+        if (obj.vFlip) {
+            rowInSprite = obj.height - 1 - rowInSprite;
+        }
+        
+        int tileY = rowInSprite / 8;
+        int pixelY = rowInSprite % 8;
+        int spriteX = (obj.x < 240) ? obj.x : (obj.x - 512);
+        
+        // Build flags for this sprite
+        uint32_t flags = (obj.priority << OFFSET_PRIORITY) | (objNum << OFFSET_ORDER);
+        
+        // Add blend target flags
+        if (obj.objMode == OBJ_MODE_SEMI_TRANSPARENT) {
+            flags |= FLAG_TARGET_1;  // Semi-transparent sprites are first targets
+        }
+        
+        if (obj.objMode == OBJ_MODE_OBJ_WINDOW) {
+            flags |= FLAG_OBJWIN;
+        }
+        
+        // Render each pixel of the sprite
+        for (int spritePixelX = 0; spritePixelX < obj.width; spritePixelX++) {
+            int screenX = spriteX + spritePixelX;
+            
+            if (screenX < 0 || screenX >= 240) {
+                continue;
+            }
+            
+            // Check window visibility
+            uint8_t control = getWindowControlForPixel(screenX, scanline, winCtrl);
+            bool objVisible = (control & WIN_OBJ_ENABLE) != 0;
+            
+            if (!objVisible) {
+                continue;
+            }
+            
+            // Get current spriteLayer pixel
+            uint32_t current = spriteLayer[screenX];
+            
+            // Check sprite ordering - allow lower OBJ# to overwrite higher OBJ#
+            if (current != FLAG_UNWRITTEN) {
+                uint32_t currentObjNum = (current & FLAG_ORDER_MASK) >> OFFSET_ORDER;
+                // If current sprite has lower number (higher priority), skip
+                if (currentObjNum < (uint32_t)objNum) {
+                    continue;
+                }
+            }
+            
+            // Calculate pixel position in sprite
+            int pixelX = obj.hFlip ? (obj.width - 1 - spritePixelX) : spritePixelX;
+            int tileX = pixelX / 8;
+            int pixelInTileX = pixelX % 8;
+            
+            uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
+            
+            // Get color index from VRAM
+            uint8_t colorIndex;
+            uint8_t* vram = memory.getVRAM();
+            uint32_t vramOffset = tileAddr - VRAM_BASE;
+            
+            if (obj.paletteMode) {
+                int pixelIndex = pixelY * 8 + pixelInTileX;
+                colorIndex = vram[vramOffset + pixelIndex];
+            } else {
+                int pixelIndex = pixelY * 4 + pixelInTileX / 2;
+                uint8_t byte = vram[vramOffset + pixelIndex];
+                colorIndex = (pixelInTileX & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+            }
+            
+            // Skip transparent pixels entirely - don't update spriteLayer
+            // This allows lower-priority sprites to render through transparent areas
+            if (colorIndex == 0) {
+                continue;
+            }
+            
+            // Get color from palette
+            uint16_t paletteIndex;
+            if (obj.paletteMode) {
+                paletteIndex = colorIndex;
+            } else {
+                paletteIndex = (obj.paletteNum * 16) + colorIndex;
+            }
+            
+            uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+            
+            // Color lookup successful
+            
+            // Store in spriteLayer: color (lower 16 bits) + flags (upper 16 bits)
+            // NO blending happens here - just store raw color
+            spriteLayer[screenX] = rgb555 | flags;
+        }
+    }
+    
+    // Preprocessing complete
+}
+
+/**
+ * Pass 2: Composite sprites from spriteLayer onto lineBuffer
+ * This is the second pass of mgba's two-pass sprite rendering
+ * - Processes sprites at specified priority level only
+ * - THIS IS WHERE SEMI-TRANSPARENT BLENDING HAPPENS
+ * - Blends with FINAL background (whatever is in lineBuffer now)
+ * - Checks priority and window visibility
+ */
+void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer,
+                             uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                             uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+                             const WindowControl& winCtrl) {
+    (void)winCtrl;   // Already checked in preprocess
+    (void)scanline;  // Unused parameter
+    
+    // Calculate layer priority value for this sprite priority level
+    uint8_t layerPriority = (priority * 4) + 3;  // Sprites drawn after BGs at same priority
+    
+    // Read blend control for semi-transparent sprites
+    uint16_t bldcnt = memory.read16(0x04000050);
+    uint8_t blendMode = (bldcnt >> 6) & 0x3;
+    bool objIsFirstTarget = (bldcnt & (1 << 4)) != 0;
+    bool alphaBlendEnabled = (blendMode == 1) && objIsFirstTarget;
+    
+    BlendControl blend = readBlendControl();
+    
+    // Composite sprites at this priority level
+    for (int x = 0; x < 240; x++) {
+        uint32_t spritePixel = spriteLayer[x];
+        
+        // Skip if no sprite OR if transparent (check color bits only)
+        // Transparent pixels have FLAG_UNWRITTEN (0xFFFF) in lower 16 bits
+        if ((spritePixel & 0xFFFF) == 0xFFFF) {
+            continue;
+        }
+        
+        // Extract priority from flags
+        uint8_t spritePriority = (spritePixel & FLAG_PRIORITY) >> OFFSET_PRIORITY;
+        
+        // Only process sprites at current priority level
+        if (spritePriority != priority) {
+            continue;
+        }
+        
+        // Check if sprite can overwrite current pixel
+        if (layerPriority >= priorityBuffer[x]) {
+            continue;
+        }
+        
+        // Extract color and flags
+        uint16_t spriteColor = spritePixel & 0xFFFF;
+        bool isSemiTransparent = (spritePixel & FLAG_TARGET_1) != 0;
+        
+        // Save current pixel as second layer
+        secondLayerBuffer[x] = lineBuffer[x];
+        secondLayerTypeBuffer[x] = layerTypeBuffer[x];
+        
+        // Handle semi-transparent blending
+        if (isSemiTransparent && alphaBlendEnabled) {
+            // Blend sprite color with current lineBuffer color
+            // This is the FINAL background, not an intermediate state
+            uint16_t bgColor = lineBuffer[x];
+            
+            uint8_t r1 = spriteColor & 0x1F;
+            uint8_t g1 = (spriteColor >> 5) & 0x1F;
+            uint8_t b1 = (spriteColor >> 10) & 0x1F;
+            
+            uint8_t r2 = bgColor & 0x1F;
+            uint8_t g2 = (bgColor >> 5) & 0x1F;
+            uint8_t b2 = (bgColor >> 10) & 0x1F;
+            
+            // Apply alpha blend formula: (sprite * EVA + bg * EVB) / 16
+            uint8_t r = (r1 * blend.eva + r2 * blend.evb) / 16;
+            uint8_t g = (g1 * blend.eva + g2 * blend.evb) / 16;
+            uint8_t b = (b1 * blend.eva + b2 * blend.evb) / 16;
+            
+            // Clamp to 5-bit range
+            if (r > 31) r = 31;
+            if (g > 31) g = 31;
+            if (b > 31) b = 31;
+            
+            spriteColor = r | (g << 5) | (b << 10);
+        }
+        
+        // Write to lineBuffer
+        lineBuffer[x] = spriteColor;
+        priorityBuffer[x] = layerPriority;
+        layerTypeBuffer[x] = 4;  // Layer type 4 for sprites
+    }
+    
 }

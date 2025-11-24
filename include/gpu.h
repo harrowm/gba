@@ -329,6 +329,22 @@ private:
     // Bit 0: FLAG_WRITTEN
     uint32_t spriteOrderLayer[240];
     
+    // Sprite layer buffer for two-pass rendering (mgba approach)
+    // Lower 24 bits: RGB555 color or flags
+    // Upper 8 bits: priority, objMode, sprite order
+    // Format matches mgba: color | (priority << 24) | (objNum << 16) | flags
+    uint32_t spriteLayer[240];
+    
+    // Sprite layer flag constants (mgba compatible)
+    static constexpr uint32_t FLAG_UNWRITTEN = 0xFFFFFFFF;
+    static constexpr uint32_t FLAG_ORDER_MASK = 0x00FF0000;  // Bits 16-23: sprite number
+    static constexpr uint32_t FLAG_PRIORITY = 0xFF000000;     // Bits 24-31: priority
+    static constexpr uint32_t FLAG_TARGET_1 = 0x00000100;     // Sprite is first blend target
+    static constexpr uint32_t FLAG_TARGET_2 = 0x00000200;     // Sprite is second blend target
+    static constexpr uint32_t FLAG_OBJWIN = 0x00000400;       // OBJ window mode
+    static constexpr int OFFSET_PRIORITY = 24;
+    static constexpr int OFFSET_ORDER = 16;
+    
     // Callbacks for interrupts
     std::function<void()> vblankCallback;
     std::function<void()> hblankCallback;
@@ -362,6 +378,14 @@ public:
                                              uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
                                              uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                              const WindowControl& winCtrl);
+    
+    // Two-pass sprite rendering (mgba approach)
+    void preprocessSprites(uint16_t scanline, bool mapping1D, const WindowControl& winCtrl);
+    void postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer,
+                           uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                           uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+                           const WindowControl& winCtrl);
+    
     void applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, 
                               uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                               uint16_t /*scanline*/, const BlendControl& blend);
