@@ -2674,18 +2674,6 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
             continue;
         }
         
-        // Calculate sprite Y position and row within sprite
-        int spriteY = (obj.y < 160) ? obj.y : (obj.y - 256);
-        int rowInSprite = scanline - spriteY;
-        
-        if (obj.vFlip) {
-            rowInSprite = obj.height - 1 - rowInSprite;
-        }
-        
-        int tileY = rowInSprite / 8;
-        int pixelY = rowInSprite % 8;
-        int spriteX = (obj.x < 240) ? obj.x : (obj.x - 512);
-        
         // Build flags for this sprite
         uint32_t flags = (obj.priority << OFFSET_PRIORITY) | (objNum << OFFSET_ORDER);
         
@@ -2698,7 +2686,121 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
             flags |= FLAG_OBJWIN;
         }
         
-        // Render each pixel of the sprite
+        // Handle affine vs normal sprites differently
+        if (obj.rotScaleFlag) {
+            // AFFINE SPRITE - use transformation matrix
+            AffineParams params = readAffineParams(obj.rotScaleParam);
+            
+            int spriteY = (obj.y < 160) ? obj.y : (obj.y - 256);
+            int rowInSprite = scanline - spriteY;
+            
+            // Get rendering dimensions (may be doubled for double-size mode)
+            int renderWidth = obj.doubleSize ? obj.width * 2 : obj.width;
+            int renderHeight = obj.doubleSize ? obj.height * 2 : obj.height;
+            
+            // Texture center (original sprite dimensions, not doubled)
+            int texCenterX = obj.width / 2;
+            int texCenterY = obj.height / 2;
+            
+            int spriteX = (obj.x < 240) ? obj.x : (obj.x - 512);
+            
+            // Render each pixel across the affine sprite's render width
+            for (int spritePixelX = 0; spritePixelX < renderWidth; spritePixelX++) {
+                int screenX = spriteX + spritePixelX;
+                
+                if (screenX < 0 || screenX >= 240) {
+                    continue;
+                }
+                
+                // Check window visibility
+                uint8_t control = getWindowControlForPixel(screenX, scanline, winCtrl);
+                bool objVisible = (control & WIN_OBJ_ENABLE) != 0;
+                
+                if (!objVisible) {
+                    continue;
+                }
+                
+                // Get current spriteLayer pixel
+                uint32_t current = spriteLayer[screenX];
+                
+                // Check sprite ordering - allow lower OBJ# to overwrite higher OBJ#
+                if (current != FLAG_UNWRITTEN) {
+                    uint32_t currentObjNum = (current & FLAG_ORDER_MASK) >> OFFSET_ORDER;
+                    if (currentObjNum < (uint32_t)objNum) {
+                        continue;
+                    }
+                }
+                
+                // Apply affine transformation
+                int relX = spritePixelX - renderWidth / 2;
+                int relY = rowInSprite - renderHeight / 2;
+                
+                int textureX, textureY;
+                applyAffineTransform(params, relX, relY, textureX, textureY);
+                
+                textureX += texCenterX;
+                textureY += texCenterY;
+                
+                // Check if transformed coordinates are within original sprite bounds
+                if (textureX < 0 || textureX >= obj.width || 
+                    textureY < 0 || textureY >= obj.height) {
+                    continue;
+                }
+                
+                // Calculate tile and pixel positions
+                int tileX = textureX / 8;
+                int tileY = textureY / 8;
+                int pixelX = textureX % 8;
+                int pixelY = textureY % 8;
+                
+                uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
+                
+                // Get color index from VRAM
+                uint8_t colorIndex;
+                uint8_t* vram = memory.getVRAM();
+                uint32_t vramOffset = tileAddr - VRAM_BASE;
+                
+                if (obj.paletteMode) {
+                    int pixelIndex = pixelY * 8 + pixelX;
+                    colorIndex = vram[vramOffset + pixelIndex];
+                } else {
+                    int pixelIndex = pixelY * 4 + pixelX / 2;
+                    uint8_t byte = vram[vramOffset + pixelIndex];
+                    colorIndex = (pixelX & 1) ? ((byte >> 4) & 0x0F) : (byte & 0x0F);
+                }
+                
+                // Skip transparent pixels
+                if (colorIndex == 0) {
+                    continue;
+                }
+                
+                // Get color from palette
+                uint16_t paletteIndex;
+                if (obj.paletteMode) {
+                    paletteIndex = colorIndex;
+                } else {
+                    paletteIndex = (obj.paletteNum * 16) + colorIndex;
+                }
+                
+                uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+                
+                // Store in spriteLayer
+                spriteLayer[screenX] = rgb555 | flags;
+            }
+        } else {
+            // NORMAL SPRITE - simple x/y with flip
+            int spriteY = (obj.y < 160) ? obj.y : (obj.y - 256);
+            int rowInSprite = scanline - spriteY;
+            
+            if (obj.vFlip) {
+                rowInSprite = obj.height - 1 - rowInSprite;
+            }
+            
+            int tileY = rowInSprite / 8;
+            int pixelY = rowInSprite % 8;
+            int spriteX = (obj.x < 240) ? obj.x : (obj.x - 512);
+            
+            // Render each pixel of the normal sprite
         for (int spritePixelX = 0; spritePixelX < obj.width; spritePixelX++) {
             int screenX = spriteX + spritePixelX;
             
@@ -2768,6 +2870,7 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
             // Store in spriteLayer: color (lower 16 bits) + flags (upper 16 bits)
             // NO blending happens here - just store raw color
             spriteLayer[screenX] = rgb555 | flags;
+            }
         }
     }
     
