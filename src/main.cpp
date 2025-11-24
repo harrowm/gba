@@ -211,6 +211,16 @@ int main(int argc, char* argv[]) {
             int videoMode = dispcnt & 0x7;
             uint16_t* palette = reinterpret_cast<uint16_t*>(mem.getPaletteRAM());
             
+            // Check highlight sprite pixels (scanline 45, x=40 and x=60)
+            static int preDisplayCount = 0;
+            if (preDisplayCount < 10 && framebuffer) {
+                uint16_t pixel40 = framebuffer[45 * 240 + 40];
+                uint16_t pixel60 = framebuffer[45 * 240 + 60];
+                printf("[PRE-DISPLAY %d] scanline 45: x=40:0x%04X x=60:0x%04X (mode=%d)\n",
+                       preDisplayCount, pixel40, pixel60, videoMode);
+                preDisplayCount++;
+            }
+            
             // Render the frame to display
             display.renderFrame(framebuffer, palette, videoMode);
             

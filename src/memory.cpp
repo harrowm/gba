@@ -336,6 +336,21 @@ void Memory::write16(uint32_t address, uint16_t value) {
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
     
+    // Log writes to ALL VRAM (Nintendo logo investigation)
+    if (address >= 0x06000000 && address < 0x06018000) {
+        static int vram_writes = 0;
+        if (vram_writes++ < 200) {
+            if (address >= 0x06010000) {
+                uint32_t tileNum = (address - 0x06010000) / 32;
+                printf("[OBJ VRAM Write #%d] addr=0x%08X (tile %d, offset 0x%06X) val=0x%04X\n",
+                       vram_writes, address, tileNum, address - 0x06010000, val);
+            } else {
+                printf("[BG VRAM Write #%d] addr=0x%08X (offset 0x%06X) val=0x%04X\n",
+                       vram_writes, address, address - 0x06000000, val);
+            }
+        }
+    }
+    
     // Log writes to IE register (Interrupt Enable)
     if (address == 0x04000200) {  // REG_IE
         printf("[REG Write] IE (Interrupt Enable) = 0x%04X\n", val);
@@ -378,6 +393,10 @@ void Memory::write16(uint32_t address, uint16_t value) {
     static bool feature_logged[256] = {false};  // Track which features we've logged
     
     if (address == 0x04000000) { // REG_DISPCNT
+        // Check previous state
+        uint16_t oldValue = read16(0x04000000);
+        bool bg2WasEnabled = (oldValue >> 10) & 1;
+        
         int mode = value & 0x7;
         bool bg0 = (value >> 8) & 1;
         bool bg1 = (value >> 9) & 1;
@@ -390,6 +409,8 @@ void Memory::write16(uint32_t address, uint16_t value) {
         
         printf("[DISPCNT] Write 0x%04X: Mode=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d Win0=%d Win1=%d ObjWin=%d\n",
                value, mode, bg0, bg1, bg2, bg3, obj, win0, win1, objWin);
+        
+
         
         // Log features being used
         if (mode > 0 && !feature_logged[0]) {

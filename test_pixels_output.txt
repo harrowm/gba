@@ -1,0 +1,31 @@
+[DEBUG] debug.cpp loaded
+Error: Multiple ROM files specified
+GBA Emulator Starting...
+GBA Emulator - Game Boy Advance Emulator
+
+Usage: ./gba_emulator [options] [rom_path]
+
+Arguments:
+  rom_path            Path to GBA ROM file (.gba)
+
+Options:
+  -h, --help               Show this help message
+  -t, --test-pattern       Use test pattern instead of ROM
+  --skip-bios              Skip BIOS and jump directly to ROM (for homebrew ROMs)
+  --trace-bios             Enable detailed BIOS execution tracing
+  --trace-instructions     Trace first 1000 instructions to /tmp/gba_instruction_trace.log
+  --trace-memory           Trace first 5000 instructions with memory to /tmp/gba_memory_trace.log
+
+Examples:
+  ./gba_emulator game.gba                    # Load and run game.gba
+  ./gba_emulator assets/roms/sonic.bin       # Load ROM from assets
+  ./gba_emulator --skip-bios test.gba        # Skip BIOS for homebrew ROMs
+  ./gba_emulator --test-pattern              # Run with gradient test pattern
+  ./gba_emulator                             # Run with test pattern (default)
+
+Controls:
+  ESC                 Quit emulator
+
+Notes:
+  - Most homebrew ROMs require --skip-bios flag
+  - Commercial ROMs may boot through BIOS (experimental)

@@ -35,6 +35,22 @@ constexpr uint32_t REG_BG2VOFS = 0x0400001A;
 constexpr uint32_t REG_BG3HOFS = 0x0400001C;
 constexpr uint32_t REG_BG3VOFS = 0x0400001E;
 
+// BG2 affine parameters (rotation/scaling)
+constexpr uint32_t REG_BG2PA = 0x04000020;  // dx/dx (pa) - 8.8 fixed point
+constexpr uint32_t REG_BG2PB = 0x04000022;  // dmx/dy (pb) - 8.8 fixed point
+constexpr uint32_t REG_BG2PC = 0x04000024;  // dy/dx (pc) - 8.8 fixed point
+constexpr uint32_t REG_BG2PD = 0x04000026;  // dmy/dy (pd) - 8.8 fixed point
+constexpr uint32_t REG_BG2X = 0x04000028;   // Reference point X - 28-bit signed (19.8 fixed)
+constexpr uint32_t REG_BG2Y = 0x0400002C;   // Reference point Y - 28-bit signed (19.8 fixed)
+
+// BG3 affine parameters (rotation/scaling)
+constexpr uint32_t REG_BG3PA = 0x04000030;  // dx/dx (pa) - 8.8 fixed point
+constexpr uint32_t REG_BG3PB = 0x04000032;  // dmx/dy (pb) - 8.8 fixed point
+constexpr uint32_t REG_BG3PC = 0x04000034;  // dy/dx (pc) - 8.8 fixed point
+constexpr uint32_t REG_BG3PD = 0x04000036;  // dmy/dy (pd) - 8.8 fixed point
+constexpr uint32_t REG_BG3X = 0x04000038;   // Reference point X - 28-bit signed (19.8 fixed)
+constexpr uint32_t REG_BG3Y = 0x0400003C;   // Reference point Y - 28-bit signed (19.8 fixed)
+
 // Window registers
 constexpr uint32_t REG_WIN0H = 0x04000040;
 constexpr uint32_t REG_WIN1H = 0x04000042;
@@ -285,6 +301,15 @@ struct AffineParams {
     int16_t pd;  // [1][1] - Vertical scaling / rotation
 };
 
+// Affine transformation parameters for backgrounds (BG2/BG3 in Mode 1/2)
+// Registers: BG2PA-BG2Y (0x04000020-0x0400002F) and BG3PA-BG3Y (0x04000030-0x0400003F)
+struct AffineBackgroundParams {
+    int16_t pa, pb, pc, pd;  // 8.8 fixed-point transformation matrix
+    int32_t refX, refY;      // 19.8 fixed-point reference point (28-bit signed)
+    // Internal rendering state (updated per-scanline)
+    int32_t currentX, currentY;  // Current texture coordinates for scanline start
+};
+
 class Scheduler;  // Forward declaration
 
 class GPU {
@@ -297,6 +322,12 @@ private:
     // Framebuffer for tiled modes (Mode 0-2)
     // In Mode 3+, we use VRAM directly as framebuffer
     uint16_t tiledFramebuffer[240 * 160];
+    
+    // Sprite ordering buffer (stores sprite index and priority)
+    // Bits 31-24: sprite number (0-127)
+    // Bits 23-16: priority (0-3)
+    // Bit 0: FLAG_WRITTEN
+    uint32_t spriteOrderLayer[240];
     
     // Callbacks for interrupts
     std::function<void()> vblankCallback;
@@ -315,6 +346,7 @@ public:
     void renderMode3Scanline(uint16_t scanline);
     void renderMode4Scanline(uint16_t scanline);  // Mode 4: 8bpp indexed bitmap
     void renderMode0Scanline(uint16_t scanline);  // Mode 0: 4 tiled backgrounds
+    void renderMode2Scanline(uint16_t scanline);  // Mode 2: 2 affine backgrounds (BG2, BG3)
     void renderBGScanline(int bgNum, uint16_t scanline);  // Render a single background scanline
     
     // Priority-aware rendering (new)
@@ -469,6 +501,12 @@ public:
                                int screenX, int screenY,        // Screen coords relative to sprite center
                                int& textureX, int& textureY);   // Output: texture coords
     
+    // Affine background functions (Mode 1/2)
+    AffineBackgroundParams readAffineBGParams(int bgNum);       // Read BG2/BG3 affine parameters
+    void renderAffineBG(int bgNum, uint16_t scanline, 
+                        uint16_t* lineBuffer, uint8_t* priorityBuffer,
+                        uint8_t* layerTypeBuffer);              // Render affine BG to scanline buffers
+    
     // Helper functions for priority rendering
     void renderNormalSpriteWithPriority(const OBJAttributes& obj, uint16_t scanline,
                                          uint16_t* lineBuffer, uint8_t* priorityBuffer,
@@ -477,19 +515,19 @@ public:
                                          const AffineParams& params, uint16_t* lineBuffer,
                                          uint8_t* priorityBuffer, uint8_t layerPriority,
                                          bool mapping1D);
-    
-    // Helper functions for priority + window rendering
-    void renderNormalSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
-                                                  uint16_t* lineBuffer, uint8_t* priorityBuffer,
-                                                  uint8_t* layerTypeBuffer, uint8_t layerPriority,
-                                                  uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
-                                                  bool mapping1D, const WindowControl& winCtrl);
-    void renderAffineSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
-                                                  const AffineParams& params, uint16_t* lineBuffer,
-                                                  uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
-                                                  uint8_t layerPriority,
-                                                  uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
-                                                  bool mapping1D, const WindowControl& winCtrl);
+                                        
+    // Window-aware sprite rendering
+    void renderNormalSpriteWithPriorityAndWindow(int objNum, const OBJAttributes& obj, uint16_t scanline,
+                                                 uint16_t* lineBuffer, uint8_t* priorityBuffer,
+                                                 uint8_t* layerTypeBuffer, uint8_t layerPriority, 
+                                                 uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+                                                 bool mapping1D, const WindowControl& winCtrl);
+    void renderAffineSpriteWithPriorityAndWindow(int objNum, const OBJAttributes& obj, uint16_t scanline,
+                                                 const AffineParams& params, uint16_t* lineBuffer,
+                                                 uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
+                                                 uint8_t layerPriority, 
+                                                 uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+                                                 bool mapping1D, const WindowControl& winCtrl);
     
     // Blend and window functions (Session 3: Advanced Features)
     BlendControl readBlendControl();                            // Read and parse blend registers

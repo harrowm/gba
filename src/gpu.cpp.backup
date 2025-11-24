@@ -124,55 +124,23 @@ void GPU::renderScanline() {
     
     // Debug: Log DISPCNT value once per frame (on scanline 0)
     static int dispcntLogCounter = 0;
-    if (currentScanline == 0) {
-        if (dispcntLogCounter++ < 10) {
-            printf("[GPU] Scanline 0: DISPCNT=0x%04X, Mode=%d, BGs=%d%d%d%d, OBJ=%d\n",
-                   dispcnt, mode,
-                   (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
-                   (dispcnt >> 12) & 1);
-        }
-        
-        // Debug: Log OAM for OBJ 7 and 8 every frame
-        for (int objNum = 7; objNum <= 8; objNum++) {
-            uint32_t oamAddr = OAM_BASE + (objNum * 8);
-            uint16_t attr0 = memory.read16(oamAddr + 0);
-            uint16_t attr1 = memory.read16(oamAddr + 2);
-            uint16_t attr2 = memory.read16(oamAddr + 4);
-            
-            int y = attr0 & 0xFF;
-            int mode = (attr0 >> 8) & 0x3; // 0=Normal, 1=Semi-Transparent, 2=Obj Window
-            int gfxMode = (attr0 >> 10) & 0x3; // 0=Normal, 1=Affine, 2=Hidden, 3=Affine Double
-            int shape = (attr0 >> 14) & 0x3; // 0=Square, 1=Horizontal, 2=Vertical
-            
-            int x = attr1 & 0x1FF;
-            int size = (attr1 >> 14) & 0x3;
-            
-            int tile = attr2 & 0x3FF;
-            int priority = (attr2 >> 10) & 0x3;
-            int palette = (attr2 >> 12) & 0xF;
-            
-            printf("[OAM] OBJ%d: Pos=(%d,%d) Mode=%d GfxMode=%d Shape=%d Size=%d Tile=%d Prio=%d Pal=%d\n",
-                   objNum, x, y, mode, gfxMode, shape, size, tile, priority, palette);
-        }
+    if (currentScanline == 0 && dispcntLogCounter++ < 10) {
+        printf("[GPU] Scanline 0: DISPCNT=0x%04X, Mode=%d, BGs=%d%d%d%d, OBJ=%d\n",
+               dispcnt, mode,
+               (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
+               (dispcnt >> 12) & 1);
     }
     
-    // Initialize sprite ordering buffer
-    // 0xFF000000 means no sprite has written to this pixel yet
-    for (int i = 0; i < 240; i++) {
-        spriteOrderLayer[i] = 0xFF000000;
-    }
-
     switch (mode) {
         case 0:
-            // Mode 0: Use priority-aware renderer for proper sprite support
-            renderScanline(currentScanline);
+            renderMode0Scanline(currentScanline);
             break;
         case 1:
         case 2:
             // Mode 1: BG0, BG1 (regular), BG2 (affine)
-            // Mode 2: BG2, BG3 (affine) + sprites
-            // Use priority-aware renderer for sprite support
-            renderScanline(currentScanline);
+            // Mode 2: BG2, BG3 (affine)
+            // For now, use the same rendering as Mode 0 (will need proper affine support later)
+            renderMode0Scanline(currentScanline);
             break;
         case 3:
             renderMode3Scanline(currentScanline);
@@ -1429,10 +1397,8 @@ void GPU::renderScanline(uint16_t scanline) {
         return;
     }
     
-    // Mode 0 and Mode 2: Tiled backgrounds with priority system and sprites
-    // Mode 0: BG0-3 (regular tiled)
-    // Mode 2: BG2-3 (affine) + sprites
-    if (mode != 0 && mode != 2) {
+    // Mode 0: Tiled backgrounds with priority system
+    if (mode != 0) {
         // Other modes not implemented yet
         clearScanlineToBackdrop(scanline);
         return;
@@ -1465,13 +1431,7 @@ void GPU::renderScanline(uint16_t scanline) {
     // 2. Render each priority level (back to front: 3 → 0)
     for (int priority = 3; priority >= 0; priority--) {
         // Render BGs with this priority (BG3 → BG0)
-        // Mode 2 only supports BG2 and BG3 (affine backgrounds), skip BG0 and BG1
         for (int bg = 3; bg >= 0; bg--) {
-            // Skip BG0/BG1 in Mode 2 (they don't exist)
-            if (mode == 2 && (bg == 0 || bg == 1)) {
-                continue;
-            }
-            
             if (dispcnt & (DISPCNT_BG0_ENABLE << bg)) {
                 // Check if this BG has the current priority
                 uint16_t bgcnt = memory.read16(REG_BG0CNT + (bg * 2));
@@ -1508,10 +1468,6 @@ void GPU::renderScanline(uint16_t scanline) {
         
         // Render sprites with this priority
         if (dispcnt & DISPCNT_OBJ_ENABLE) {
-            static int spriteDebugCount = 0;
-            if (scanline == 102 && priority == 2 && spriteDebugCount++ < 5) {
-                printf("[SPRITE DEBUG] Scanline %d Priority %d: About to render sprites\n", scanline, priority);
-            }
             // Track which pixels existed before rendering sprites
             uint16_t oldLineBuffer[240];
             for (int x = 0; x < 240; x++) {
@@ -2242,24 +2198,15 @@ void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline
         // Calculate layer priority value
         uint8_t layerPriority = (priority * 4) + 3;  // Sprites drawn after BGs at same priority
         
-        // Debug OBJ 7 and 8 rendering
-        if (objNum == 7 || objNum == 8) {
-            static int renderLogCount = 0;
-            if (renderLogCount++ < 10) {
-                printf("[SPRITE RENDER] OBJ%d on scanline %d: affine=%d pos=(%d,%d) priority=%d\n",
-                       objNum, scanline, obj.rotScaleFlag, obj.x, obj.y, obj.priority);
-            }
-        }
-
         // Handle affine sprites differently
         if (obj.rotScaleFlag) {
             AffineParams params = readAffineParams(obj.rotScaleParam);
-            renderAffineSpriteWithPriorityAndWindow(objNum, obj, scanline, params, lineBuffer,
+            renderAffineSpriteWithPriorityAndWindow(obj, scanline, params, lineBuffer,
                                                      priorityBuffer, layerTypeBuffer, 
                                                      layerPriority, secondLayerBuffer, 
                                                      secondLayerTypeBuffer, mapping1D, winCtrl);
         } else {
-            renderNormalSpriteWithPriorityAndWindow(objNum, obj, scanline, lineBuffer, 
+            renderNormalSpriteWithPriorityAndWindow(obj, scanline, lineBuffer, 
                                                      priorityBuffer, layerTypeBuffer,
                                                      layerPriority, secondLayerBuffer,
                                                      secondLayerTypeBuffer, mapping1D, winCtrl);
@@ -2267,7 +2214,7 @@ void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline
     }
 }
 
-void GPU::renderNormalSpriteWithPriorityAndWindow(int objNum, const OBJAttributes& obj, uint16_t scanline,
+void GPU::renderNormalSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
                                                     uint16_t* lineBuffer, uint8_t* priorityBuffer,
                                                     uint8_t* layerTypeBuffer, uint8_t layerPriority,
                                                     uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
@@ -2303,26 +2250,6 @@ void GPU::renderNormalSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
         if (layerPriority >= priorityBuffer[screenX]) {
             continue;
         }
-
-        // Check sprite ordering
-        uint32_t currentOrder = spriteOrderLayer[screenX];
-        bool isWritten = (currentOrder & 1) != 0;
-        
-        if (isWritten) {
-            uint8_t existingPrio = (currentOrder >> 16) & 0xFF;
-            uint8_t existingObj = (currentOrder >> 24) & 0xFF;
-            
-            // If existing pixel has higher priority (lower value), skip
-            if (existingPrio < layerPriority) continue;
-            
-            // If same priority, only draw if we are a lower OBJ number (higher priority in tie)
-            // Since we iterate 127->0, we are drawing later.
-            // If existingObj < objNum, existing is better. We should skip.
-            if (existingPrio == layerPriority && existingObj < objNum) continue;
-        }
-        
-        // Update order layer (even for transparent pixels)
-        spriteOrderLayer[screenX] = (objNum << 24) | (layerPriority << 16) | 1;
         
         int pixelX = obj.hFlip ? (obj.width - 1 - spritePixelX) : spritePixelX;
         int tileX = pixelX / 8;
@@ -2406,7 +2333,7 @@ void GPU::renderNormalSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
     }
 }
 
-void GPU::renderAffineSpriteWithPriorityAndWindow(int objNum, const OBJAttributes& obj, uint16_t scanline,
+void GPU::renderAffineSpriteWithPriorityAndWindow(const OBJAttributes& obj, uint16_t scanline,
                                                     const AffineParams& params, uint16_t* lineBuffer,
                                                     uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
                                                     uint8_t layerPriority,
@@ -2449,21 +2376,6 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
         if (layerPriority >= priorityBuffer[screenX]) {
             continue;
         }
-
-        // Check sprite ordering
-        uint32_t currentOrder = spriteOrderLayer[screenX];
-        bool isWritten = (currentOrder & 1) != 0;
-        
-        if (isWritten) {
-            uint8_t existingPrio = (currentOrder >> 16) & 0xFF;
-            uint8_t existingObj = (currentOrder >> 24) & 0xFF;
-            
-            if (existingPrio < layerPriority) continue;
-            if (existingPrio == layerPriority && existingObj < objNum) continue;
-        }
-        
-        // Update order layer
-        spriteOrderLayer[screenX] = (objNum << 24) | (layerPriority << 16) | 1;
         
         int relX = spritePixelX - renderWidth / 2;
         int relY = rowInSprite - renderHeight / 2;

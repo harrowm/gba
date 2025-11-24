@@ -305,61 +305,9 @@ void GBA::runFrame() {
         // Get the cycle of the next scheduled event before executing
         uint64_t nextEventCycle = scheduler.getNextEventCycle();
         
-        // Detect BIOS IntrWait loop (0x340-0x380) - this busy-waits for interrupts
-        // Real GBA would HALT the CPU; we simulate by fast-forwarding to next event
-        // IntrWait HALT detection: PC=0x344 is the HALT instruction (writes to HALTCNT)
-        bool at_intrwait_halt = (pc == 0x344);
-        bool in_intrwait = (pc >= 0x330 && pc <= 0x380); // Track if we're anywhere in IntrWait
-        static int intrwait_halt_count = 0; // Count how many times we hit the HALT at 0x344
-        static bool irq_triggered_this_intrwait = false; // Track if we've already triggered IRQ
-        static bool was_in_intrwait_last_cycle = false; // Track if we were in IntrWait last instruction
-        static int first_print_count = 0;
-        
-        // Reset when we enter IntrWait fresh (transition from outside to inside)
-        if (in_intrwait && !was_in_intrwait_last_cycle) {
-            intrwait_halt_count = 0;
-            irq_triggered_this_intrwait = false;
-        }
-        was_in_intrwait_last_cycle = in_intrwait;
-        
-        if (at_intrwait_halt) {
-            intrwait_halt_count++;
-            // Print first few times we detect the halt
-            if (first_print_count < 3) {
-                printf("[INTRWAIT DETECT] PC=0x%08X, halt_count=%d\n", pc, intrwait_halt_count);
-                first_print_count++;
-            }
-            // After a few HALT iterations, fast-forward through events until IF becomes non-zero
-            if (intrwait_halt_count > 3 && nextEventCycle != UINT64_MAX) {
-                static uint16_t last_if_value = 0; // Track IF value from previous check
-                uint16_t current_if = memory.read16(0x04000202); // Read IF register
-                
-                if (current_if == 0) {
-                    // No interrupt pending - fast-forward to next event
-                    uint64_t cycles_to_skip = nextEventCycle - cycleBeforeInstr;
-                    if (cycles_to_skip > 0) {
-                        static int skip_count = 0;
-                        if (skip_count < 10) {
-                            printf("[INTRWAIT HALT] CPU halted, fast-forwarding %llu cycles to next event\n", 
-                                   cycles_to_skip);
-                            skip_count++;
-                        }
-                        cpu->advanceCycles(cycles_to_skip);
-                        scheduler.runUntil(nextEventCycle);
-                    }
-                    last_if_value = 0;
-                } else if (last_if_value == 0 && current_if != 0) {
-                    // Transition from IF=0 to IF!=0 - trigger IRQ ONCE
-                    printf("[INTRWAIT RESUME] IF=0x%04X (was 0x%04X), triggering IRQ once\n", current_if, last_if_value);
-                    cpu->handleInterrupt();
-                    last_if_value = current_if; // Remember we've processed this
-                } else {
-                    // IF is still set (another VBlank arrived) - don't re-trigger, just continue execution
-                    // The BIOS IRQ handler will eventually clear IF, and we'll detect the next transition
-                    last_if_value = current_if;
-                }
-            }
-        }
+        // DISABLED: IntrWait fast-forward causes BIOS to hang
+        // The manual IRQ triggering interferes with normal interrupt handling
+        // TODO: Investigate proper HALT emulation that doesn't break interrupt flow
         
         // Execute the instruction (this will advance cycles based on instruction + memory timing)
         // Typical GBA instruction cost breakdown:
@@ -383,11 +331,11 @@ void GBA::runFrame() {
         
         uint64_t cyclesAdvanced = cycleAfterInstr - cycleBeforeInstr;
         
-        // Log first 10 instructions and their cycle impact
-        if (!timing_logged && instructionCount <= 10) {
-            printf("[TIMING] Instr %d: PC=0x%08X, cycles before=%llu, cycles after=%llu, advanced=%llu\n",
-                   instructionCount, pc, cycleBeforeInstr, cycleAfterInstr, cyclesAdvanced);
-        }
+        // Log first 10 instructions (DISABLED FOR PERFORMANCE)
+        // if (!timing_logged && instructionCount <= 10) {
+        //     printf("[TIMING] Instr %d: PC=0x%08X, cycles before=%llu, cycles after=%llu, advanced=%llu\n",
+        //            instructionCount, pc, cycleBeforeInstr, cycleAfterInstr, cyclesAdvanced);
+        // }
         
     }
     

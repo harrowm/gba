@@ -194,10 +194,10 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     
     instruction_count++;
     
-    // Progress indicator every 100K instructions
-    if (instruction_count % 100000 == 0) {
-        printf("[Progress] %llu instructions executed, PC=0x%08X\n", instruction_count, pc);
-    }
+    // Progress indicator every 100K instructions (DISABLED FOR PERFORMANCE)
+    // if (instruction_count % 100000 == 0) {
+    //     printf("[Progress] %llu instructions executed, PC=0x%08X\n", instruction_count, pc);
+    // }
     
     bool pc_in_rom = (pc >= 0x08000000 && pc < 0x0E000000);
     bool pc_in_bios = (pc < 0x00004000);
@@ -267,65 +267,27 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
                parentCPU.R()[13], parentCPU.R()[14]);
     }
     
-    // Debug BIOS execution - trace first 200 instructions or specific addresses
-    if ((in_bios && instruction_count <= 200) || (in_bios && pc >= 0x140 && pc <= 0x170)) {
-        printf("[%3llu] BIOS PC=0x%08X: Instr=0x%08X | R0-R3=0x%08X 0x%08X 0x%08X 0x%08X | SP=0x%08X LR=0x%08X R12=0x%08X\n",
-               instruction_count, pc, instruction,
-               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
-               parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[12]);
-        
-        // Show specific details for critical instructions
-        if (pc == 0x00000060 || pc == 0x00000064 || pc == 0x0000016C) {
-            uint32_t sp = parentCPU.R()[13];
-            printf("     -> Stack contents: [0x%08X]=0x%08X, [0x%08X]=0x%08X\n",
-                   sp, parentCPU.getMemory().read32(sp),
-                   sp+4, parentCPU.getMemory().read32(sp+4));
-        }
-    }
+    // Debug BIOS execution (DISABLED FOR PERFORMANCE)
+    // if ((in_bios && instruction_count <= 200) || (in_bios && pc >= 0x140 && pc <= 0x170)) {
+    //     printf("[%3llu] BIOS PC=0x%08X: Instr=0x%08X | R0-R3=0x%08X 0x%08X 0x%08X 0x%08X | SP=0x%08X LR=0x%08X R12=0x%08X\n",
+    //            instruction_count, pc, instruction,
+    //            parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+    //            parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[12]);
+    //     
+    //     // Show specific details for critical instructions
+    //     if (pc == 0x00000060 || pc == 0x00000064 || pc == 0x0000016C) {
+    //         uint32_t sp = parentCPU.R()[13];
+    //         printf("     -> Stack contents: [0x%08X]=0x%08X, [0x%08X]=0x%08X\n",
+    //                sp, parentCPU.getMemory().read32(sp),
+    //                sp+4, parentCPU.getMemory().read32(sp+4));
+    //     }
+    // }
     
-    // TRACE IntrWait check function (0x358-0x374) to understand what it's checking  
-    static int intrwait_trace_count = 0;
-    if (in_bios && pc >= 0x358 && pc <= 0x374) {
-        if (intrwait_trace_count < 200 || (intrwait_trace_count % 100000 == 0)) {
-            intrwait_trace_count++;
-            printf("[INTRWAIT #%d] PC=0x%08X | R0=0x%08X R1=0x%08X R2=0x%08X R12=0x%08X\n",
-                   intrwait_trace_count, pc, 
-                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[12]);
-            
-            // At 0x358: Show when r12 is set
-            if (pc == 0x358) {
-                printf("        -> 0x358: MOV r12, #0x4000000\n");
-            }
-            // At 0x360: LDRH r2, [r12, #0xb8] - show what address we're reading from
-            if (pc == 0x360) {
-                printf("        -> 0x360: Will read from [0x%08X + offset]\n", parentCPU.R()[12]);
-            }
-            // At 0x364: ANDS r0, r1, r2 - show the test
-            if (pc == 0x364) {
-                printf("        -> 0x364: Test R1 & R2 = 0x%08X & 0x%08X = 0x%08X (Z=%d)\n",
-                       parentCPU.R()[1], parentCPU.R()[2], 
-                       parentCPU.R()[1] & parentCPU.R()[2],
-                       ((parentCPU.R()[1] & parentCPU.R()[2]) == 0) ? 1 : 0);
-            }
-            // At 0x374: BX lr - show return
-            if (pc == 0x374) {
-                printf("        -> 0x374: BX LR, returning to 0x%08X\n", parentCPU.R()[14]);
-            }
-        } else {
-            intrwait_trace_count++;
-        }
-    }
-    
-    // Sample PC every 100k instructions to see if we're making progress
-    if (instruction_count % 100000 == 0) {
-        const char* region = "UNKNOWN";
-        if (pc_in_bios) region = "BIOS";
-        else if (pc_in_rom) region = "ROM";
-        else if (pc_in_iwram) region = "IWRAM";
-        else if (pc_in_ewram) region = "EWRAM";
-        printf("[%llu instructions] PC=0x%08X (%s), Instr=0x%08X, LR=0x%08X\n", 
-               instruction_count, pc, region, instruction, parentCPU.R()[14]);
-    }
+    // TRACE IntrWait (DISABLED FOR PERFORMANCE)
+    // static int intrwait_trace_count = 0;
+    // if (in_bios && pc >= 0x358 && pc <= 0x374) {
+    //     intrwait_trace_count++;
+    // }
     
     last_pc = pc;
 
@@ -455,13 +417,13 @@ void ARMCPU::executeOneInstruction() {
     // Calculate how many cycles this instruction will take
     uint32_t instruction_cycles = calculateInstructionCycles(instruction);
     
-    // Debug: Log first few instructions
-    static int debug_count = 0;
-    if (debug_count < 10) {
-        printf("[ARM EXEC] PC=0x%08X instr=0x%08X cycles=%u\n", pc, instruction, instruction_cycles);
-        fflush(stdout);
-        debug_count++;
-    }
+    // Debug: Log first few instructions (DISABLED FOR PERFORMANCE)
+    // static int debug_count = 0;
+    // if (debug_count < 10) {
+    //     printf("[ARM EXEC] PC=0x%08X instr=0x%08X cycles=%u\n", pc, instruction, instruction_cycles);
+    //     fflush(stdout);
+    //     debug_count++;
+    // }
     
     // Execute the instruction
     executeInstruction(pc, instruction);
