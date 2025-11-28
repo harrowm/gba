@@ -410,6 +410,7 @@ void Memory::write16(uint32_t address, uint16_t value) {
         bool bg2WasEnabled = (oldValue >> 10) & 1;
         
         int mode = value & 0x7;
+        bool forcedBlank = (value >> 7) & 1;
         bool bg0 = (value >> 8) & 1;
         bool bg1 = (value >> 9) & 1;
         bool bg2 = (value >> 10) & 1;
@@ -419,8 +420,8 @@ void Memory::write16(uint32_t address, uint16_t value) {
         bool win1 = (value >> 14) & 1;
         bool objWin = (value >> 15) & 1;
         
-        printf("[DISPCNT] Write 0x%04X: Mode=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d Win0=%d Win1=%d ObjWin=%d\n",
-               value, mode, bg0, bg1, bg2, bg3, obj, win0, win1, objWin);
+        printf("[DISPCNT] Write 0x%04X: Mode=%d Blank=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d Win0=%d Win1=%d ObjWin=%d\n",
+               value, mode, forcedBlank, bg0, bg1, bg2, bg3, obj, win0, win1, objWin);
         
 
         
