@@ -1468,6 +1468,7 @@ void GPU::renderScanline(uint16_t scanline) {
     
     // 1. Fill line buffers with backdrop color (lowest priority)
     uint16_t backdrop = memory.read16(0x05000000);  // Palette 0, color 0
+    
     for (int i = 0; i < 240; i++) {
         lineBuffer[i] = backdrop;
         priorityBuffer[i] = 255;  // Lowest possible priority
@@ -1509,13 +1510,29 @@ void GPU::renderScanline(uint16_t scanline) {
                         oldLineBuffer[x] = lineBuffer[x];
                     }
                     
+                    // Determine if this is an affine background
+                    // Mode 2: BG2 and BG3 are affine
+                    // Mode 1: BG2 is affine, BG0/BG1 are regular
+                    bool isAffineBG = (mode == 2 && (bg == 2 || bg == 3)) ||
+                                      (mode == 1 && bg == 2);
+                    
                     // Render with window checking if windows are enabled
                     if (windowsEnabled) {
-                        renderBGScanlineWithPriorityAndWindow(bg, scanline, lineBuffer, 
-                                                               priorityBuffer, layerTypeBuffer,
-                                                               secondLayerBuffer, secondLayerTypeBuffer, winCtrl);
+                        if (isAffineBG) {
+                            renderAffineBGScanlineWithPriorityAndWindow(bg, scanline, lineBuffer, 
+                                                                        priorityBuffer, layerTypeBuffer,
+                                                                        secondLayerBuffer, secondLayerTypeBuffer, winCtrl);
+                        } else {
+                            renderBGScanlineWithPriorityAndWindow(bg, scanline, lineBuffer, 
+                                                                   priorityBuffer, layerTypeBuffer,
+                                                                   secondLayerBuffer, secondLayerTypeBuffer, winCtrl);
+                        }
                     } else {
-                        renderBGScanlineWithPriority(bg, scanline, lineBuffer, priorityBuffer);
+                        if (isAffineBG) {
+                            renderAffineBGScanlineWithPriority(bg, scanline, lineBuffer, priorityBuffer);
+                        } else {
+                            renderBGScanlineWithPriority(bg, scanline, lineBuffer, priorityBuffer);
+                        }
                         // Update layer type buffer AND second layer buffer for pixels that changed
                         for (int x = 0; x < 240; x++) {
                             if (lineBuffer[x] != oldLineBuffer[x]) {
@@ -1549,6 +1566,17 @@ void GPU::renderScanline(uint16_t scanline) {
     
     // 4. Copy line buffer to framebuffer
     int fbOffset = scanline * 240;
+    
+    // Debug: Log backdrop color
+    static int finalFrameCount = 0;
+    static int lastFinalScanline = -1;
+    if (scanline == 0 && lastFinalScanline != 0) finalFrameCount++;
+    lastFinalScanline = scanline;
+    if (finalFrameCount == 600 && scanline == 16) {
+        uint16_t backdrop = memory.read16(0x05000000);
+        printf("[BACKDROP F%d] color=0x%04X\n", finalFrameCount, backdrop);
+    }
+    
     for (int x = 0; x < 240; x++) {
         tiledFramebuffer[fbOffset + x] = lineBuffer[x];
     }
@@ -1626,6 +1654,164 @@ void GPU::renderBGScanlineWithPriority(int bgNum, uint16_t scanline,
             lineBuffer[screenX] = rgb555;
             priorityBuffer[screenX] = layerPriority;
         }
+    }
+}
+
+/**
+ * Read affine background parameters from IO registers
+ * BG2: 0x04000020-0x0400002F
+ * BG3: 0x04000030-0x0400003F
+ */
+AffineBackgroundParams GPU::readAffineBGParams(int bgNum) {
+    AffineBackgroundParams params;
+    
+    uint32_t baseAddr = (bgNum == 2) ? REG_BG2PA : REG_BG3PA;
+    
+    // Read 8.8 fixed-point transformation matrix parameters
+    params.pa = static_cast<int16_t>(memory.read16(baseAddr + 0));   // dx
+    params.pb = static_cast<int16_t>(memory.read16(baseAddr + 2));   // dmx
+    params.pc = static_cast<int16_t>(memory.read16(baseAddr + 4));   // dy
+    params.pd = static_cast<int16_t>(memory.read16(baseAddr + 6));   // dmy
+    
+    // Read 19.8 fixed-point reference points (28-bit signed)
+    // BG2X/BG3X at offset 8, BG2Y/BG3Y at offset 12
+    uint32_t refXRaw = memory.read32(baseAddr + 8);
+    uint32_t refYRaw = memory.read32(baseAddr + 12);
+    
+    // Sign extend from 28 bits to 32 bits
+    params.refX = (refXRaw & 0x08000000) ? (refXRaw | 0xF0000000) : (refXRaw & 0x0FFFFFFF);
+    params.refY = (refYRaw & 0x08000000) ? (refYRaw | 0xF0000000) : (refYRaw & 0x0FFFFFFF);
+    
+    return params;
+}
+
+/**
+ * Get affine background map size based on BGCNT screen size bits
+ * Affine BGs have different sizes than regular BGs:
+ *   0: 128x128 (16x16 tiles)
+ *   1: 256x256 (32x32 tiles)
+ *   2: 512x512 (64x64 tiles)
+ *   3: 1024x1024 (128x128 tiles)
+ */
+void GPU::getAffineBGDimensions(uint8_t sizeCode, int& widthPixels, int& heightPixels, int& widthTiles) {
+    switch (sizeCode) {
+        case 0: widthPixels = 128;  heightPixels = 128;  widthTiles = 16;  break;
+        case 1: widthPixels = 256;  heightPixels = 256;  widthTiles = 32;  break;
+        case 2: widthPixels = 512;  heightPixels = 512;  widthTiles = 64;  break;
+        case 3: widthPixels = 1024; heightPixels = 1024; widthTiles = 128; break;
+        default: widthPixels = 128; heightPixels = 128; widthTiles = 16;  break;
+    }
+}
+
+/**
+ * Render an affine background scanline with priority checking
+ * Affine backgrounds (Mode 1 BG2, Mode 2 BG2/BG3) use rotation/scaling
+ * 
+ * Key differences from regular BGs:
+ * - Map entries are 8-bit tile indices (not 16-bit screen entries)
+ * - Always 256-color mode (8bpp tiles)
+ * - No horizontal/vertical flip per-tile
+ * - Uses PA/PB/PC/PD matrix + reference point for transformation
+ */
+void GPU::renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline, 
+                                              uint16_t* lineBuffer, uint8_t* priorityBuffer) {
+    // Read BG control register
+    uint16_t bgcnt = memory.read16(REG_BG0CNT + (bgNum * 2));
+    
+    // Parse BGCNT for affine BG
+    uint8_t priority = bgcnt & BGCNT_PRIORITY_MASK;
+    uint8_t charBaseBlock = (bgcnt >> 2) & 0x03;
+    uint8_t screenBaseBlock = (bgcnt >> 8) & 0x1F;
+    uint8_t screenSize = (bgcnt >> 14) & 0x03;
+    bool wrapAround = (bgcnt & 0x2000) != 0;  // Bit 13: Display Area Overflow
+    
+    // Calculate VRAM addresses
+    uint32_t charBaseAddr = VRAM_BASE + (charBaseBlock * 0x4000);
+    uint32_t screenBaseAddr = VRAM_BASE + (screenBaseBlock * 0x800);
+    
+    // Get map dimensions
+    int mapWidthPixels, mapHeightPixels, mapWidthTiles;
+    getAffineBGDimensions(screenSize, mapWidthPixels, mapHeightPixels, mapWidthTiles);
+    
+    // Read affine parameters
+    AffineBackgroundParams params = readAffineBGParams(bgNum);
+    
+    // If PA is 0 and PB is 0, the affine matrix hasn't been set up properly
+    // (identity would be PA=0x100, PB=0, PC=0, PD=0x100)
+    // In this case, just skip rendering to avoid garbage
+    if (params.pa == 0 && params.pb == 0 && params.pc == 0 && params.pd == 0) {
+        // Uninitialized affine parameters, don't render garbage
+        return;
+    }
+    
+    // Calculate layer priority (same as regular BGs)
+    uint8_t layerPriority = (priority * 4) + bgNum;
+    
+    // Calculate texture coordinates for this scanline
+    // Starting point: refX + scanline * dmx, refY + scanline * dmy
+    // These are in 8.8 fixed point (reference point is 19.8, but we work in 8.8)
+    int32_t texX = params.refX + (scanline * params.pb);  // refX + y * dmx
+    int32_t texY = params.refY + (scanline * params.pd);  // refY + y * dmy
+    
+    // Render each screen pixel
+    for (int screenX = 0; screenX < 240; screenX++) {
+        // Convert from 8.8 fixed point to integer coordinates
+        int32_t bgX = texX >> 8;
+        int32_t bgY = texY >> 8;
+        
+        // Handle wraparound or out-of-bounds
+        if (wrapAround) {
+            // Wrap texture coordinates
+            bgX = bgX & (mapWidthPixels - 1);
+            bgY = bgY & (mapHeightPixels - 1);
+        } else {
+            // Check bounds - transparent if outside
+            if (bgX < 0 || bgX >= mapWidthPixels || bgY < 0 || bgY >= mapHeightPixels) {
+                // Advance to next pixel
+                texX += params.pa;  // x += dx
+                texY += params.pc;  // y += dy
+                continue;
+            }
+        }
+        
+        // Get tile coordinates
+        int tileX = bgX >> 3;  // divide by 8
+        int tileY = bgY >> 3;
+        int pixelInTileX = bgX & 7;  // mod 8
+        int pixelInTileY = bgY & 7;
+        
+        // Read map entry (8-bit tile index for affine BGs)
+        uint32_t mapOffset = tileY * mapWidthTiles + tileX;
+        uint8_t tileIndex = memory.read8(screenBaseAddr + mapOffset);
+        
+        // Get tile address (affine BGs always use 8bpp = 64 bytes per tile)
+        uint32_t tileAddr = charBaseAddr + (tileIndex * 64);
+        
+        // Read pixel color index (8bpp)
+        uint32_t pixelOffset = pixelInTileY * 8 + pixelInTileX;
+        uint8_t colorIndex = memory.read8(tileAddr + pixelOffset);
+        
+        // Color 0 is transparent
+        if (colorIndex == 0) {
+            // Advance to next pixel
+            texX += params.pa;
+            texY += params.pc;
+            continue;
+        }
+        
+        // Only draw if this pixel has higher or equal priority
+        if (layerPriority <= priorityBuffer[screenX]) {
+            // Get color from BG palette (256-color mode uses single palette)
+            uint16_t rgb555 = memory.read16(0x05000000 + colorIndex * 2);
+            
+            // Update line buffer and priority
+            lineBuffer[screenX] = rgb555;
+            priorityBuffer[screenX] = layerPriority;
+        }
+        
+        // Advance texture coordinates
+        texX += params.pa;  // x += dx
+        texY += params.pc;  // y += dy
     }
 }
 
@@ -2218,6 +2404,122 @@ void GPU::renderBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, ui
     }
 }
 
+/**
+ * Render an affine background scanline with priority and window checking
+ * This is the window-aware version of renderAffineBGScanlineWithPriority
+ */
+void GPU::renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, 
+                                                       uint16_t* lineBuffer, uint8_t* priorityBuffer,
+                                                       uint8_t* layerTypeBuffer, 
+                                                       uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+                                                       const WindowControl& winCtrl) {
+    // Read BG control register
+    uint16_t bgcnt = memory.read16(REG_BG0CNT + (bgNum * 2));
+    
+    // Parse BGCNT for affine BG
+    uint8_t priority = bgcnt & BGCNT_PRIORITY_MASK;
+    uint8_t charBaseBlock = (bgcnt >> 2) & 0x03;
+    uint8_t screenBaseBlock = (bgcnt >> 8) & 0x1F;
+    uint8_t screenSize = (bgcnt >> 14) & 0x03;
+    bool wrapAround = (bgcnt & 0x2000) != 0;  // Bit 13: Display Area Overflow
+    
+    // Calculate VRAM addresses
+    uint32_t charBaseAddr = VRAM_BASE + (charBaseBlock * 0x4000);
+    uint32_t screenBaseAddr = VRAM_BASE + (screenBaseBlock * 0x800);
+    
+    // Get map dimensions
+    int mapWidthPixels, mapHeightPixels, mapWidthTiles;
+    getAffineBGDimensions(screenSize, mapWidthPixels, mapHeightPixels, mapWidthTiles);
+    
+    // Read affine parameters
+    AffineBackgroundParams params = readAffineBGParams(bgNum);
+    
+    // If PA is 0 and PB is 0, the affine matrix hasn't been set up properly
+    // In this case, just skip rendering to avoid garbage
+    if (params.pa == 0 && params.pb == 0 && params.pc == 0 && params.pd == 0) {
+        return;
+    }
+    
+    // Calculate layer priority (same as regular BGs)
+    uint8_t layerPriority = (priority * 4) + bgNum;
+    
+    // Calculate texture coordinates for this scanline
+    int32_t texX = params.refX + (scanline * params.pb);
+    int32_t texY = params.refY + (scanline * params.pd);
+    
+    // Render each screen pixel
+    for (int screenX = 0; screenX < 240; screenX++) {
+        // Check window visibility first
+        uint8_t control = getWindowControlForPixel(screenX, scanline, winCtrl);
+        bool layerVisible = (control & (1 << bgNum)) != 0;
+        
+        if (!layerVisible) {
+            // Advance texture coordinates even if not visible
+            texX += params.pa;
+            texY += params.pc;
+            continue;
+        }
+        
+        // Convert from 8.8 fixed point to integer coordinates
+        int32_t bgX = texX >> 8;
+        int32_t bgY = texY >> 8;
+        
+        // Handle wraparound or out-of-bounds
+        if (wrapAround) {
+            bgX = bgX & (mapWidthPixels - 1);
+            bgY = bgY & (mapHeightPixels - 1);
+        } else {
+            if (bgX < 0 || bgX >= mapWidthPixels || bgY < 0 || bgY >= mapHeightPixels) {
+                texX += params.pa;
+                texY += params.pc;
+                continue;
+            }
+        }
+        
+        // Get tile coordinates
+        int tileX = bgX >> 3;
+        int tileY = bgY >> 3;
+        int pixelInTileX = bgX & 7;
+        int pixelInTileY = bgY & 7;
+        
+        // Read map entry (8-bit tile index)
+        uint32_t mapOffset = tileY * mapWidthTiles + tileX;
+        uint8_t tileIndex = memory.read8(screenBaseAddr + mapOffset);
+        
+        // Get tile address (8bpp = 64 bytes per tile)
+        uint32_t tileAddr = charBaseAddr + (tileIndex * 64);
+        
+        // Read pixel color index
+        uint32_t pixelOffset = pixelInTileY * 8 + pixelInTileX;
+        uint8_t colorIndex = memory.read8(tileAddr + pixelOffset);
+        
+        // Color 0 is transparent
+        if (colorIndex == 0) {
+            texX += params.pa;
+            texY += params.pc;
+            continue;
+        }
+        
+        // Only draw if this pixel has higher or equal priority
+        if (layerPriority <= priorityBuffer[screenX]) {
+            uint16_t rgb555 = memory.read16(0x05000000 + colorIndex * 2);
+            
+            // Save current pixel as second layer
+            secondLayerBuffer[screenX] = lineBuffer[screenX];
+            secondLayerTypeBuffer[screenX] = layerTypeBuffer[screenX];
+            
+            // Update buffers
+            lineBuffer[screenX] = rgb555;
+            priorityBuffer[screenX] = layerPriority;
+            layerTypeBuffer[screenX] = bgNum;
+        }
+        
+        // Advance texture coordinates
+        texX += params.pa;
+        texY += params.pc;
+    }
+}
+
 void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer,
                                                uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
                                                uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
@@ -2657,8 +2959,6 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
     for (int objNum = 127; objNum >= 0; objNum--) {
         OBJAttributes obj = readOBJAttributes(objNum);
         
-
-        
         // Skip if not visible
         if (!obj.visible) {
             continue;
@@ -2669,11 +2969,17 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
             continue;
         }
         
+        // Skip OBJ Window mode sprites - they should NOT be rendered as visible sprites
+        // They are only used for window masking (when OBJ Window is enabled in DISPCNT)
+        if (obj.objMode == OBJ_MODE_OBJ_WINDOW) {
+            continue;
+        }
+        
         // Check if sprite is on this scanline
         if (!isSpriteOnScanline(obj, scanline)) {
             continue;
         }
-        
+
         // Build flags for this sprite
         uint32_t flags = (obj.priority << OFFSET_PRIORITY) | (objNum << OFFSET_ORDER);
         
@@ -2682,9 +2988,7 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
             flags |= FLAG_TARGET_1;  // Semi-transparent sprites are first targets
         }
         
-        if (obj.objMode == OBJ_MODE_OBJ_WINDOW) {
-            flags |= FLAG_OBJWIN;
-        }
+        // Note: OBJ_MODE_OBJ_WINDOW sprites are skipped above - they don't render visibly
         
         // Handle affine vs normal sprites differently
         if (obj.rotScaleFlag) {

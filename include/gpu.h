@@ -527,9 +527,14 @@ public:
     
     // Affine background functions (Mode 1/2)
     AffineBackgroundParams readAffineBGParams(int bgNum);       // Read BG2/BG3 affine parameters
-    void renderAffineBG(int bgNum, uint16_t scanline, 
-                        uint16_t* lineBuffer, uint8_t* priorityBuffer,
-                        uint8_t* layerTypeBuffer);              // Render affine BG to scanline buffers
+    void getAffineBGDimensions(uint8_t sizeCode, int& widthPixels, int& heightPixels, int& widthTiles);
+    void renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline, 
+                                            uint16_t* lineBuffer, uint8_t* priorityBuffer);
+    void renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, 
+                                                     uint16_t* lineBuffer, uint8_t* priorityBuffer,
+                                                     uint8_t* layerTypeBuffer, 
+                                                     uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+                                                     const WindowControl& winCtrl);
     
     // Helper functions for priority rendering
     void renderNormalSpriteWithPriority(const OBJAttributes& obj, uint16_t scanline,
