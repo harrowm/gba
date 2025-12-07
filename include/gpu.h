@@ -335,13 +335,25 @@ private:
     // Format matches mgba: color | (priority << 24) | (objNum << 16) | flags
     uint32_t spriteLayer[240];
     
+    // OBJ Window mask buffer - true if pixel is inside OBJ Window region
+    // Built from OBJ_MODE_OBJ_WINDOW sprites during preprocessSprites
+    bool objWindowMask[240];
+    
     // Sprite layer flag constants (mgba compatible)
+    // IMPORTANT: Flags must NOT overlap with color bits 0-15 (RGB555 color)!
+    // Layout:
+    //   Bits 0-15: RGB555 color (or 0xFFFF for transparent)
+    //   Bits 16-23: sprite number (0-127)
+    //   Bits 24-25: priority (0-3)
+    //   Bits 26-29: blend flags (target1, target2, objwin, semi-transparent)
+    //   Bits 30-31: reserved
     static constexpr uint32_t FLAG_UNWRITTEN = 0xFFFFFFFF;
     static constexpr uint32_t FLAG_ORDER_MASK = 0x00FF0000;  // Bits 16-23: sprite number
-    static constexpr uint32_t FLAG_PRIORITY = 0xFF000000;     // Bits 24-31: priority
-    static constexpr uint32_t FLAG_TARGET_1 = 0x00000100;     // Sprite is first blend target
-    static constexpr uint32_t FLAG_TARGET_2 = 0x00000200;     // Sprite is second blend target
-    static constexpr uint32_t FLAG_OBJWIN = 0x00000400;       // OBJ window mode
+    static constexpr uint32_t FLAG_PRIORITY = 0x03000000;     // Bits 24-25: priority (only need 2 bits)
+    static constexpr uint32_t FLAG_TARGET_1 = 0x04000000;     // Bit 26: Sprite is first blend target
+    static constexpr uint32_t FLAG_TARGET_2 = 0x08000000;     // Bit 27: Sprite is second blend target
+    static constexpr uint32_t FLAG_OBJWIN = 0x10000000;       // Bit 28: OBJ window mode
+    static constexpr uint32_t FLAG_SEMI_TRANSPARENT = 0x20000000; // Bit 29: Semi-transparent sprite (mode=1)
     static constexpr int OFFSET_PRIORITY = 24;
     static constexpr int OFFSET_ORDER = 16;
     
@@ -381,6 +393,7 @@ public:
     
     // Two-pass sprite rendering (mgba approach)
     void preprocessSprites(uint16_t scanline, bool mapping1D, const WindowControl& winCtrl);
+    void renderObjWindowToMask(const OBJAttributes& obj, int objNum, uint16_t scanline, bool mapping1D);
     void postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer,
                            uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
                            uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
