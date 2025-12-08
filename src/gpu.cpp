@@ -1455,7 +1455,10 @@ void GPU::renderScanline(uint16_t scanline) {
     // Read blend and window control once per scanline (optimization)
     BlendControl blend = readBlendControl();
     WindowControl winCtrl = readWindowControl();
-    bool windowsEnabled = (dispcnt & (DISPCNT_WIN0_ENABLE | DISPCNT_WIN1_ENABLE)) != 0;
+    
+
+
+    bool windowsEnabled = (dispcnt & (DISPCNT_WIN0_ENABLE | DISPCNT_WIN1_ENABLE | DISPCNT_WINOBJ_ENABLE)) != 0;
     
     // Create line buffers for priority-based compositing
     uint16_t lineBuffer[240];
@@ -1484,6 +1487,13 @@ void GPU::renderScanline(uint16_t scanline) {
     WindowControl emptyWinCtrl = {};
     emptyWinCtrl.winOut = 0x3F;  // All layers visible by default
     
+    // Initialize sprite buffers unconditionally
+    // This is critical because objWindowMask is used for windowing even if OBJ rendering is disabled
+    for (int i = 0; i < 240; i++) {
+        spriteLayer[i] = FLAG_UNWRITTEN;
+        objWindowMask[i] = false;
+    }
+    
     if (dispcnt & DISPCNT_OBJ_ENABLE) {
         preprocessSprites(scanline, mapping1D, windowsEnabled ? winCtrl : emptyWinCtrl);
     }
@@ -1506,8 +1516,10 @@ void GPU::renderScanline(uint16_t scanline) {
                 if (bgPriority == priority) {
                     // Track which pixels existed before rendering this layer
                     uint16_t oldLineBuffer[240];
+                    uint8_t oldPriorityBuffer[240];
                     for (int x = 0; x < 240; x++) {
                         oldLineBuffer[x] = lineBuffer[x];
+                        oldPriorityBuffer[x] = priorityBuffer[x];
                     }
                     
                     // Determine if this is an affine background
@@ -1535,7 +1547,7 @@ void GPU::renderScanline(uint16_t scanline) {
                         }
                         // Update layer type buffer AND second layer buffer for pixels that changed
                         for (int x = 0; x < 240; x++) {
-                            if (lineBuffer[x] != oldLineBuffer[x]) {
+                            if (lineBuffer[x] != oldLineBuffer[x] || priorityBuffer[x] != oldPriorityBuffer[x]) {
                                 // Save old pixel as second layer
                                 secondLayerBuffer[x] = oldLineBuffer[x];
                                 secondLayerTypeBuffer[x] = layerTypeBuffer[x];
@@ -1561,7 +1573,7 @@ void GPU::renderScanline(uint16_t scanline) {
     // 3. Apply blend effects if enabled
     if (blend.mode != BLEND_MODE_OFF) {
         applyBlendToScanline(lineBuffer, layerTypeBuffer, secondLayerBuffer, 
-                             secondLayerTypeBuffer, scanline, blend);
+                             secondLayerTypeBuffer, scanline, blend, windowsEnabled ? winCtrl : emptyWinCtrl);
     }
     
     // 4. Copy line buffer to framebuffer
@@ -2184,14 +2196,13 @@ uint8_t GPU::getWindowControlForPixel(int x, int y, const WindowControl& winCtrl
         return winCtrl.win1.control;
     }
     
-    // TODO: OBJ Window support - currently disabled due to rendering issues
     // Check OBJ Window (built from OBJ_MODE_OBJ_WINDOW sprites)
     // OBJ Window has priority between WIN0/WIN1 and WINOUT
-    // uint16_t dispcnt = memory.read16(REG_DISPCNT);
-    // bool objWinEnabled = (dispcnt & DISPCNT_WINOBJ_ENABLE) != 0;
-    // if (objWinEnabled && x >= 0 && x < 240 && objWindowMask[x]) {
-    //     return winCtrl.winObj;  // Return OBJ Window control settings
-    // }
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    bool objWinEnabled = (dispcnt & DISPCNT_WINOBJ_ENABLE) != 0;
+    if (objWinEnabled && x >= 0 && x < 240 && objWindowMask[x]) {
+        return winCtrl.winObj;  // Return OBJ Window control settings
+    }
     
     // Outside all windows
     return winCtrl.winOut;
@@ -2433,6 +2444,8 @@ void GPU::renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanli
     // Read affine parameters
     AffineBackgroundParams params = readAffineBGParams(bgNum);
     
+
+    
     // If PA is 0 and PB is 0, the affine matrix hasn't been set up properly
     // In this case, just skip rendering to avoid garbage
     if (params.pa == 0 && params.pb == 0 && params.pc == 0 && params.pd == 0) {
@@ -2447,10 +2460,12 @@ void GPU::renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanli
     int32_t texY = params.refY + (scanline * params.pd);
     
     // Render each screen pixel
+    bool anyVisible = false;
     for (int screenX = 0; screenX < 240; screenX++) {
         // Check window visibility first
         uint8_t control = getWindowControlForPixel(screenX, scanline, winCtrl);
         bool layerVisible = (control & (1 << bgNum)) != 0;
+        if (layerVisible) anyVisible = true;
         
         if (!layerVisible) {
             // Advance texture coordinates even if not visible
@@ -2550,14 +2565,7 @@ void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline
         // Calculate layer priority value
         uint8_t layerPriority = (priority * 4) + 3;  // Sprites drawn after BGs at same priority
         
-        // Debug OBJ 7 and 8 rendering
-        if (objNum == 7 || objNum == 8) {
-            static int renderLogCount = 0;
-            if (renderLogCount++ < 10) {
-                printf("[SPRITE RENDER] OBJ%d on scanline %d: affine=%d pos=(%d,%d) priority=%d\n",
-                       objNum, scanline, obj.rotScaleFlag, obj.x, obj.y, obj.priority);
-            }
-        }
+
 
         // Handle affine sprites differently
         if (obj.rotScaleFlag) {
@@ -2874,12 +2882,18 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
 
 void GPU::applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, 
                                 uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
-                                uint16_t /*scanline*/, const BlendControl& blend) {
+                                uint16_t scanline, const BlendControl& blend, const WindowControl& winCtrl) {
     // Apply blend effects based on mode
     switch (blend.mode) {
         case BLEND_MODE_ALPHA:
             // Full alpha blending with second layer tracking
             for (int x = 0; x < 240; x++) {
+                // Check Window Special Effects Enable (Bit 5)
+                uint8_t winControl = getWindowControlForPixel(x, scanline, winCtrl);
+                if (!(winControl & 0x20)) {
+                    continue; // Blending disabled by window
+                }
+
                 uint8_t firstLayerType = layerTypeBuffer[x];
                 uint8_t secondLayerType = secondLayerTypeBuffer[x];
                 
@@ -2911,6 +2925,12 @@ void GPU::applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer,
         case BLEND_MODE_BRIGHTEN:
             // Brighten all first target pixels
             for (int x = 0; x < 240; x++) {
+                // Check Window Special Effects Enable (Bit 5)
+                uint8_t winControl = getWindowControlForPixel(x, scanline, winCtrl);
+                if (!(winControl & 0x20)) {
+                    continue; // Blending disabled by window
+                }
+
                 uint8_t layerType = layerTypeBuffer[x];
                 bool isFirstTarget = (blend.firstTargets & (1 << layerType)) != 0;
                 
@@ -2923,6 +2943,12 @@ void GPU::applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer,
         case BLEND_MODE_DARKEN:
             // Darken all first target pixels
             for (int x = 0; x < 240; x++) {
+                // Check Window Special Effects Enable (Bit 5)
+                uint8_t winControl = getWindowControlForPixel(x, scanline, winCtrl);
+                if (!(winControl & 0x20)) {
+                    continue; // Blending disabled by window
+                }
+
                 uint8_t layerType = layerTypeBuffer[x];
                 bool isFirstTarget = (blend.firstTargets & (1 << layerType)) != 0;
                 
@@ -2952,9 +2978,6 @@ void GPU::renderObjWindowToMask(const OBJAttributes& obj, int objNum, uint16_t s
     int width = obj.width;
     int height = obj.height;
     
-    // Calculate tile stride based on mapping mode
-    int tileStride = mapping1D ? (width / 8) : 32;
-    
     int spriteX = (obj.x < 240) ? obj.x : (obj.x - 512);
     
     if (obj.rotScaleFlag) {
@@ -2981,29 +3004,20 @@ void GPU::renderObjWindowToMask(const OBJAttributes& obj, int objNum, uint16_t s
                 continue;
             }
             
-            // Get color index
+            // Get color index using shared helper
+            int tileX = textureX / 8;
+            int tileY = textureY / 8;
+            int pixelInTileX = textureX % 8;
+            int pixelInTileY = textureY % 8;
+            
+            uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
             uint8_t colorIndex;
+            
             if (obj.paletteMode) {
-                int tileX = textureX / 8;
-                int tileY = textureY / 8;
-                int pixelInTileX = textureX % 8;
-                int pixelInTileY = textureY % 8;
-                
-                uint32_t tileAddr = 0x06010000 + (obj.tileNumber * 32);
-                tileAddr += (tileY * tileStride + tileX) * 64;
                 tileAddr += pixelInTileY * 8 + pixelInTileX;
-                
                 colorIndex = memory.read8(tileAddr);
             } else {
-                int tileX = textureX / 8;
-                int tileY = textureY / 8;
-                int pixelInTileX = textureX % 8;
-                int pixelInTileY = textureY % 8;
-                
-                uint32_t tileAddr = 0x06010000 + (obj.tileNumber * 32);
-                tileAddr += (tileY * tileStride + tileX) * 32;
                 tileAddr += pixelInTileY * 4 + (pixelInTileX / 2);
-                
                 uint8_t tileData = memory.read8(tileAddr);
                 colorIndex = (pixelInTileX & 1) ? (tileData >> 4) : (tileData & 0x0F);
             }
@@ -3023,29 +3037,19 @@ void GPU::renderObjWindowToMask(const OBJAttributes& obj, int objNum, uint16_t s
             
             int effectiveX = obj.hFlip ? (width - 1 - spritePixelX) : spritePixelX;
             
-            // Get color index
+            int tileX = effectiveX / 8;
+            int tileY = effectiveRow / 8;
+            int pixelInTileX = effectiveX % 8;
+            int pixelInTileY = effectiveRow % 8;
+            
+            uint32_t tileAddr = getOBJTileAddress(obj, tileX, tileY, mapping1D);
             uint8_t colorIndex;
+            
             if (obj.paletteMode) {
-                int tileX = effectiveX / 8;
-                int tileY = effectiveRow / 8;
-                int pixelInTileX = effectiveX % 8;
-                int pixelInTileY = effectiveRow % 8;
-                
-                uint32_t tileAddr = 0x06010000 + (obj.tileNumber * 32);
-                tileAddr += (tileY * tileStride + tileX) * 64;
                 tileAddr += pixelInTileY * 8 + pixelInTileX;
-                
                 colorIndex = memory.read8(tileAddr);
             } else {
-                int tileX = effectiveX / 8;
-                int tileY = effectiveRow / 8;
-                int pixelInTileX = effectiveX % 8;
-                int pixelInTileY = effectiveRow % 8;
-                
-                uint32_t tileAddr = 0x06010000 + (obj.tileNumber * 32);
-                tileAddr += (tileY * tileStride + tileX) * 32;
                 tileAddr += pixelInTileY * 4 + (pixelInTileX / 2);
-                
                 uint8_t tileData = memory.read8(tileAddr);
                 colorIndex = (pixelInTileX & 1) ? (tileData >> 4) : (tileData & 0x0F);
             }
@@ -3069,15 +3073,13 @@ void GPU::renderObjWindowToMask(const OBJAttributes& obj, int objNum, uint16_t s
  */
 void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowControl& winCtrl) {
     
-    // Initialize spriteLayer to FLAG_UNWRITTEN
-    for (int i = 0; i < 240; i++) {
-        spriteLayer[i] = FLAG_UNWRITTEN;
-        objWindowMask[i] = false;  // Initialize OBJ Window mask
-    }
+    // spriteLayer and objWindowMask are initialized in renderScanline
     
     // Check if OBJ Window is enabled in DISPCNT
     uint16_t dispcnt = memory.read16(REG_DISPCNT);
     bool objWinEnabled = (dispcnt & DISPCNT_WINOBJ_ENABLE) != 0;
+    
+
     
     // Read BLDCNT to check if NORMAL sprites should be blend targets
     // Per mGBA: NORMAL sprites can be 1st targets if BLDCNT enables them + alpha mode
@@ -3158,6 +3160,8 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
 
         // Build flags for this sprite
         uint32_t flags = (obj.priority << OFFSET_PRIORITY) | (objNum << OFFSET_ORDER);
+        
+
         
         // Add blend target flags
         // Semi-transparent sprites are ALWAYS first targets
@@ -3373,7 +3377,6 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
                              uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                              const WindowControl& winCtrl) {
     (void)winCtrl;   // Already checked in preprocess
-    (void)scanline;  // Unused parameter
     
     // Calculate layer priority value for this sprite priority level
     uint8_t layerPriority = (priority * 4) + 3;  // Sprites drawn after BGs at same priority
@@ -3381,6 +3384,12 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
     // Read blend control 
     // Note: Semi-transparent OBJs always use alpha blending regardless of BLDCNT mode
     BlendControl blend = readBlendControl();
+    
+    // Debug: Track frame count for logging
+    static int postFrame = 0;
+    static int postLastScan = -1;
+    if (scanline == 0 && postLastScan != 0) postFrame++;
+    postLastScan = scanline;
     
     // Composite sprites at this priority level
     for (int x = 0; x < 240; x++) {
@@ -3409,6 +3418,15 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
         uint16_t spriteColor = spritePixel & 0xFFFF;
         bool isSemiTransparent = (spritePixel & FLAG_SEMI_TRANSPARENT) != 0;
         bool isBlendTarget = (spritePixel & FLAG_TARGET_1) != 0;
+        
+        // Debug: Log sprite info during highlight phase (frame ~690 is when highlight is active)
+        // Log at multiple X positions to see what's happening
+        if (postFrame >= 690 && postFrame <= 695 && scanline == 110 && (x == 40 || x == 80 || x == 120 || x == 160)) {
+            uint32_t objNum = (spritePixel & FLAG_ORDER_MASK) >> OFFSET_ORDER;
+            printf("[POSTPROC F%d L%d x%d] obj%d color=0x%04X isBlend=%d isSemi=%d mode=%d 1stTgt=%d\n",
+                   postFrame, scanline, x, objNum, spriteColor, isBlendTarget, isSemiTransparent,
+                   blend.mode, blend.firstTargets);
+        }
         
         // Save current pixel as second layer
         secondLayerBuffer[x] = lineBuffer[x];
@@ -3449,9 +3467,89 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
                 shouldBlend = (blend.secondTargets & (1 << behindLayerType)) != 0;
             }
             
+            // Debug: Log blending decision with full blend control info
+            // OBJ9 at F690: Y=104, X=92, 32x32 -> covers scanlines 104-135, x=92-123
+            // Capture at scanline 110, x=100 (center-ish of sprite)
+            if (postFrame >= 690 && postFrame <= 692 && scanline == 110 && x == 100) {
+                uint32_t objNum = (spritePixel & FLAG_ORDER_MASK) >> OFFSET_ORDER;
+                uint16_t bgColor = lineBuffer[x];
+                uint16_t bldcnt = memory.read16(0x04000050);
+                uint16_t bldalpha = memory.read16(0x04000052);
+                uint16_t dispcnt = memory.read16(0x04000000);
+                uint16_t palette0 = memory.read16(0x05000000);
+                printf("=== BLEND DEBUG F%d L%d x%d ===\n", postFrame, scanline, x);
+                printf("  DISPCNT: 0x%04X (mode=%d, BGs=%d%d%d%d, OBJ=%d)\n",
+                       dispcnt, dispcnt & 7,
+                       (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
+                       (dispcnt >> 12) & 1);
+                printf("  Palette 0: 0x%04X\n", palette0);
+                printf("  OBJ#: %d\n", objNum);
+                printf("  Sprite color: 0x%04X (R=%d G=%d B=%d)\n", 
+                       spriteColor, spriteColor & 0x1F, (spriteColor >> 5) & 0x1F, (spriteColor >> 10) & 0x1F);
+                printf("  BG color (lineBuffer): 0x%04X (R=%d G=%d B=%d)\n",
+                       bgColor, bgColor & 0x1F, (bgColor >> 5) & 0x1F, (bgColor >> 10) & 0x1F);
+                printf("  Behind layer type: %d (0-3=BG, 4=OBJ, 5=Backdrop)\n", behindLayerType);
+                printf("  BLDCNT: 0x%04X (mode=%d, 1st=0x%02X, 2nd=0x%02X)\n", 
+                       bldcnt, (bldcnt >> 6) & 3, bldcnt & 0x3F, (bldcnt >> 8) & 0x3F);
+                printf("  BLDALPHA: 0x%04X (EVA=%d, EVB=%d)\n", bldalpha, blend.eva, blend.evb);
+                printf("  isSemiTransparent: %d, isBlendTarget: %d\n", isSemiTransparent, isBlendTarget);
+                printf("  shouldBlend: %d\n", shouldBlend);
+                // Also show what BG3 is doing
+                uint16_t bg3cnt = memory.read16(0x04000000 + 0x0E);  // BG3CNT
+                printf("  BG3CNT: 0x%04X (priority=%d, charBase=%d, screenBase=%d)\n",
+                       bg3cnt, bg3cnt & 3, (bg3cnt >> 2) & 3, (bg3cnt >> 8) & 0x1F);
+                
+                uint16_t winin = memory.read16(0x04000048);
+                uint16_t winout = memory.read16(0x0400004A);
+                printf("  WININ: 0x%04X, WINOUT: 0x%04X\n", winin, winout);
+                
+                // Check if any OBJ Window sprites exist
+                bool hasObjWin = false;
+                printf("  OBJ Window Sprites:\n");
+                for (int i = 0; i < 128; i++) {
+                    OBJAttributes obj = readOBJAttributes(i);
+                    if (obj.objMode == OBJ_MODE_OBJ_WINDOW && obj.visible) {
+                        hasObjWin = true;
+                        printf("    OBJ%d at (%d,%d) size=%dx%d\n", i, obj.x, obj.y, obj.width, obj.height);
+                    }
+                }
+                if (!hasObjWin) printf("    None.\n");
+                
+                // Check Window Control for this pixel
+                uint8_t winControlByte = getWindowControlForPixel(x, scanline, winCtrl);
+                bool winObjEnable = (winControlByte & 0x10) != 0; // Bit 4
+                bool winBlendEnable = (winControlByte & 0x20) != 0; // Bit 5
+                
+                printf("  Window Control at (%d,%d): objEnable=%d, blendEnable=%d, raw=0x%02X\n",
+                       x, scanline, winObjEnable, winBlendEnable, winControlByte);
+                       
+                if (shouldBlend) {
+                    uint8_t r1 = spriteColor & 0x1F;
+                    uint8_t g1 = (spriteColor >> 5) & 0x1F;
+                    uint8_t b1 = (spriteColor >> 10) & 0x1F;
+                    uint8_t r2 = bgColor & 0x1F;
+                    uint8_t g2 = (bgColor >> 5) & 0x1F;
+                    uint8_t b2 = (bgColor >> 10) & 0x1F;
+                    uint8_t rOut = (r1 * blend.eva + r2 * blend.evb) / 16;
+                    uint8_t gOut = (g1 * blend.eva + g2 * blend.evb) / 16;
+                    uint8_t bOut = (b1 * blend.eva + b2 * blend.evb) / 16;
+                    printf("  Blended result: R=%d G=%d B=%d\n", rOut > 31 ? 31 : rOut, gOut > 31 ? 31 : gOut, bOut > 31 ? 31 : bOut);
+                } else {
+                    printf("  Final (no blend): 0x%04X\n", spriteColor);
+                }
+                printf("==============================\n");
+            }
+            
             if (shouldBlend) {
                 // Blend sprite color with current lineBuffer color
                 uint16_t bgColor = lineBuffer[x];
+                
+                // Debug: Log blending during highlight phase
+                if (postFrame >= 690 && postFrame <= 695 && scanline == 110 && x == 120) {
+                    uint32_t objNum = (spritePixel & FLAG_ORDER_MASK) >> OFFSET_ORDER;
+                    printf("[BLEND F%d L%d x%d] obj%d spriteColor=0x%04X bgColor=0x%04X eva=%d evb=%d behindType=%d\n",
+                           postFrame, scanline, x, objNum, spriteColor, bgColor, blend.eva, blend.evb, behindLayerType);
+                }
             
                 uint8_t r1 = spriteColor & 0x1F;
                 uint8_t g1 = (spriteColor >> 5) & 0x1F;
