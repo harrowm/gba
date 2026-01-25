@@ -204,12 +204,20 @@ public:
         DEBUG_INFO("setMode: BEFORE swap, mode=" + std::to_string((int)oldMode) + ", SP=0x" + debug_to_hex_string(registers[13], 8) + ", LR=0x" + debug_to_hex_string(registers[14], 8));
         DEBUG_INFO(std::string("setMode: switching from ") + std::to_string((int)oldMode) + " to " + std::to_string((int)newMode));
         assert((int)newMode >= 0x10 && (int)newMode <= 0x1F && "Invalid newMode in setMode");
-        // Always update CPSR mode bits, even if mode is unchanged
-        // Save current SP/LR (and R8-R12 for FIQ) to bank
-        // printf("[setMode] About to save from oldMode=0x%02X\n", (int)oldMode);
+        
+        // ARM7TDMI Register Banking:
+        // - FIQ mode: banks R8-R14 (has its own copies of R8-R12, R13, R14)
+        // - SVC/IRQ/ABT/UND: bank only R13-R14 (SP and LR)
+        // - USER/SYS: share all R0-R14 with each other
+        // 
+        // R8-R12 are ONLY banked for FIQ mode. When switching to/from FIQ,
+        // we need to save/restore R8-R12. For all other mode switches,
+        // R8-R12 are shared and should NOT be modified.
+        
+        // Save current mode's banked registers
         switch (oldMode) {
             case FIQ: 
-                // FIQ banks R8-R14
+                // FIQ banks R8-R14 - save to FIQ bank
                 banked_r8_fiq = registers[8];
                 banked_r9_fiq = registers[9];
                 banked_r10_fiq = registers[10];
@@ -217,6 +225,13 @@ public:
                 banked_r12_fiq = registers[12];
                 banked_r13_fiq = registers[13];
                 banked_r14_fiq = registers[14];
+                // When leaving FIQ, we need to restore R8-R12 from User bank
+                // (since User/System share R8-R12 with non-FIQ modes)
+                registers[8] = banked_r8_usr;
+                registers[9] = banked_r9_usr;
+                registers[10] = banked_r10_usr;
+                registers[11] = banked_r11_usr;
+                registers[12] = banked_r12_usr;
                 break;
             case SVC: banked_r13_svc = registers[13]; banked_r14_svc = registers[14]; break;
             case ABT: banked_r13_abt = registers[13]; banked_r14_abt = registers[14]; break;
@@ -224,24 +239,32 @@ public:
             case UND: banked_r13_und = registers[13]; banked_r14_und = registers[14]; break;
             case USER:
             case SYS: 
-                // User/System banks R8-R14 (needed when switching to/from FIQ)
+                // User/System only bank R13-R14 for the purpose of switching
+                // R8-R12 are shared with all non-FIQ modes
+                banked_r13_usr = registers[13]; 
+                banked_r14_usr = registers[14];
+                // Also update R8-R12 bank in case we later switch to FIQ
                 banked_r8_usr = registers[8];
                 banked_r9_usr = registers[9];
                 banked_r10_usr = registers[10];
                 banked_r11_usr = registers[11];
                 banked_r12_usr = registers[12];
-                banked_r13_usr = registers[13]; 
-                banked_r14_usr = registers[14];
-                // printf("[setMode] Saved System/User LR=0x%08X to banked_r14_usr\n", registers[14]);
                 break;
             default: break;
         }
         // Update CPSR mode bits BEFORE loading new banked registers
         cpsr = (cpsr & ~0x1F) | (uint32_t)newMode;
-        // Load new SP/LR (and R8-R12 for FIQ) from bank
+        // Load new mode's banked registers
         switch (newMode) {
             case FIQ:
-                // FIQ restores R8-R14
+                // FIQ restores R8-R14 from FIQ bank
+                // First save current R8-R12 to User bank (for when we leave FIQ later)
+                banked_r8_usr = registers[8];
+                banked_r9_usr = registers[9];
+                banked_r10_usr = registers[10];
+                banked_r11_usr = registers[11];
+                banked_r12_usr = registers[12];
+                // Now load FIQ's banked registers
                 registers[8] = banked_r8_fiq;
                 registers[9] = banked_r9_fiq;
                 registers[10] = banked_r10_fiq;
@@ -268,16 +291,10 @@ public:
                 break;
             case USER:
             case SYS:
-                // User/System restores R8-R14
-                registers[8] = banked_r8_usr;
-                registers[9] = banked_r9_usr;
-                registers[10] = banked_r10_usr;
-                registers[11] = banked_r11_usr;
-                registers[12] = banked_r12_usr;
+                // User/System only restore R13-R14
+                // R8-R12 are already correct (shared with non-FIQ modes)
                 registers[13] = banked_r13_usr;
                 registers[14] = banked_r14_usr;
-                // printf("[setMode] Loading System/User: banked_r14_usr=0x%08X\n", banked_r14_usr);
-                // printf("[setMode] After restore: R[14]=0x%08X\n", registers[14]);
                 break;
             default: break;
         }

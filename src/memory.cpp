@@ -707,6 +707,15 @@ void Memory::write32(uint32_t address, uint32_t value) {
                 printf("[DMA%d] Write Dest Address: 0x%08X\n", channelID, value);
                 dmaController->writeDestAddress(channelID, value);
                 return;  // Don't write to memory
+            } else if (regOffset == 8) {  // Word count + Control (DMAxCNT as 32-bit write)
+                uint16_t word_count = value & 0xFFFF;
+                uint16_t control = (value >> 16) & 0xFFFF;
+                printf("[DMA%d] Write32 CNT: WordCount=0x%04X Control=0x%04X (Enable=%d, Mode=%d, 32bit=%d)\n", 
+                       channelID, word_count, control, 
+                       (control >> 15) & 1, (control >> 12) & 3, (control >> 10) & 1);
+                dmaController->writeWordCount(channelID, word_count);
+                dmaController->writeControl(channelID, control);
+                return;  // Don't write to memory
             }
         }
     }

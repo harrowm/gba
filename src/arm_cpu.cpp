@@ -350,9 +350,23 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
     uint32_t old_cpsr = parentCPU.CPSR(); UNUSED(old_cpsr);
 
     // Calculate the return address for LR
-    // NOTE: ARM architectural requirement: LR for exception modes is always set to PC+4 (address of next instruction).
-    // Even without a pipeline, exception handlers expect LR = PC+4.
-    uint32_t return_address = parentCPU.R()[15] + 4;
+    // For SWI/SVC: LR = next instruction after SWI
+    // - ARM mode: PC wasn't pre-incremented, so LR = PC + 4
+    // - Thumb mode: PC was already incremented by 2, so LR = PC (which is already next instruction)
+    // For other exceptions (IRQ, FIQ, etc.): LR = PC + 4 (to re-execute the interrupted instruction after adjustment)
+    bool is_thumb = (old_cpsr & 0x20) != 0;
+    uint32_t return_address;
+    if (vector_address == 0x08) { // SWI vector
+        // SWI return: LR points to instruction after SWI
+        if (is_thumb) {
+            return_address = parentCPU.R()[15]; // Already points to next instruction
+        } else {
+            return_address = parentCPU.R()[15] + 4; // ARM mode needs +4
+        }
+    } else {
+        // Other exceptions: PC + 4 (standard)
+        return_address = parentCPU.R()[15] + 4;
+    }
     if (old_mode == CPU::USER || old_mode == CPU::SYS) {
         parentCPU.bankedLRUser() = parentCPU.R()[14]; // save User LR
     } else {
@@ -384,8 +398,10 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
     parentCPU.SPSR() = old_cpsr;
     DEBUG_LOG("Saved CPSR 0x" + debug_to_hex_string(old_cpsr, 8) + " to SPSR of mode 0x" + debug_to_hex_string(new_mode, 2));
     
-    // Set IRQ/FIQ disable bits in CPSR (after mode switch)
+    // Set IRQ/FIQ disable bits in CPSR and clear T bit (after mode switch)
+    // ARM7TDMI: Exception handling ALWAYS switches to ARM state
     uint32_t new_cpsr = parentCPU.CPSR();
+    new_cpsr &= ~0x20; // Clear T bit (bit 5) - switch to ARM state
     if (disable_irq) {
         new_cpsr |= 0x80; // Set I bit
     }

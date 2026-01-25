@@ -108,6 +108,14 @@ void GPU::setupTiming(Scheduler* scheduler) {
 }
 
 void GPU::renderScanline() {
+    // Debug: trace first few scanlines
+    static int scanline_trace = 0;
+    if (scanline_trace < 10) {
+        scanline_trace++;
+        printf("[GPU::renderScanline] scanline=%d DISPCNT=0x%04X forcedBlank=%d\n",
+               currentScanline, memory.read16(REG_DISPCNT), isForcedBlank());
+    }
+    
     // Skip rendering during VBlank
     if (currentScanline >= SCANLINES_VISIBLE) {
         return;
@@ -1517,6 +1525,16 @@ void GPU::renderScanline(uint16_t scanline) {
     }
     
     // 2. Render each priority level (back to front: 3 → 0)
+    static int render_trace = 0;
+    if (scanline == 0 && render_trace < 5) {
+        render_trace++;
+        printf("[RENDER] Mode=%d DISPCNT=0x%04X windowsEnabled=%d\n", mode, dispcnt, windowsEnabled);
+        for (int bg = 0; bg < 4; bg++) {
+            bool enabled = (dispcnt & (DISPCNT_BG0_ENABLE << bg)) != 0;
+            printf("  BG%d: enabled=%d\n", bg, enabled);
+        }
+    }
+    
     for (int priority = 3; priority >= 0; priority--) {
         // Render BGs with this priority (BG3 → BG0)
         // Mode 2 only supports BG2 and BG3 (affine backgrounds), skip BG0 and BG1
@@ -1756,11 +1774,25 @@ void GPU::renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline,
     // Read affine parameters
     AffineBackgroundParams params = readAffineBGParams(bgNum);
     
+    // Debug: trace affine params on first scanline
+    static int affine_trace_count = 0;
+    if (scanline == 0 && affine_trace_count < 10) {
+        affine_trace_count++;
+        printf("[AFFINE BG%d] PA=%d PB=%d PC=%d PD=%d refX=%d refY=%d BGCNT=0x%04X\n",
+               bgNum, params.pa, params.pb, params.pc, params.pd, 
+               params.refX, params.refY, bgcnt);
+    }
+    
     // If PA is 0 and PB is 0, the affine matrix hasn't been set up properly
     // (identity would be PA=0x100, PB=0, PC=0, PD=0x100)
     // In this case, just skip rendering to avoid garbage
     if (params.pa == 0 && params.pb == 0 && params.pc == 0 && params.pd == 0) {
         // Uninitialized affine parameters, don't render garbage
+        static int skip_count = 0;
+        if (scanline == 0 && skip_count < 5) {
+            skip_count++;
+            printf("[AFFINE BG%d] SKIPPING - all params are 0\n", bgNum);
+        }
         return;
     }
     
