@@ -1069,11 +1069,30 @@ void ARMCPU::exec_arm_msr_imm(uint32_t instruction) {
             DEBUG_LOG("MSR: Only control, extension, status, and flag fields supported, mask=" + std::to_string(mask));
         }
     } else {
-        DEBUG_LOG("MSR IMM: SPSR write not implemented");
+        // SPSR write - only valid in privileged modes (not USER or SYS)
+        uint32_t current_mode = parentCPU.CPSR() & 0x1F;
+        if (current_mode != 0x10 && current_mode != 0x1F) { // Not USER or SYS
+            uint32_t mask = (instruction >> 16) & 0xF;
+            uint32_t spsr = parentCPU.SPSR();
+            // Apply mask-based field writes
+            if (mask & 1) { // Control field (bits 0-7)
+                spsr = (spsr & ~0xFF) | (value & 0xFF);
+            }
+            if (mask & 2) { // Extension field (bits 8-15)
+                spsr = (spsr & ~0xFF00) | (value & 0xFF00);
+            }
+            if (mask & 4) { // Status field (bits 16-23)
+                spsr = (spsr & ~0xFF0000) | (value & 0xFF0000);
+            }
+            if (mask & 8) { // Flag field (bits 24-31)
+                spsr = (spsr & ~0xF0000000) | (value & 0xF0000000);
+            }
+            parentCPU.SPSR() = spsr;
+            DEBUG_INFO("MSR IMM: SPSR set to " + debug_to_hex_string(spsr, 8));
+        }
     }
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
-
 void ARMCPU::exec_arm_msr_reg(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_msr_reg: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // Bit 22: PSR destination (0 = CPSR, 1 = SPSR)
@@ -1125,7 +1144,27 @@ void ARMCPU::exec_arm_msr_reg(uint32_t instruction) {
             DEBUG_LOG("MSR REG: Only control, extension, status, and flag fields supported, mask=" + std::to_string(mask));
         }
     } else {
-        DEBUG_LOG("MSR REG: SPSR write not implemented");
+        // SPSR write - only valid in privileged modes (not USER or SYS)
+        uint32_t current_mode = parentCPU.CPSR() & 0x1F;
+        if (current_mode != 0x10 && current_mode != 0x1F) { // Not USER or SYS
+            uint32_t mask = (instruction >> 16) & 0xF;
+            uint32_t spsr = parentCPU.SPSR();
+            // Apply mask-based field writes
+            if (mask & 1) { // Control field (bits 0-7)
+                spsr = (spsr & ~0xFF) | (value & 0xFF);
+            }
+            if (mask & 2) { // Extension field (bits 8-15)
+                spsr = (spsr & ~0xFF00) | (value & 0xFF00);
+            }
+            if (mask & 4) { // Status field (bits 16-23)
+                spsr = (spsr & ~0xFF0000) | (value & 0xFF0000);
+            }
+            if (mask & 8) { // Flag field (bits 24-31)
+                spsr = (spsr & ~0xF0000000) | (value & 0xF0000000);
+            }
+            parentCPU.SPSR() = spsr;
+            DEBUG_INFO("MSR REG: SPSR set to " + debug_to_hex_string(spsr, 8));
+        }
     }
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }

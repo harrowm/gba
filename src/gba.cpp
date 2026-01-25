@@ -95,11 +95,22 @@ GBA::~GBA() {
 
 void GBA::skipBIOS() {
     // Skip BIOS boot process and jump directly to ROM
-    // Based on mGBA's GBASkipBIOS() implementation
+    // Based on mGBA's GBAReset() + GBASkipBIOS() implementation
+    
+    // First set up stack pointers for all modes (like mGBA's GBAReset)
+    // IRQ mode stack
+    cpu->setMode(CPU::IRQ);
+    cpu->R()[13] = 0x03007FA0;  // GBA_SP_BASE_IRQ
+    
+    // Supervisor mode stack  
+    cpu->setMode(CPU::SVC);
+    cpu->R()[13] = 0x03007FE0;  // GBA_SP_BASE_SUPERVISOR
+    
+    // System mode
+    cpu->setMode(CPU::SYS);
+    cpu->R()[13] = 0x03007F00;  // GBA_SP_BASE_SYSTEM
     
     // Set up CPU registers as if BIOS had initialized them
-    cpu->setMode(CPU::SYS);  // System mode
-    cpu->R()[13] = 0x03007F00;  // SP_sys
     cpu->R()[14] = 0x08000000;  // LR
     cpu->R()[15] = 0x08000000;  // PC at ROM start
     
@@ -107,56 +118,21 @@ void GBA::skipBIOS() {
     cpu->CPSR() = 0x0000001F;
     
     // Initialize hardware registers (following mGBA's approach)
-    // VCOUNT = 0 - starts at scanline 0
-    memory.write8(0x04000006, 0x00);
+    // VCOUNT = 0x7E (126) - mGBA sets this exact value in GBASkipBIOS
+    memory.write8(0x04000006, 0x7E);
     
-    // POSTFLG = 0 - indicates first boot (ROM needs this to initialize text display)
-    // Note: Setting to 1 causes test ROM to skip text rendering setup
-    memory.write8(0x04000300, 0x00);
+    // POSTFLG = 1 - indicates boot has completed
+    memory.write8(0x04000300, 0x01);
     
-    // Disable interrupts initially - let ROM enable them when ready
-    // IME (Master interrupt enable) = 0
-    memory.write16(0x04000208, 0x0000);
-    // IE (Interrupt enable) = 0
-    memory.write16(0x04000200, 0x0000);
+    // mGBA does NOT initialize IME/IE - leave them at default values
+    // Games will set up their own interrupt configuration
     
-    // Set up other stack pointers that BIOS normally initializes
-    uint32_t oldMode = cpu->CPSR();
+    // mGBA does NOT set up a dummy IRQ handler - games set their own
+    // The IRQ handler pointer at 0x03FFFFFC/0x03007FFC is left uninitialized
+    // Games that use interrupts will write their own handler address there
     
-    // IRQ mode stack
-    cpu->setMode(CPU::IRQ);
-    cpu->R()[13] = 0x03007FA0;
-    
-    // Supervisor mode stack  
-    cpu->setMode(CPU::SVC);
-    cpu->R()[13] = 0x03007FE0;
-    
-    // Restore to System mode
-    cpu->CPSR() = oldMode;
-    cpu->setMode(CPU::SYS);
-    
-    // Set up a default IRQ handler at 0x03FFFFFC
-    // The BIOS IRQ handler at 0x128 reads the handler pointer from [0x04000000-4] = 0x03FFFFFC
-    // ROM will replace this with its own handler if needed
-    // For now, create a handler that acknowledges the interrupt and returns:
-    //   MOV R0, #0x04000000   ; IO register base
-    //   ADD R0, R0, #0x200    ; Point to IF (0x04000202)
-    //   LDRH R1, [R0, #2]     ; Read IF
-    //   STRH R1, [R0, #2]     ; Write back to clear (write-to-clear)
-    //   BX LR                 ; Return from interrupt
-    uint32_t dummyHandlerAddr = 0x03007F00;
-    memory.write32(dummyHandlerAddr + 0, 0xE3A00301);  // MOV R0, #0x04000000
-    memory.write32(dummyHandlerAddr + 4, 0xE2800C02);  // ADD R0, R0, #0x200
-    memory.write32(dummyHandlerAddr + 8, 0xE1D010B2);  // LDRH R1, [R0, #2]
-    memory.write32(dummyHandlerAddr + 12, 0xE1C010B2); // STRH R1, [R0, #2]
-    memory.write32(dummyHandlerAddr + 16, 0xE12FFF1E); // BX LR
-    memory.write32(0x03FFFFFC, dummyHandlerAddr);      // IRQ handler pointer (correct address!)
-    
-    // Verify the write succeeded
-    uint32_t readBack = memory.read32(0x03FFFFFC);
-    printf("[BIOS SKIP] Initialized: PC=0x08000000, VCOUNT=0x7E, POSTFLG=0 (first boot), stacks set\n");
-    printf("[BIOS SKIP] IRQ handler: dummy handler at 0x%08X, pointer at 0x03FFFFFC\n", dummyHandlerAddr);
-    printf("[BIOS SKIP] Verification: read back 0x%08X from 0x03FFFFFC (should be 0x%08X)\n", readBack, dummyHandlerAddr);
+    printf("[BIOS SKIP] Initialized: PC=0x08000000, VCOUNT=0x7E, POSTFLG=1, stacks set\n");
+    printf("[BIOS SKIP] SP_sys=0x03007F00, SP_irq=0x03007FA0, SP_svc=0x03007FE0\n");
     DEBUG_INFO("Skipped BIOS, jumping directly to ROM at 0x08000000");
 }
 
@@ -245,6 +221,32 @@ void GBA::runFrame() {
         static uint64_t total_instructions = 0;
         static uint64_t last_report_cycle = 0;
         
+        // Circular buffer to track last 100 instructions before crash
+        static uint32_t last_pcs[100] = {0};
+        static uint32_t last_instrs[100] = {0};
+        static uint32_t last_cpsrs[100] = {0};
+        static int buf_idx = 0;
+        
+        // Record this instruction before executing (only if PC is in valid executable regions)
+        bool pc_valid = (pc < 0x00004000) || // BIOS
+                        (pc >= 0x02000000 && pc < 0x02040000) || // EWRAM
+                        (pc >= 0x03000000 && pc < 0x04000000) || // IWRAM
+                        (pc >= 0x08000000 && pc < 0x0E000000);   // ROM
+        
+        last_pcs[buf_idx] = pc;
+        last_cpsrs[buf_idx] = cpu->CPSR();
+        if (pc_valid) {
+            // Fetch the instruction for tracing
+            if (cpu->CPSR() & (1 << 5)) { // Thumb
+                last_instrs[buf_idx] = memory.read16(pc);
+            } else { // ARM
+                last_instrs[buf_idx] = memory.read32(pc);
+            }
+        } else {
+            last_instrs[buf_idx] = 0xDEADBEEF; // Invalid PC marker
+        }
+        buf_idx = (buf_idx + 1) % 100;
+        
         const char* region = "UNKNOWN";
         
         if (pc < 0x00004000) {
@@ -269,6 +271,33 @@ void GBA::runFrame() {
         if (region != last_region && last_region != nullptr) {
             printf("[PC REGION] %s -> %s at PC=0x%08X (frame %d)\n", 
                    last_region, region, pc, frame_num);
+            
+            // CRITICAL: Detect when PC enters non-executable regions
+            if (strcmp(region, "IO") == 0 || (pc >= 0x04000000 && pc < 0x05000000)) {
+                printf("[FATAL] PC entered I/O region! Dumping state:\n");
+                printf("  R0-R3:  %08X %08X %08X %08X\n",
+                       cpu->R()[0], cpu->R()[1], cpu->R()[2], cpu->R()[3]);
+                printf("  R4-R7:  %08X %08X %08X %08X\n",
+                       cpu->R()[4], cpu->R()[5], cpu->R()[6], cpu->R()[7]);
+                printf("  R8-R11: %08X %08X %08X %08X\n",
+                       cpu->R()[8], cpu->R()[9], cpu->R()[10], cpu->R()[11]);
+                printf("  R12-R15: %08X %08X %08X %08X\n",
+                       cpu->R()[12], cpu->R()[13], cpu->R()[14], cpu->R()[15]);
+                printf("  CPSR: %08X, Mode: 0x%02X, T=%d\n",
+                       cpu->CPSR(), cpu->CPSR() & 0x1F, (cpu->CPSR() >> 5) & 1);
+                printf("  Last instruction fetch from: %s\n", last_region);
+                
+                // Dump the last 100 instructions before crash
+                printf("  Last 100 instructions before crash:\n");
+                for (int i = 0; i < 100; i++) {
+                    int idx = (buf_idx + i) % 100;
+                    bool thumb = (last_cpsrs[idx] >> 5) & 1;
+                    printf("    [%2d] PC=0x%08X CPSR=%08X %s 0x%08X\n",
+                           i, last_pcs[idx], last_cpsrs[idx],
+                           thumb ? "THUMB" : "ARM  ", last_instrs[idx]);
+                }
+            }
+            
             // Detailed dump when entering UNKNOWN region
             static bool first_unknown = true;
             if (strcmp(region, "UNKNOWN") == 0 && first_unknown) {

@@ -70,8 +70,10 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     uint16_t reg_list = bits<15,0>(instruction);
     bool pre = bits<24,24>(instruction);
     bool up  = bits<23,23>(instruction);
+    bool s_bit = bits<22,22>(instruction);  // S bit - restore SPSR to CPSR if R15 in list
     bool writeback = bits<21,21>(instruction);
     int reg_count = std::popcount(reg_list);
+    bool r15_in_list = (reg_list & (1 << 15)) != 0;
 
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr;
@@ -106,6 +108,20 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
             else addr += 4;
         }
     }
+    
+    // S-bit handling: When S=1 and R15 is loaded, restore CPSR from SPSR
+    // This is used for returning from exception handlers (IRQ, SWI, etc.)
+    if (s_bit && r15_in_list) {
+        uint32_t spsr = parentCPU.SPSR();
+        // Debug: Log the CPSR restoration
+        static int spsr_restore_count = 0;
+        if (spsr_restore_count++ < 10) {
+            printf("[LDM ^] Restoring CPSR from SPSR: 0x%08X -> 0x%08X, new PC=0x%08X\n",
+                   parentCPU.CPSR(), spsr, parentCPU.R()[15]);
+        }
+        parentCPU.setCPSR(spsr);
+    }
+    
     if (writeback && reg_count > 0 && !(reg_list & (1 << rn))) {
         uint32_t new_base = up ? base + reg_count * 4 : base - reg_count * 4;
         parentCPU.R()[rn] = new_base;
@@ -169,7 +185,17 @@ void ARMCPU::exec_arm_b(uint32_t instruction) {
     int32_t offset = bits<23,0>(instruction);
     if (offset & 0x800000) offset |= 0xFF000000; // sign extend
     int32_t branch_offset = (offset << 2) + 8;
-    // printf("[B @0x%08X] offset=%d, branch_offset=%d\n", pc_before, offset, branch_offset);
+    
+    // Debug: Trace ALL branches from BIOS
+    if (pc_before < 0x4000) {
+        static int bios_b_count = 0;
+        bios_b_count++;
+        uint32_t target = pc_before + branch_offset;
+        printf("[BIOS B #%d] @0x%08X: offset=0x%06X, branch_offset=%d -> target=0x%08X CPSR=0x%08X\n",
+               bios_b_count, pc_before, offset & 0xFFFFFF, branch_offset, target, parentCPU.CPSR());
+        fflush(stdout);
+    }
+    
     parentCPU.R()[15] += branch_offset;
     // printf("[B] pc_after=0x%08X\n", parentCPU.R()[15]);
 }
@@ -244,6 +270,17 @@ void ARMCPU::exec_arm_swpb(uint32_t instruction) {
 void ARMCPU::exec_arm_undefined(uint32_t instruction) {
     UNUSED(instruction);
     DEBUG_ERROR(std::string("exec_arm_undefined: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
+    
+    static int undef_count = 0;
+    undef_count++;
+    if (undef_count <= 20) {
+        printf("[UNDEFINED INSTRUCTION #%d] PC=0x%08X Instr=0x%08X\n", undef_count, parentCPU.R()[15], instruction);
+        printf("  CPSR=0x%08X Mode=0x%02X T=%d\n", parentCPU.CPSR(), parentCPU.CPSR() & 0x1F, (parentCPU.CPSR() >> 5) & 1);
+        printf("  R0-R3: %08X %08X %08X %08X\n", parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+        printf("  LR=%08X SP=%08X\n", parentCPU.R()[14], parentCPU.R()[13]);
+        fflush(stdout);
+    }
+    
     // Trigger ARM undefined instruction exception
     handleException(0x04, 0x1B, true, false); // Vector 0x04, mode 0x1B (Undefined), disable IRQ
 }

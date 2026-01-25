@@ -283,6 +283,21 @@ public:
         }
         DEBUG_INFO("setMode: AFTER swap, mode=" + std::to_string((int)newMode) + ", SP=0x" + debug_to_hex_string(registers[13], 8) + ", LR=0x" + debug_to_hex_string(registers[14], 8));
     }
+    
+    // Set entire CPSR, handling mode change if needed (for LDM ^ instruction)
+    void setCPSR(uint32_t newCPSR) {
+        Mode oldMode = getMode();
+        Mode newMode = static_cast<Mode>(newCPSR & 0x1F);
+        
+        // If mode is changing, use setMode to handle register banking
+        if (oldMode != newMode) {
+            setMode(newMode);
+        }
+        
+        // Now set the full CPSR (flags, T bit, etc.)
+        cpsr = newCPSR;
+    }
+    
     Memory& getMemory() { return memory; }
     TimingState& getTiming() { return timing; } // Access to timing state
     

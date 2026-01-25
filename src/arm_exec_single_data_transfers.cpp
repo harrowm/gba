@@ -210,7 +210,19 @@ void ARMCPU::exec_arm_ldr_imm_pre_nowb(uint32_t instruction) {
     // When PC is used as base register, use PC+8 (pipeline offset)
     uint32_t base = (rn == 15) ? (parentCPU.R()[rn] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
+    uint32_t value = parentCPU.getMemory().read32(addr);
+    
+    // Debug: trace ALL LDR PC from BIOS IRQ handler
+    if (rd == 15 && parentCPU.R()[15] < 0x4000) {
+        static int ldr_pc_count = 0;
+        ldr_pc_count++;
+        printf("[LDR PC #%d] @0x%08X: R%d = [R%d(%08X) %c %d] = [%08X] = %08X\n",
+               ldr_pc_count, parentCPU.R()[15], rd, rn, parentCPU.R()[rn],
+               up ? '+' : '-', imm, addr, value);
+        fflush(stdout);
+    }
+    
+    parentCPU.R()[rd] = value;
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
 

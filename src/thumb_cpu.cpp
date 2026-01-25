@@ -1,5 +1,6 @@
 
 #include "thumb_cpu.h"
+#include "arm_cpu.h"
 #include "debug.h" // Use debug system
 #include "timing.h"
 #include "thumb_timing.h"
@@ -1428,9 +1429,12 @@ void ThumbCPU::thumb_swi(uint16_t instruction) {
                parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
     }
     
-    // Handle the software interrupt
+    // Handle the software interrupt - trigger SVC exception
     DEBUG_INFO("Executing Thumb SWI: Software interrupt with comment 0x" + std::to_string(comment));
-    //handle_software_interrupt(comment); // Call the software interrupt handler
+    
+    // Trigger SVC exception: Vector 0x08, mode 0x13 (Supervisor), disable IRQ
+    // This will switch to ARM mode and jump to the BIOS SWI handler
+    parentCPU.getARMCPU().handleException(0x08, 0x13, true, false);
     
     // Prevent unused variable warning in release builds
     UNUSED(comment);
@@ -1658,23 +1662,24 @@ void ThumbCPU::executeOneInstruction() {
         printf("[THUMB TRACE] Disabled - entered BIOS\n");
     }
     
-    // Log ROM/RAM execution
-    if (rom_trace_enabled && rom_trace_count < 200) {
-        if (pc == rom_last_pc) {
-            rom_repeat_count++;
-            if (rom_repeat_count == 100) {
-                printf("[THUMB LOOP!] Stuck at PC=0x%08X, instruction=0x%04X\n", pc, instruction);
-            }
-        } else {
-            rom_repeat_count = 0;
-            printf("[THUMB %llu] PC=0x%08X: I=0x%04X | R0-R3=%08X %08X %08X %08X | SP=%08X LR=%08X\n",
-                   rom_trace_count, pc, instruction,
-                   parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
-                   parentCPU.R()[13], parentCPU.R()[14]);
-        }
-        rom_last_pc = pc;
-        rom_trace_count++;
-    }
+    // Log ROM/RAM execution (disabled for now to check if trace causes crash)
+    // if (rom_trace_enabled && rom_trace_count < 200) {
+    //     if (pc == rom_last_pc) {
+    //         rom_repeat_count++;
+    //         if (rom_repeat_count == 100) {
+    //             printf("[THUMB LOOP!] Stuck at PC=0x%08X, instruction=0x%04X\n", pc, instruction);
+    //         }
+    //     } else {
+    //         rom_repeat_count = 0;
+    //         printf("[THUMB %llu] PC=0x%08X: I=0x%04X | R0-R3=%08X %08X %08X %08X | SP=%08X LR=%08X\n",
+    //                rom_trace_count, pc, instruction,
+    //                parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+    //                parentCPU.R()[13], parentCPU.R()[14]);
+    //     }
+    //     rom_last_pc = pc;
+    //     rom_trace_count++;
+    // }
+    UNUSED(rom_trace_enabled); UNUSED(rom_trace_count); UNUSED(rom_last_pc); UNUSED(rom_repeat_count);
     
     // Calculate how many cycles this instruction will take
     uint32_t instruction_cycles = calculateInstructionCycles(instruction);
@@ -1684,7 +1689,13 @@ void ThumbCPU::executeOneInstruction() {
     
     // Execute the instruction
     uint8_t opcode = instruction >> 8;
-    (this->*thumb_instruction_table[opcode])(instruction);
+    if (thumb_instruction_table[opcode]) {
+        (this->*thumb_instruction_table[opcode])(instruction);
+    } else {
+        // Undefined/unimplemented instruction
+        printf("[THUMB UNDEFINED] Opcode 0x%02X (instruction 0x%04X) at PC=0x%08X\n",
+               opcode, instruction, parentCPU.R()[15] - 2);
+    }
     
     // Advance scheduler by instruction execution cycles
     // Note: Memory access cycles are already handled by memory.cpp addWaitCycles()

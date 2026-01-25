@@ -125,12 +125,30 @@ void GPU::renderScanline() {
     
     // Debug: Log DISPCNT value once per frame (on scanline 0)
     static int dispcntLogCounter = 0;
+    static int lastMode2WithBG3Frame = 0;
     if (currentScanline == 0) {
-        if (dispcntLogCounter++ < 10) {
+        // Check if this is Mode 2 with BG3 enabled
+        bool isMode2WithBG3 = (mode == 2) && (dispcnt & (1 << 11));
+        
+        if (dispcntLogCounter++ < 10 || (isMode2WithBG3 && lastMode2WithBG3Frame < 5)) {
+            if (isMode2WithBG3) lastMode2WithBG3Frame++;
             printf("[GPU] Scanline 0: DISPCNT=0x%04X, Mode=%d, BGs=%d%d%d%d, OBJ=%d\n",
                    dispcnt, mode,
                    (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
                    (dispcnt >> 12) & 1);
+            
+            // If Mode 2 with BG3, log the affine parameters
+            if (isMode2WithBG3) {
+                int16_t bg3pa = (int16_t)memory.read16(0x04000030);
+                int16_t bg3pb = (int16_t)memory.read16(0x04000032);
+                int16_t bg3pc = (int16_t)memory.read16(0x04000034);
+                int16_t bg3pd = (int16_t)memory.read16(0x04000036);
+                uint32_t bg3x = memory.read32(0x04000038);
+                uint32_t bg3y = memory.read32(0x0400003C);
+                uint16_t bg3cnt = memory.read16(0x0400000E);
+                printf("[GPU] BG3 Affine: PA=%d PB=%d PC=%d PD=%d X=0x%08X Y=0x%08X BGCNT=0x%04X\n",
+                       bg3pa, bg3pb, bg3pc, bg3pd, bg3x, bg3y, bg3cnt);
+            }
         }
         
         // Debug: Log OAM for all visible sprites to identify the sweeping highlight

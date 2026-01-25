@@ -547,7 +547,18 @@ uint32_t Memory::readDirectIO32(uint32_t address) const {
     uint8_t b1 = base[(offset + 1) % wrapSize];
     uint8_t b2 = base[(offset + 2) % wrapSize];
     uint8_t b3 = base[(offset + 3) % wrapSize];
-    return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+    uint32_t val = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+    
+    // Debug: Trace BIOS reads at 0x18 (IRQ vector)
+    if (address == 0x00000018) {
+        static int bios18_read_count = 0;
+        bios18_read_count++;
+        printf("[BIOS 0x18 DirectIO READ #%d] offset=%u, bytes: %02X %02X %02X %02X = value 0x%08X (base=%p)\n",
+               bios18_read_count, offset, b0, b1, b2, b3, val, (void*)base);
+        fflush(stdout);
+    }
+    
+    return val;
 }
 
 // ARM7TDMI Unaligned Word Access (LDR)
@@ -568,6 +579,14 @@ uint32_t Memory::readDirectIO32(uint32_t address) const {
 // byte at the requested address ending up in the LSB of the result.
 uint32_t Memory::read32(uint32_t address) const {
     addWaitCycles(address, 32);
+    
+    // Debug: trace reads from IRQ handler pointer
+    if (address == 0x03FFFFFC || address == 0x03007FFC) {
+        static int irq_ptr_read_count = 0;
+        if (irq_ptr_read_count++ < 100) {
+            printf("[IRQ PTR READ #%d] Reading from 0x%08X\n", irq_ptr_read_count, address);
+        }
+    }
     
     // Handle DMA register reads (source and dest addresses)
     if (dmaController) {
@@ -614,6 +633,15 @@ uint32_t Memory::read32(uint32_t address) const {
         | (base[(offset + 2) % wrapSize] << 16)
         | (base[(offset + 3) % wrapSize] << 24);
     
+    // Debug: Trace BIOS reads at 0x18 (IRQ vector)
+    if (aligned_address == 0x00000018) {
+        static int bios18_read_count = 0;
+        bios18_read_count++;
+        printf("[BIOS 0x18 READ #%d] offset=%u, bytes: %02X %02X %02X %02X = value 0x%08X\n",
+               bios18_read_count, offset, base[offset], base[offset+1], base[offset+2], base[offset+3], val);
+        fflush(stdout);
+    }
+    
     // Rotate right by misalignment * 8 bits
     if (misalignment != 0) {
         uint32_t rotate_amount = misalignment * 8;
@@ -630,6 +658,15 @@ uint32_t Memory::read32(uint32_t address) const {
     // Debug: Print reads from entry point
     if (address == 0x080000B4) {
         printf("[Memory::read32] Read from 0x%08X: 0x%08X\n", address, val);
+    }
+    
+    // Debug: trace result from IRQ handler pointer read
+    if (address == 0x03FFFFFC || address == 0x03007FFC) {
+        static int irq_ptr_result_count = 0;
+        if (irq_ptr_result_count++ < 100) {
+            printf("[IRQ PTR VALUE #%d] Read from 0x%08X = 0x%08X (offset=0x%X)\n", 
+                   irq_ptr_result_count, address, val, offset);
+        }
     }
     
     return val;  // No rotation on ARM7TDMI
@@ -705,6 +742,14 @@ void Memory::write32(uint32_t address, uint32_t value) {
     // The BIOS IRQ dispatcher at 0x128 reads from [0x04000000-4] = 0x03FFFFFC
     // BIOS also uses 0x03007FF0-0x03007FFC area during initialization
     // IMPORTANT: 0x03007FF8 = IntrCheck flag (BIOS writes interrupt bits here)
+    // Log ALL writes to IRQ handler location
+    if (aligned_address == 0x03FFFFFC || aligned_address == 0x03007FFC) {
+        static int irq_write_count = 0;
+        if (irq_write_count++ < 50) {
+            printf("[IRQ HANDLER WRITE #%d] Writing 0x%08X to 0x%08X\n", 
+                   irq_write_count, val, aligned_address);
+        }
+    }
     if (aligned_address == 0x03FFFFFC || (aligned_address >= 0x03007F00 && aligned_address <= 0x03007FFC)) {
         // Get current PC for debugging (requires CPU context)
         // Detect corrupted values (addresses outside valid GBA memory)

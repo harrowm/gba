@@ -244,28 +244,30 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
         in_bios = false;
     }
     
-    // Track ROM entry
-    static uint64_t rom_instructions = 0;
-    if (pc_in_rom && !in_rom) {
-        printf("\n*** [%llu] PC ENTERED ROM REGION at 0x%08X (from 0x%08X) ***\n", 
-               instruction_count, pc, last_pc);
-        printf("*** First ROM instruction: 0x%08X ***\n\n", instruction);
-        in_rom = true;
-        rom_instructions = 0;
-    } else if (!pc_in_rom && in_rom) {
-        printf("\n*** [%llu] PC LEFT ROM REGION at 0x%08X ***\n\n", instruction_count, pc);
-        in_rom = false;
-    }
-    
-    // Debug ROM execution - trace first 20 instructions
-    if (in_rom && rom_instructions < 20) {
-        rom_instructions++;
-        printf("[ROM #%llu @0x%08X] Instr: 0x%08X | R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R5=%08X | SP=%08X LR=%08X\n",
-               rom_instructions, pc, instruction,
-               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
-               parentCPU.R()[4], parentCPU.R()[5],
-               parentCPU.R()[13], parentCPU.R()[14]);
-    }
+    // Track ROM entry (disabled for debugging crash)
+    // static uint64_t rom_instructions = 0;
+    // if (pc_in_rom && !in_rom) {
+    //     printf("\n*** [%llu] PC ENTERED ROM REGION at 0x%08X (from 0x%08X) ***\n", 
+    //            instruction_count, pc, last_pc);
+    //     printf("*** First ROM instruction: 0x%08X ***\n\n", instruction);
+    //     in_rom = true;
+    //     rom_instructions = 0;
+    // } else if (!pc_in_rom && in_rom) {
+    //     printf("\n*** [%llu] PC LEFT ROM REGION at 0x%08X ***\n\n", instruction_count, pc);
+    //     in_rom = false;
+    // }
+    // 
+    // // Debug ROM execution - trace first 20 instructions
+    // if (in_rom && rom_instructions < 20) {
+    //     rom_instructions++;
+    //     printf("[ROM #%llu @0x%08X] Instr: 0x%08X | R0=%08X R1=%08X R2=%08X R3=%08X R4=%08X R5=%08X | SP=%08X LR=%08X\n",
+    //            rom_instructions, pc, instruction,
+    //            parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+    //            parentCPU.R()[4], parentCPU.R()[5],
+    //            parentCPU.R()[13], parentCPU.R()[14]);
+    // }
+    if (pc_in_rom && !in_rom) in_rom = true;
+    else if (!pc_in_rom && in_rom) in_rom = false;
     
     // Debug BIOS execution (DISABLED FOR PERFORMANCE)
     // if ((in_bios && instruction_count <= 200) || (in_bios && pc >= 0x140 && pc <= 0x170)) {
@@ -295,6 +297,18 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     // uint32_t cpsr = parentCPU.CPSR();
     // printf("[ARMCPU] CPSR flags before disasm: N:%d Z:%d C:%d V:%d (CPSR=0x%08X)\n",
     //     (cpsr >> 31) & 1, (cpsr >> 30) & 1, (cpsr >> 29) & 1, (cpsr >> 28) & 1, cpsr);
+
+    // Debug: Trace BIOS IRQ handling at 0x18
+    if (pc == 0x00000018) {
+        static int irq_vec_count = 0;
+        irq_vec_count++;
+        printf("[BIOS IRQ #%d] PC=0x%08X Instr=0x%08X CPSR=0x%08X\n", 
+               irq_vec_count, pc, instruction, parentCPU.CPSR());
+        printf("  R0-R3: %08X %08X %08X %08X\n",
+               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+        printf("  LR=%08X SP=%08X\n", parentCPU.R()[14], parentCPU.R()[13]);
+        fflush(stdout);
+    }
 
     uint32_t index = (bits<27,20>(instruction) << 1) | ((instruction & 0x90) == 0x90); // bit 7 and 4 are set
     DEBUG_INFO("executeInstruction: PC=0x" + debug_to_hex_string(pc, 8) + 
@@ -365,6 +379,11 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
     // Now swap to the new mode
     parentCPU.setMode(new_mode_enum);
     
+    // Save old CPSR to SPSR of the NEW mode (must be done AFTER mode switch)
+    // This is critical for exception handlers to return correctly
+    parentCPU.SPSR() = old_cpsr;
+    DEBUG_LOG("Saved CPSR 0x" + debug_to_hex_string(old_cpsr, 8) + " to SPSR of mode 0x" + debug_to_hex_string(new_mode, 2));
+    
     // Set IRQ/FIQ disable bits in CPSR (after mode switch)
     uint32_t new_cpsr = parentCPU.CPSR();
     if (disable_irq) {
@@ -374,9 +393,6 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
         new_cpsr |= 0x40; // Set F bit
     }
     parentCPU.CPSR() = new_cpsr;
-
-    // In a real ARM CPU, we would save old_cpsr to SPSR, but it's not supported here
-    DEBUG_LOG("SPSR write not supported, old CPSR value 0x" + debug_to_hex_string(old_cpsr, 8) + " not saved");
 
     // Set the PC to the exception vector
     parentCPU.R()[15] = vector_address;
