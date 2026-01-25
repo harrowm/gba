@@ -162,6 +162,10 @@ inline uint8_t* get_region_base(uint8_t* const* regionTable, uint32_t address, u
             printf("[IWRAM MIRROR] addr=0x%08X → block=%u orig_offset=0x%X final_offset=0x%X (maps to 0x%08X)\n",
                    address, block, original_offset, offset, 0x03000000 + offset);
         }
+        // Bounds check for IWRAM
+        if (offset > 0x7FFC) {
+            printf("[IWRAM OOB] addr=0x%08X offset=0x%X (max 0x7FFF)\n", address, offset);
+        }
     }
     // VRAM mirroring is handled by the base pointer mapping in the regionTable
     // Don't remap offset here - it causes out-of-bounds access
@@ -253,7 +257,9 @@ uint16_t Memory::read16(uint32_t address) const {
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
     if (!base) return 0xFFFF;
-    uint16_t val = base[offset] | (base[(offset + 1) % Memory::BLOCK_SIZE] << 8);
+    // IWRAM is only 32KB (0x8000 bytes), not 64KB like BLOCK_SIZE
+    uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
+    uint16_t val = base[offset] | (base[(offset + 1) % wrapSize] << 8);
     
     // Log IF register reads to debug the 0x0080 vs 0x0001 issue
     if (address == 0x04000202) {
@@ -335,6 +341,8 @@ void Memory::write16(uint32_t address, uint16_t value) {
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
+    // IWRAM is only 32KB (0x8000 bytes), not 64KB like BLOCK_SIZE
+    uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
     
     // Log writes to OBJ VRAM and OBJ Palette (Nintendo logo investigation)
     if (address >= 0x06000000 && address < 0x06018000) {
@@ -384,10 +392,10 @@ void Memory::write16(uint32_t address, uint16_t value) {
     
     // Special handling for IF register (write 1 to clear)
     if (address == 0x04000202) {  // REG_IF
-        uint16_t currentIF = base[offset] | (base[(offset + 1) % Memory::BLOCK_SIZE] << 8);
+        uint16_t currentIF = base[offset] | (base[(offset + 1) % wrapSize] << 8);
         uint16_t newIF = currentIF & ~val;  // Clear bits where value has 1
         base[offset] = newIF & 0xFF;
-        base[(offset + 1) % Memory::BLOCK_SIZE] = (newIF >> 8) & 0xFF;
+        base[(offset + 1) % wrapSize] = (newIF >> 8) & 0xFF;
         static int if_write_count = 0;
         if (if_write_count++ < 10) {
             printf("[REG Write #%d] IF acknowledge = 0x%04X, currentIF was = 0x%04X, new IF = 0x%04X\n", 
@@ -487,7 +495,7 @@ void Memory::write16(uint32_t address, uint16_t value) {
     }
     
     base[offset] = val & 0xFF;
-    base[(offset + 1) % Memory::BLOCK_SIZE] = (val >> 8) & 0xFF;
+    base[(offset + 1) % wrapSize] = (val >> 8) & 0xFF;
 }
 
 void Memory::writeDirectIO(uint32_t address, uint16_t value) {
@@ -497,8 +505,10 @@ void Memory::writeDirectIO(uint32_t address, uint16_t value) {
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
     
+    // IWRAM is only 32KB (0x8000 bytes), not 64KB like BLOCK_SIZE
+    uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
     base[offset] = value & 0xFF;
-    base[(offset + 1) % Memory::BLOCK_SIZE] = (value >> 8) & 0xFF;
+    base[(offset + 1) % wrapSize] = (value >> 8) & 0xFF;
 }
 
 // Direct I/O reads (bypass wait cycle counting)
@@ -515,8 +525,12 @@ uint16_t Memory::readDirectIO16(uint32_t address) const {
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return 0xFFFF;
     
+    // For IWRAM, we need to properly wrap around at 32KB (0x8000)
+    // For other regions, use BLOCK_SIZE (64KB)
+    uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
+    
     uint8_t low = base[offset];
-    uint8_t high = base[(offset + 1) % Memory::BLOCK_SIZE];
+    uint8_t high = base[(offset + 1) % wrapSize];
     return low | (high << 8);
 }
 
@@ -525,10 +539,14 @@ uint32_t Memory::readDirectIO32(uint32_t address) const {
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return 0xFFFFFFFF;
     
+    // For IWRAM, we need to properly wrap around at 32KB (0x8000)
+    // For other regions, use BLOCK_SIZE (64KB)
+    uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
+    
     uint8_t b0 = base[offset];
-    uint8_t b1 = base[(offset + 1) % Memory::BLOCK_SIZE];
-    uint8_t b2 = base[(offset + 2) % Memory::BLOCK_SIZE];
-    uint8_t b3 = base[(offset + 3) % Memory::BLOCK_SIZE];
+    uint8_t b1 = base[(offset + 1) % wrapSize];
+    uint8_t b2 = base[(offset + 2) % wrapSize];
+    uint8_t b3 = base[(offset + 3) % wrapSize];
     return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
 }
 
@@ -577,11 +595,24 @@ uint32_t Memory::read32(uint32_t address) const {
     uint32_t misalignment = address & 3u;       // Get misalignment (0-3)
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), aligned_address, offset);
-    if (!base) return 0xFFFFFFFF;
+    if (!base) {
+        static int null_base_count = 0;
+        if (null_base_count++ < 5) {
+            printf("[READ32] NULL base for address 0x%08X (first occurrence #%d)\n", address, null_base_count);
+        }
+        return 0xFFFFFFFF;
+    }
+    // Debug: Check for unexpected offset values for IWRAM
+    if (aligned_address >= 0x03000000 && aligned_address < 0x04000000 && offset >= 0x8000) {
+        printf("[READ32 OOB] IWRAM address 0x%08X mapped to offset 0x%X (>= 32KB!)\n", address, offset);
+    }
+    // IWRAM is only 32KB (0x8000 bytes), not 64KB like BLOCK_SIZE
+    // Must wrap within actual buffer size to prevent buffer overflow
+    uint32_t wrapSize = (aligned_address >= 0x03000000 && aligned_address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
     uint32_t val = base[offset]
-        | (base[offset + 1] << 8)
-        | (base[offset + 2] << 16)
-        | (base[offset + 3] << 24);
+        | (base[(offset + 1) % wrapSize] << 8)
+        | (base[(offset + 2) % wrapSize] << 16)
+        | (base[(offset + 3) % wrapSize] << 24);
     
     // Rotate right by misalignment * 8 bits
     if (misalignment != 0) {
@@ -676,7 +707,14 @@ void Memory::write32(uint32_t address, uint32_t value) {
     // IMPORTANT: 0x03007FF8 = IntrCheck flag (BIOS writes interrupt bits here)
     if (aligned_address == 0x03FFFFFC || (aligned_address >= 0x03007F00 && aligned_address <= 0x03007FFC)) {
         // Get current PC for debugging (requires CPU context)
-        printf("[IRQ HANDLER] Write32 to 0x%08X: value=0x%08X (IRQ/BIOS work area)\n", aligned_address, val);
+        // Detect corrupted values (addresses outside valid GBA memory)
+        bool suspicious = (val >= 0x10000000 && val < 0x80000000) || // Outside valid ranges
+                          ((val >> 28) == 0x6) ||  // 0x6xxxxxxx range
+                          ((val >> 28) == 0x1);    // 0x1xxxxxxx range
+        if (suspicious) {
+            printf("[CORRUPTION!] Write32 to 0x%08X: value=0x%08X (suspicious value in IRQ/BIOS work area)\n", 
+                   aligned_address, val);
+        }
         if (aligned_address == 0x03FFFFFC && (val < 0x02000000 || val > 0x0FFFFFFF)) {
             printf("[IRQ HANDLER ERROR] Suspicious IRQ handler address 0x%08X written to 0x%08X!\n", val, aligned_address);
         }
@@ -723,10 +761,12 @@ void Memory::write32(uint32_t address, uint32_t value) {
         }
     }
     
+    // IWRAM is only 32KB (0x8000 bytes), not 64KB like BLOCK_SIZE
+    uint32_t wrapSize = (aligned_address >= 0x03000000 && aligned_address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
     base[offset] = val & 0xFF;
-    base[(offset + 1) % Memory::BLOCK_SIZE] = (val >> 8) & 0xFF;
-    base[(offset + 2) % Memory::BLOCK_SIZE] = (val >> 16) & 0xFF;
-    base[(offset + 3) % Memory::BLOCK_SIZE] = (val >> 24) & 0xFF;
+    base[(offset + 1) % wrapSize] = (val >> 8) & 0xFF;
+    base[(offset + 2) % wrapSize] = (val >> 16) & 0xFF;
+    base[(offset + 3) % wrapSize] = (val >> 24) & 0xFF;
 }
 
 // ============================================================================

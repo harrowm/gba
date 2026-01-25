@@ -81,25 +81,23 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     else if (!up && pre) addr = base - 4;   // DB
     else addr = base;                       // IA/DA
     
-    // Debug logging for BIOS IRQ handler
-    static int ldm_count = 0;
-    if (ldm_count < 10 && parentCPU.R()[15] < 0x4000) {
-        const char* mode = (up && pre) ? "IB" : (!up && pre) ? "DB" : up ? "IA" : "DA";
-        printf("[LDM #%d @0x%08X] Mode=%s, R%d=0x%08X, reglist=0x%04X, start_addr=0x%08X, WB=%d\n",
-               ldm_count++, parentCPU.R()[15], mode, rn, base, reg_list, addr, writeback);
-    }
+    // Debug logging for BIOS IRQ handler - DISABLED for performance
+    // static int ldm_count = 0;
+    // if (ldm_count < 10 && parentCPU.R()[15] < 0x4000) {
+    //     const char* mode = (up && pre) ? "IB" : (!up && pre) ? "DB" : up ? "IA" : "DA";
+    //     printf("[LDM #%d @0x%08X] Mode=%s, R%d=0x%08X, reglist=0x%04X, start_addr=0x%08X, WB=%d\n",
+    //            ldm_count++, parentCPU.R()[15], mode, rn, base, reg_list, addr, writeback);
+    // }
     
     bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
-            if (ldm_count <= 10 && parentCPU.R()[15] < 0x4000) {
-                printf("    Loading R%d from 0x%08X...", i, addr);
-                fflush(stdout);
-            }
+            // DISABLED debug logging
+            // if (ldm_count <= 10 && parentCPU.R()[15] < 0x4000) {
+            //     printf("    Loading R%d from 0x%08X...", i, addr);
+            //     fflush(stdout);
+            // }
             parentCPU.R()[i] = parentCPU.getMemory().read32(addr);
-            if (ldm_count <= 10 && parentCPU.R()[15] < 0x4000) {
-                printf(" = 0x%08X\n", parentCPU.R()[i]);
-            }
             if (i == 15) {
                 r15_updated = true;
             }
@@ -111,17 +109,6 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     if (writeback && reg_count > 0 && !(reg_list & (1 << rn))) {
         uint32_t new_base = up ? base + reg_count * 4 : base - reg_count * 4;
         parentCPU.R()[rn] = new_base;
-    }
-    
-    // Show what was loaded
-    if (ldm_count <= 10 && parentCPU.R()[15] < 0x4000) {
-        printf("  Loaded: ");
-        for (int i = 0; i < 16; i++) {
-            if (reg_list & (1 << i)) {
-                printf("R%d=0x%08X ", i, parentCPU.R()[i]);
-            }
-        }
-        printf("\n");
     }
     
     if (!r15_updated) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -144,23 +131,6 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     if (up && pre) addr = base + 4;                    // IB
     else if (!up && pre) addr = base - (reg_count * 4); // DB: start at lowest address
     else addr = base;                                  // IA/DA
-    
-    // Debug logging for BIOS IRQ handler
-    static int stm_count = 0;
-    if (stm_count < 10 && parentCPU.R()[15] < 0x4000) {
-        const char* mode = (up && pre) ? "IB" : (!up && pre) ? "DB" : up ? "IA" : "DA";
-        printf("[STM #%d @0x%08X] Mode=%s, R%d=0x%08X, reglist=0x%04X, start_addr=0x%08X, WB=%d\n",
-               stm_count++, parentCPU.R()[15], mode, rn, base, reg_list, addr, writeback);
-        
-        // Show which registers will be stored
-        printf("  Storing: ");
-        for (int i = 0; i < 16; i++) {
-            if (reg_list & (1 << i)) {
-                printf("R%d=0x%08X ", i, parentCPU.R()[i]);
-            }
-        }
-        printf("\n");
-    }
     
     bool r15_updated = false;
     for (int i = 0; i < 16; ++i) {

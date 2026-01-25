@@ -251,7 +251,8 @@ void GBA::runFrame() {
             region = "BIOS";
         } else if (pc >= 0x02000000 && pc < 0x02040000) {
             region = "EWRAM";
-        } else if (pc >= 0x03000000 && pc < 0x03008000) {
+        } else if (pc >= 0x03000000 && pc < 0x04000000) {
+            // IWRAM is 32KB but mirrored throughout 0x03000000-0x03FFFFFF
             region = "IWRAM";
         } else if (pc >= 0x08000000 && pc < 0x0E000000) {
             region = "ROM";
@@ -268,6 +269,22 @@ void GBA::runFrame() {
         if (region != last_region && last_region != nullptr) {
             printf("[PC REGION] %s -> %s at PC=0x%08X (frame %d)\n", 
                    last_region, region, pc, frame_num);
+            // Detailed dump when entering UNKNOWN region
+            static bool first_unknown = true;
+            if (strcmp(region, "UNKNOWN") == 0 && first_unknown) {
+                first_unknown = false;
+                printf("[FIRST UNKNOWN] Detailed state dump:\n");
+                printf("  R0-R3:  %08X %08X %08X %08X\n",
+                       cpu->R()[0], cpu->R()[1], cpu->R()[2], cpu->R()[3]);
+                printf("  R4-R7:  %08X %08X %08X %08X\n",
+                       cpu->R()[4], cpu->R()[5], cpu->R()[6], cpu->R()[7]);
+                printf("  R8-R11: %08X %08X %08X %08X\n",
+                       cpu->R()[8], cpu->R()[9], cpu->R()[10], cpu->R()[11]);
+                printf("  R12-R15: %08X %08X %08X %08X\n",
+                       cpu->R()[12], cpu->R()[13], cpu->R()[14], cpu->R()[15]);
+                printf("  CPSR: %08X, Mode: 0x%02X, T=%d\n",
+                       cpu->CPSR(), cpu->CPSR() & 0x1F, (cpu->CPSR() >> 5) & 1);
+            }
         }
         last_region = region;
         
