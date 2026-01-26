@@ -24,7 +24,7 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
     static int schedule_count = 0;
     uint64_t currentCycle = scheduler->getCurrentCycle();
     if (schedule_count < 10) {
-        printf("[GPU SCHEDULE] Scanline %d scheduled at cycle %llu (HDRAW ends at %llu)\n",
+        LOG_TRACE_CAT("[GPU SCHEDULE] Scanline %d scheduled at cycle %llu (HDRAW ends at %llu)\n",
                currentScanline, currentCycle, currentCycle + CYCLES_HDRAW);
         schedule_count++;
     }
@@ -61,7 +61,7 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
             
             // Debug
             if (currentScanline >= 158 && currentScanline <= 162) {
-                printf("[GPU] Scanline %d starts at cycle %llu\n", 
+                LOG_TRACE_CAT("[GPU] Scanline %d starts at cycle %llu\n", 
                        currentScanline, scheduler->getCurrentCycle());
             }
             
@@ -74,13 +74,13 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
                 
                 static int vblank_count = 0;
                 if (vblank_count++ < 5) {
-                    printf("[GPU] V-Blank #%d: DISPSTAT=0x%04X, IRQ_EN=%d, callback=%d at cycle %llu\n", 
+                    LOG_TRACE_CAT("[GPU] V-Blank #%d: DISPSTAT=0x%04X, IRQ_EN=%d, callback=%d at cycle %llu\n", 
                            vblank_count, dispstat, (dispstat & DISPSTAT_VBLANK_IRQ_ENABLE) ? 1 : 0, 
                            vblankCallback ? 1 : 0, scheduler->getCurrentCycle());
                 }
                 
                 if ((dispstat & DISPSTAT_VBLANK_IRQ_ENABLE) && vblankCallback) {
-                    printf("[GPU] Calling vblankCallback() #%d\n", vblank_count);
+                    LOG_TRACE_CAT("[GPU] Calling vblankCallback() #%d\n", vblank_count);
                     vblankCallback();
                 }
             } else if (currentScanline == 0) {
@@ -103,7 +103,7 @@ void GPU::setupTiming(Scheduler* scheduler) {
     }
     
     uint64_t currentCycle = scheduler->getCurrentCycle();
-    printf("[GPU SETUP] Setting up GPU video timing at cycle %llu\n", currentCycle);
+    LOG_TRACE_CAT("[GPU SETUP] Setting up GPU video timing at cycle %llu\n", currentCycle);
     scheduleScanline(scheduler);
 }
 
@@ -112,7 +112,7 @@ void GPU::renderScanline() {
     static int scanline_trace = 0;
     if (scanline_trace < 10) {
         scanline_trace++;
-        printf("[GPU::renderScanline] scanline=%d DISPCNT=0x%04X forcedBlank=%d\n",
+        LOG_TRACE_CAT("[GPU::renderScanline] scanline=%d DISPCNT=0x%04X forcedBlank=%d\n",
                currentScanline, memory.read16(REG_DISPCNT), isForcedBlank());
     }
     
@@ -140,7 +140,7 @@ void GPU::renderScanline() {
         
         if (dispcntLogCounter++ < 10 || (isMode2WithBG3 && lastMode2WithBG3Frame < 5)) {
             if (isMode2WithBG3) lastMode2WithBG3Frame++;
-            printf("[GPU] Scanline 0: DISPCNT=0x%04X, Mode=%d, BGs=%d%d%d%d, OBJ=%d\n",
+            LOG_TRACE_CAT("[GPU] Scanline 0: DISPCNT=0x%04X, Mode=%d, BGs=%d%d%d%d, OBJ=%d\n",
                    dispcnt, mode,
                    (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
                    (dispcnt >> 12) & 1);
@@ -154,7 +154,7 @@ void GPU::renderScanline() {
                 uint32_t bg3x = memory.read32(0x04000038);
                 uint32_t bg3y = memory.read32(0x0400003C);
                 uint16_t bg3cnt = memory.read16(0x0400000E);
-                printf("[GPU] BG3 Affine: PA=%d PB=%d PC=%d PD=%d X=0x%08X Y=0x%08X BGCNT=0x%04X\n",
+                LOG_TRACE_CAT("[GPU] BG3 Affine: PA=%d PB=%d PC=%d PD=%d X=0x%08X Y=0x%08X BGCNT=0x%04X\n",
                        bg3pa, bg3pb, bg3pc, bg3pd, bg3x, bg3y, bg3cnt);
             }
         }
@@ -163,7 +163,7 @@ void GPU::renderScanline() {
         static int oamLogFrames = 0;
         if (oamLogFrames >= 60 && oamLogFrames < 260) { // Log frames 60-260 (when animation happens)
             if ((oamLogFrames - 60) % 10 == 0) { // Log every 10th frame
-                printf("\n[OAM FRAME %d]\n", oamLogFrames);
+                LOG_TRACE_CAT("\n[OAM FRAME %d]\n", oamLogFrames);
                 for (int objNum = 0; objNum < 16; objNum++) { // Check first 16 sprites
                     uint32_t oamAddr = OAM_BASE + (objNum * 8);
                     uint16_t attr0 = memory.read16(oamAddr + 0);
@@ -188,7 +188,7 @@ void GPU::renderScanline() {
                     int palette = (attr2 >> 12) & 0xF;
                     
                     // Log all sprites regardless of Y position to catch animation
-                    printf("  OBJ%d: X=%3d Y=%3d ObjMode=%d GfxMode=%d Shape=%d Size=%d Tile=%d Prio=%d Pal=%d\n",
+                    LOG_TRACE_CAT("  OBJ%d: X=%3d Y=%3d ObjMode=%d GfxMode=%d Shape=%d Size=%d Tile=%d Prio=%d Pal=%d\n",
                            objNum, x, y, objMode, gfxMode, shape, size, tile, priority, palette);
                 }
             }
@@ -277,23 +277,23 @@ void GPU::renderMode4Scanline(uint16_t scanline) {
     // Debug: Check BOTH frame buffers for non-zero pixels
     static int debugFrameCount = 0;
     if (debugFrameCount < 3 && scanline == 76) {
-        printf("[Mode 4 Debug Frame %d] Scanline 76, useSecondFrame=%d\n", debugFrameCount, useSecondFrame);
+        LOG_TRACE_CAT("[Mode 4 Debug Frame %d] Scanline 76, useSecondFrame=%d\n", debugFrameCount, useSecondFrame);
         
         // Check both frame buffers
         for (int frame = 0; frame < 2; frame++) {
             uint32_t frameOff = frame ? 0xA000 : 0x0000;
             int nonZeroCount = 0;
-            printf("  Frame %d (offset 0x%05X): ", frame, frameOff);
+            LOG_TRACE_CAT("  Frame %d (offset 0x%05X): ", frame, frameOff);
             for (int i = 0; i < 240; i++) {
                 uint8_t idx = vram[frameOff + scanlineOffset + i];
                 if (idx != 0) {
                     nonZeroCount++;
                     if (nonZeroCount <= 10) {
-                        printf("[X%d=idx%d] ", i, idx);
+                        LOG_TRACE_CAT("[X%d=idx%d] ", i, idx);
                     }
                 }
             }
-            printf(" -> %d non-zero pixels\n", nonZeroCount);
+            LOG_TRACE_CAT(" -> %d non-zero pixels\n", nonZeroCount);
         }
         debugFrameCount++;
     }
@@ -316,7 +316,7 @@ uint16_t* GPU::getFrameBuffer() {
         uint8_t* vram_ptr = memory.getVRAM();
         static int debugCount = 0;
         if (debugCount < 3) {
-            printf("[GPU::getFrameBuffer] Mode %d, returning VRAM=%p\n", mode, (void*)vram_ptr);
+            LOG_TRACE_CAT("[GPU::getFrameBuffer] Mode %d, returning VRAM=%p\n", mode, (void*)vram_ptr);
             debugCount++;
         }
         return reinterpret_cast<uint16_t*>(vram_ptr);
@@ -355,7 +355,7 @@ uint16_t GPU::readBGPaletteRaw(int paletteNum, int colorIndex) {
         if (paletteNum == 0 && colorIndex == 3 && debugCount < 3) {
             uint16_t* paletteRAM = reinterpret_cast<uint16_t*>(memory.getPaletteRAM());
             uint16_t value = paletteRAM[offset / 2];
-            printf("[Palette Debug] Reading BG palette[0][3]: offset=%d, value=0x%04X\n", offset, value);
+            LOG_TRACE_CAT("[Palette Debug] Reading BG palette[0][3]: offset=%d, value=0x%04X\n", offset, value);
             debugCount++;
         }
     } else {
@@ -1528,10 +1528,10 @@ void GPU::renderScanline(uint16_t scanline) {
     static int render_trace = 0;
     if (scanline == 0 && render_trace < 5) {
         render_trace++;
-        printf("[RENDER] Mode=%d DISPCNT=0x%04X windowsEnabled=%d\n", mode, dispcnt, windowsEnabled);
+        LOG_TRACE_CAT("[RENDER] Mode=%d DISPCNT=0x%04X windowsEnabled=%d\n", mode, dispcnt, windowsEnabled);
         for (int bg = 0; bg < 4; bg++) {
             bool enabled = (dispcnt & (DISPCNT_BG0_ENABLE << bg)) != 0;
-            printf("  BG%d: enabled=%d\n", bg, enabled);
+            LOG_TRACE_CAT("  BG%d: enabled=%d\n", bg, enabled);
         }
     }
     
@@ -1778,7 +1778,7 @@ void GPU::renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline,
     static int affine_trace_count = 0;
     if (scanline == 0 && affine_trace_count < 10) {
         affine_trace_count++;
-        printf("[AFFINE BG%d] PA=%d PB=%d PC=%d PD=%d refX=%d refY=%d BGCNT=0x%04X\n",
+        LOG_TRACE_CAT("[AFFINE BG%d] PA=%d PB=%d PC=%d PD=%d refX=%d refY=%d BGCNT=0x%04X\n",
                bgNum, params.pa, params.pb, params.pc, params.pd, 
                params.refX, params.refY, bgcnt);
     }
@@ -1791,7 +1791,7 @@ void GPU::renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline,
         static int skip_count = 0;
         if (scanline == 0 && skip_count < 5) {
             skip_count++;
-            printf("[AFFINE BG%d] SKIPPING - all params are 0\n", bgNum);
+            LOG_TRACE_CAT("[AFFINE BG%d] SKIPPING - all params are 0\n", bgNum);
         }
         return;
     }
@@ -3473,7 +3473,7 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
         // Log at multiple X positions to see what's happening
         if (postFrame >= 690 && postFrame <= 695 && scanline == 110 && (x == 40 || x == 80 || x == 120 || x == 160)) {
             uint32_t objNum = (spritePixel & FLAG_ORDER_MASK) >> OFFSET_ORDER;
-            printf("[POSTPROC F%d L%d x%d] obj%d color=0x%04X isBlend=%d isSemi=%d mode=%d 1stTgt=%d\n",
+            LOG_TRACE_CAT("[POSTPROC F%d L%d x%d] obj%d color=0x%04X isBlend=%d isSemi=%d mode=%d 1stTgt=%d\n",
                    postFrame, scanline, x, objNum, spriteColor, isBlendTarget, isSemiTransparent,
                    blend.mode, blend.firstTargets);
         }
@@ -3527,50 +3527,50 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
                 uint16_t bldalpha = memory.read16(0x04000052);
                 uint16_t dispcnt = memory.read16(0x04000000);
                 uint16_t palette0 = memory.read16(0x05000000);
-                printf("=== BLEND DEBUG F%d L%d x%d ===\n", postFrame, scanline, x);
-                printf("  DISPCNT: 0x%04X (mode=%d, BGs=%d%d%d%d, OBJ=%d)\n",
+                LOG_TRACE_CAT("=== BLEND DEBUG F%d L%d x%d ===\n", postFrame, scanline, x);
+                LOG_TRACE_CAT("  DISPCNT: 0x%04X (mode=%d, BGs=%d%d%d%d, OBJ=%d)\n",
                        dispcnt, dispcnt & 7,
                        (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
                        (dispcnt >> 12) & 1);
-                printf("  Palette 0: 0x%04X\n", palette0);
-                printf("  OBJ#: %d\n", objNum);
-                printf("  Sprite color: 0x%04X (R=%d G=%d B=%d)\n", 
+                LOG_TRACE_CAT("  Palette 0: 0x%04X\n", palette0);
+                LOG_TRACE_CAT("  OBJ#: %d\n", objNum);
+                LOG_TRACE_CAT("  Sprite color: 0x%04X (R=%d G=%d B=%d)\n", 
                        spriteColor, spriteColor & 0x1F, (spriteColor >> 5) & 0x1F, (spriteColor >> 10) & 0x1F);
-                printf("  BG color (lineBuffer): 0x%04X (R=%d G=%d B=%d)\n",
+                LOG_TRACE_CAT("  BG color (lineBuffer): 0x%04X (R=%d G=%d B=%d)\n",
                        bgColor, bgColor & 0x1F, (bgColor >> 5) & 0x1F, (bgColor >> 10) & 0x1F);
-                printf("  Behind layer type: %d (0-3=BG, 4=OBJ, 5=Backdrop)\n", behindLayerType);
-                printf("  BLDCNT: 0x%04X (mode=%d, 1st=0x%02X, 2nd=0x%02X)\n", 
+                LOG_TRACE_CAT("  Behind layer type: %d (0-3=BG, 4=OBJ, 5=Backdrop)\n", behindLayerType);
+                LOG_TRACE_CAT("  BLDCNT: 0x%04X (mode=%d, 1st=0x%02X, 2nd=0x%02X)\n", 
                        bldcnt, (bldcnt >> 6) & 3, bldcnt & 0x3F, (bldcnt >> 8) & 0x3F);
-                printf("  BLDALPHA: 0x%04X (EVA=%d, EVB=%d)\n", bldalpha, blend.eva, blend.evb);
-                printf("  isSemiTransparent: %d, isBlendTarget: %d\n", isSemiTransparent, isBlendTarget);
-                printf("  shouldBlend: %d\n", shouldBlend);
+                LOG_TRACE_CAT("  BLDALPHA: 0x%04X (EVA=%d, EVB=%d)\n", bldalpha, blend.eva, blend.evb);
+                LOG_TRACE_CAT("  isSemiTransparent: %d, isBlendTarget: %d\n", isSemiTransparent, isBlendTarget);
+                LOG_TRACE_CAT("  shouldBlend: %d\n", shouldBlend);
                 // Also show what BG3 is doing
                 uint16_t bg3cnt = memory.read16(0x04000000 + 0x0E);  // BG3CNT
-                printf("  BG3CNT: 0x%04X (priority=%d, charBase=%d, screenBase=%d)\n",
+                LOG_TRACE_CAT("  BG3CNT: 0x%04X (priority=%d, charBase=%d, screenBase=%d)\n",
                        bg3cnt, bg3cnt & 3, (bg3cnt >> 2) & 3, (bg3cnt >> 8) & 0x1F);
                 
                 uint16_t winin = memory.read16(0x04000048);
                 uint16_t winout = memory.read16(0x0400004A);
-                printf("  WININ: 0x%04X, WINOUT: 0x%04X\n", winin, winout);
+                LOG_TRACE_CAT("  WININ: 0x%04X, WINOUT: 0x%04X\n", winin, winout);
                 
                 // Check if any OBJ Window sprites exist
                 bool hasObjWin = false;
-                printf("  OBJ Window Sprites:\n");
+                LOG_TRACE_CAT("  OBJ Window Sprites:\n");
                 for (int i = 0; i < 128; i++) {
                     OBJAttributes obj = readOBJAttributes(i);
                     if (obj.objMode == OBJ_MODE_OBJ_WINDOW && obj.visible) {
                         hasObjWin = true;
-                        printf("    OBJ%d at (%d,%d) size=%dx%d\n", i, obj.x, obj.y, obj.width, obj.height);
+                        LOG_TRACE_CAT("    OBJ%d at (%d,%d) size=%dx%d\n", i, obj.x, obj.y, obj.width, obj.height);
                     }
                 }
-                if (!hasObjWin) printf("    None.\n");
+                if (!hasObjWin) LOG_TRACE_CAT("    None.\n");
                 
                 // Check Window Control for this pixel
                 uint8_t winControlByte = getWindowControlForPixel(x, scanline, winCtrl);
                 bool winObjEnable = (winControlByte & 0x10) != 0; // Bit 4
                 bool winBlendEnable = (winControlByte & 0x20) != 0; // Bit 5
                 
-                printf("  Window Control at (%d,%d): objEnable=%d, blendEnable=%d, raw=0x%02X\n",
+                LOG_TRACE_CAT("  Window Control at (%d,%d): objEnable=%d, blendEnable=%d, raw=0x%02X\n",
                        x, scanline, winObjEnable, winBlendEnable, winControlByte);
                        
                 if (shouldBlend) {
@@ -3583,11 +3583,11 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
                     uint8_t rOut = (r1 * blend.eva + r2 * blend.evb) / 16;
                     uint8_t gOut = (g1 * blend.eva + g2 * blend.evb) / 16;
                     uint8_t bOut = (b1 * blend.eva + b2 * blend.evb) / 16;
-                    printf("  Blended result: R=%d G=%d B=%d\n", rOut > 31 ? 31 : rOut, gOut > 31 ? 31 : gOut, bOut > 31 ? 31 : bOut);
+                    LOG_TRACE_CAT("  Blended result: R=%d G=%d B=%d\n", rOut > 31 ? 31 : rOut, gOut > 31 ? 31 : gOut, bOut > 31 ? 31 : bOut);
                 } else {
-                    printf("  Final (no blend): 0x%04X\n", spriteColor);
+                    LOG_TRACE_CAT("  Final (no blend): 0x%04X\n", spriteColor);
                 }
-                printf("==============================\n");
+                LOG_TRACE_CAT("==============================\n");
             }
             
             if (shouldBlend) {
@@ -3597,7 +3597,7 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
                 // Debug: Log blending during highlight phase
                 if (postFrame >= 690 && postFrame <= 695 && scanline == 110 && x == 120) {
                     uint32_t objNum = (spritePixel & FLAG_ORDER_MASK) >> OFFSET_ORDER;
-                    printf("[BLEND F%d L%d x%d] obj%d spriteColor=0x%04X bgColor=0x%04X eva=%d evb=%d behindType=%d\n",
+                    LOG_TRACE_CAT("[BLEND F%d L%d x%d] obj%d spriteColor=0x%04X bgColor=0x%04X eva=%d evb=%d behindType=%d\n",
                            postFrame, scanline, x, objNum, spriteColor, bgColor, blend.eva, blend.evb, behindLayerType);
                 }
             

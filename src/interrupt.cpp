@@ -33,7 +33,7 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
     uint64_t currentCycle = scheduler ? scheduler->getCurrentCycle() : 0;
     // Disable HBlank spam, only log VBlank
     if (irq_bit == 0) {  // VBlank only
-        fprintf(stderr, "[GBA IRQ] %s raised at cycle %llu, IF=0x%04X, IE=0x%04X, IME=0x%04X\n",
+        LOG_IRQ("[GBA IRQ] %s raised at cycle %llu, IF=0x%04X, IE=0x%04X, IME=0x%04X\n",
                 irq_bit >= 0 ? irq_names[irq_bit] : "UNKNOWN",
                 currentCycle,
                 currentIF,
@@ -50,19 +50,19 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
             static int schedule_count = 0;
             schedule_count++;
             if (schedule_count <= 10) {
-                printf("[IRQ SCHEDULE #%d] Scheduling IRQ_TRIGGER event with %d cycle delay\n", 
+                LOG_IRQ("[IRQ SCHEDULE #%d] Scheduling IRQ_TRIGGER event with %d cycle delay\n", 
                        schedule_count, IRQ_LATENCY_CYCLES);
             }
             scheduler->schedule(IRQ_LATENCY_CYCLES, [this]() {
                 static int trigger_count = 0;
                 trigger_count++;
                 if (trigger_count <= 10) {
-                    printf("[IRQ TRIGGER #%d] Event fired, checking pending interrupts\n", trigger_count);
+                    LOG_IRQ("[IRQ TRIGGER #%d] Event fired, checking pending interrupts\n", trigger_count);
                 }
                 // At trigger time, check IME and I flag, then call CPU
                 if (hasPendingInterrupt() && irqCallback) {
                     if (trigger_count <= 10) {
-                        printf("[IRQ TRIGGER #%d] Calling irqCallback\n", trigger_count);
+                        LOG_IRQ("[IRQ TRIGGER #%d] Calling irqCallback\n", trigger_count);
                     }
                     irqCallback();
                 }

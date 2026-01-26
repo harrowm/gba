@@ -50,9 +50,9 @@ void ThumbCPU::execute(uint32_t cycles) {
         // HACK - do we need to model the cpu pipeline?
         uint32_t current_pc = parentCPU.R()[15];
         if (thumb_instruction_count < 3) {
-            printf("[THUMB DEBUG #%llu] Read current_pc=0x%08X from R[15], FLAG_T=%d\n",
+            LOG_TRACE_CAT("[THUMB DEBUG #%llu] Read current_pc=0x%08X from R[15], FLAG_T=%d\n",
                    thumb_instruction_count, current_pc, parentCPU.getFlag(CPU::FLAG_T));
-            printf("  R[14]=0x%08X, R[15]=0x%08X\n", parentCPU.R()[14], parentCPU.R()[15]);
+            LOG_TRACE_CAT("  R[14]=0x%08X, R[15]=0x%08X\n", parentCPU.R()[14], parentCPU.R()[15]);
         }
         uint16_t instruction = parentCPU.getMemory().read16(current_pc); // Fetch instruction
         uint8_t opcode = instruction >> 8;
@@ -68,7 +68,7 @@ void ThumbCPU::execute(uint32_t cycles) {
             uint32_t ime = parentCPU.getMemory().readDirectIO32(0x04000208);
             
             // Print in mGBA-compatible compact format (matches the format from the trace script)
-            printf("PC:%08X R00:%08X R01:%08X R02:%08X R03:%08X R04:%08X R05:%08X R06:%08X R07:%08X R08:%08X R09:%08X R10:%08X R11:%08X R12:%08X R13:%08X R14:%08X R15:%08X CPSR:%08X | IE:%04X IF:%04X IME:%08X\n",
+            LOG_TRACE_CAT("PC:%08X R00:%08X R01:%08X R02:%08X R03:%08X R04:%08X R05:%08X R06:%08X R07:%08X R08:%08X R09:%08X R10:%08X R11:%08X R12:%08X R13:%08X R14:%08X R15:%08X CPSR:%08X | IE:%04X IF:%04X IME:%08X\n",
                    current_pc,
                    parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
                    parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7],
@@ -87,7 +87,7 @@ void ThumbCPU::execute(uint32_t cycles) {
                                          sizeof(instruction),
                                          current_pc, 1, &insn);
                 if (count > 0) {
-                    printf("     ; %s %s\n", insn[0].mnemonic, insn[0].op_str);
+                    LOG_TRACE_CAT("     ; %s %s\n", insn[0].mnemonic, insn[0].op_str);
                     cs_free(insn, count);
                 }
             }
@@ -98,7 +98,7 @@ void ThumbCPU::execute(uint32_t cycles) {
         uint32_t pc = parentCPU.R()[15];
         if (pc >= 0x120 && pc <= 0x126 && loop_trace_count < 20) {
             uint32_t cpsr = parentCPU.CPSR();
-            printf("[LOOP #%llu] PC=0x%04X Instr=0x%04X | R0=%08X R1=%08X R4=%08X | CPSR=0x%08X (N=%d Z=%d C=%d V=%d)\n",
+            LOG_TRACE_CAT("[LOOP #%llu] PC=0x%04X Instr=0x%04X | R0=%08X R1=%08X R4=%08X | CPSR=0x%08X (N=%d Z=%d C=%d V=%d)\n",
                    loop_trace_count++, pc, instruction,
                    parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[4],
                    cpsr,
@@ -126,10 +126,10 @@ void ThumbCPU::execute(uint32_t cycles) {
                                      sizeof(instruction),
                                      parentCPU.R()[15] - 2, 1, &insn);
             if (count > 0) {
-                printf("[DISASM][THUMB] 0x%08X: %s %s\n", (unsigned int)(parentCPU.R()[15] - 2), insn[0].mnemonic, insn[0].op_str);
+                LOG_TRACE_CAT("[DISASM][THUMB] 0x%08X: %s %s\n", (unsigned int)(parentCPU.R()[15] - 2), insn[0].mnemonic, insn[0].op_str);
                 cs_free(insn, count);
             } else {
-                printf("[DISASM][THUMB] 0x%08X: <failed to disassemble>\n", (unsigned int)(parentCPU.R()[15] - 2));
+                LOG_TRACE_CAT("[DISASM][THUMB] 0x%08X: <failed to disassemble>\n", (unsigned int)(parentCPU.R()[15] - 2));
             }
         }
         // Decode and execute the instruction
@@ -203,6 +203,16 @@ uint32_t ThumbCPU::calculateInstructionCycles(uint16_t instruction) {
     }
     
     uint32_t pc = parentCPU.R()[15];
+
+    // Targeted trace around Sonic branch to UNKNOWN region (Thumb)
+    if ((pc >= 0x08097240 && pc <= 0x08097260) || (pc >= 0x08097390 && pc <= 0x080973B0)) {
+        static int trace_count = 0;
+        if (trace_count++ < 20) {
+            uint16_t instr = parentCPU.getMemory().readDirectIO16(pc);
+            LOG_TRACE_CAT("[TRACE THUMB] PC=0x%08X instr=0x%04X CPSR=0x%08X R0=0x%08X R1=0x%08X R2=0x%08X R3=0x%08X SP=0x%08X LR=0x%08X\n",
+                     pc, instr, parentCPU.CPSR(), parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3], parentCPU.R()[13], parentCPU.R()[14]);
+        }
+    }
     uint32_t cpsr = parentCPU.CPSR();
     uint32_t base_cycles = thumb_calculate_instruction_cycles(instruction, pc, registers, cpsr);
     
@@ -311,7 +321,7 @@ void ThumbCPU::thumb_add_offset(uint16_t instruction) {
     if (pc == 0x0124) { // PC is already incremented by 2 at this point
         static int add_count = 0;
         if (add_count < 10) {
-            printf("[ADDS @0x0122] instr=0x%04x rd=%d rs=%d offset=%d | R[%d]=0x%08X + %d = 0x%08X\n",
+            LOG_TRACE_CAT("[ADDS @0x0122] instr=0x%04x rd=%d rs=%d offset=%d | R[%d]=0x%08X + %d = 0x%08X\n",
                    instruction, rd, rs, offset, rs, op1, offset, result);
             add_count++;
         }
@@ -730,7 +740,12 @@ void ThumbCPU::thumb_format5(uint16_t instruction) {
                 
                 // Special case: if destination is PC, handle branch
                 if (rd == 15) {
-                    parentCPU.R()[15] = result & ~1; // Clear bit 0 for ARM alignment
+                    uint32_t target = result & ~1;
+                    if (target >= 0x10000000) {
+                        LOG_CRASH("[THUMB MOV PC] target=0x%08X from R%d (CPSR=0x%08X)\n",
+                               target, rs, parentCPU.CPSR());
+                    }
+                    parentCPU.R()[15] = target; // Clear bit 0 for alignment
                     // Note: PC writes in Thumb mode stay in Thumb mode
                 }
                 
@@ -800,7 +815,14 @@ void ThumbCPU::thumb_format5(uint16_t instruction) {
                 }
                 
                 // Set PC to target address with bit 0 cleared
-                parentCPU.R()[15] = target & ~1;
+                uint32_t new_pc = target & ~1;
+                if (new_pc >= 0x10000000) {
+                    uint32_t bx_pc = parentCPU.R()[15] - 2;
+                    LOG_CRASH("[THUMB BX] PC=0x%08X rs=R%d target=0x%08X (CPSR=0x%08X) R0-R3=%08X %08X %08X %08X\n",
+                           bx_pc, rs, new_pc, parentCPU.CPSR(),
+                           parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+                }
+                parentCPU.R()[15] = new_pc;
                 
                 // Update processor mode based on bit 0 of target
                 if (target & 1) {
@@ -868,7 +890,16 @@ void ThumbCPU::thumb_ldr_word(uint16_t instruction) {
                      ", address=0x" + debug_to_hex_string(address, 8));
 
     // Perform the load operation using memory_read_32
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
+    uint32_t value = parentCPU.getMemory().read32(address);
+    
+    // Debug: Log suspicious values being loaded
+    uint32_t pc = parentCPU.R()[15];
+    if (value >= 0xF0000000 || (value >= 0x10000000 && value < 0x02000000)) {
+        LOG_LDR("[LDR SUSPECT] PC=0x%08X: LDR R%d, [R%d + R%d] = [0x%08X + 0x%08X] = [0x%08X] => 0x%08X\n",
+               pc, rd, rn, rm, parentCPU.R()[rn], parentCPU.R()[rm], address, value);
+    }
+    
+    parentCPU.R()[rd] = value;
 
     DEBUG_INFO("Executing Thumb LDR (word): R" + std::to_string(rd) + " = [0x" + debug_to_hex_string(address, 8) + "]");
 }
@@ -990,7 +1021,16 @@ void ThumbCPU::thumb_ldr_immediate_offset(uint16_t instruction) {
     uint32_t address = parentCPU.R()[rb] + (offset5 << 2); // Offset scaled by 4 for word alignment
 
     // Perform the load operation using memory_read_32
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
+    uint32_t value = parentCPU.getMemory().read32(address);
+    
+    // Debug: Log suspicious values being loaded
+    uint32_t pc = parentCPU.R()[15];
+    if (value >= 0xF0000000 || (value >= 0x10000000 && value < 0x02000000)) {
+        LOG_LDR("[LDR IMM SUSPECT] PC=0x%08X: LDR R%d, [R%d, #%d] = [0x%08X] => 0x%08X\n",
+               pc, rd, rb, offset5 << 2, address, value);
+    }
+    
+    parentCPU.R()[rd] = value;
 
     DEBUG_INFO("Executing Thumb LDR (immediate offset): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
@@ -1226,7 +1266,12 @@ void ThumbCPU::thumb_pop_registers_and_pc(uint16_t instruction) {
 
     // Pop PC from the stack
     uint32_t new_pc = parentCPU.getMemory().read32(parentCPU.R()[13]); // Read PC from memory
-    parentCPU.R()[15] = new_pc & 0xFFFFFFFE; // Clear bit 0 for THUMB alignment
+    if (new_pc & 1) {
+        parentCPU.setFlag(CPU::FLAG_T);
+    } else {
+        parentCPU.clearFlag(CPU::FLAG_T);
+    }
+    parentCPU.R()[15] = new_pc & 0xFFFFFFFE; // Clear bit 0 for alignment
     DEBUG_INFO("Popping PC from stack: PC = [0x" + std::to_string(parentCPU.R()[13]) + "]");
     parentCPU.R()[13] += 4; // Increment SP by 4
 }
@@ -1238,9 +1283,9 @@ void ThumbCPU::thumb_stmia(uint16_t instruction) {
     // TEMPORARY DEBUG for all STM instructions
     static int stm_count = 0;
     if (stm_count < 5 || instruction == 0xC0CA) {
-        printf("[STM #%d] PC=0x%08X instruction=0x%04X rn=%d reglist=0x%02X\n", 
+        LOG_STACK("[STM #%d] PC=0x%08X instruction=0x%04X rn=%d reglist=0x%02X\n", 
                stm_count, parentCPU.R()[15] - 2, instruction, rn, register_list);
-        printf("[STM #%d] BEFORE: r0=0x%08X r1=0x%08X r2=0x%08X r3=0x%08X\n",
+        LOG_STACK("[STM #%d] BEFORE: r0=0x%08X r1=0x%08X r2=0x%08X r3=0x%08X\n",
                stm_count, parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
     }
     stm_count++;
@@ -1251,7 +1296,7 @@ void ThumbCPU::thumb_stmia(uint16_t instruction) {
         if (register_list & (1 << i)) {
             static int stm_count_inner = 0;
             if (stm_count_inner < 20 || instruction == 0xC0CA) {
-                printf("[STM #%d] Writing R%d=0x%08X to address 0x%08X\n", 
+                LOG_STACK("[STM #%d] Writing R%d=0x%08X to address 0x%08X\n", 
                        stm_count_inner, i, parentCPU.R()[i], address);
             }
             stm_count_inner++;
@@ -1267,8 +1312,8 @@ void ThumbCPU::thumb_stmia(uint16_t instruction) {
     
     static int stm_count_after = 0;
     if (stm_count_after < 5 || instruction == 0xC0CA) {
-        printf("[STM #%d] Updated R%d from 0x%08X to 0x%08X\n", stm_count_after, rn, old_rn, address);
-        printf("[STM #%d] AFTER: r0=0x%08X r1=0x%08X r2=0x%08X r3=0x%08X\n",
+        LOG_STACK("[STM #%d] Updated R%d from 0x%08X to 0x%08X\n", stm_count_after, rn, old_rn, address);
+        LOG_STACK("[STM #%d] AFTER: r0=0x%08X r1=0x%08X r2=0x%08X r3=0x%08X\n",
                stm_count_after, parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
     }
     stm_count_after++;
@@ -1424,7 +1469,7 @@ void ThumbCPU::thumb_swi(uint16_t instruction) {
     // Track SWI calls
     static uint64_t swi_count = 0;
     if (swi_count < 10) {
-        printf("[SWI THUMB #%llu] PC=0x%08X, Comment=0x%02X, R0=%08X R1=%08X R2=%08X R3=%08X\n",
+        LOG_BIOS("[SWI THUMB #%llu] PC=0x%08X, Comment=0x%02X, R0=%08X R1=%08X R2=%08X R3=%08X\n",
                swi_count++, parentCPU.R()[15], comment,
                parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
     }
@@ -1474,9 +1519,14 @@ void ThumbCPU::thumb_bl(uint16_t instruction) {
         // PC is already +4 ahead due to pre-increment, so current_pc + 4 = actual PC value
         // For THUMB: PC used in calculation = (address of first BL instruction) + 4
         parentCPU.R()[14] = (current_pc + 4) + high_offset; 
+
+        if (current_pc >= 0x08097240 && current_pc <= 0x08097260) {
+            LOG_BL("[TRACE BL1] PC=0x%08X instr=0x%04X high_off=0x%08X LR_temp=0x%08X\n",
+                   current_pc, instruction, (uint32_t)high_offset, parentCPU.R()[14]);
+        }
         
         if (g_trace_bios && current_pc < 0x4000) {
-            printf("[BL-PART1] PC=0x%08X: BL prefix, LR_temp=0x%08X\n", current_pc, parentCPU.R()[14]);
+            LOG_BIOS("[BL-PART1] PC=0x%08X: BL prefix, LR_temp=0x%08X\n", current_pc, parentCPU.R()[14]);
         }
         DEBUG_INFO("Executing Thumb BL (first part): Storing intermediate value");
     } else if ((instruction & 0xF800) == 0xF800) {
@@ -1490,9 +1540,14 @@ void ThumbCPU::thumb_bl(uint16_t instruction) {
         
         // Branch to target
         parentCPU.R()[15] = target & 0xFFFFFFFE; // Clear bit 0 for alignment
+
+        if (current_pc >= 0x08097240 && current_pc <= 0x08097260) {
+            LOG_BL("[TRACE BL2] PC=0x%08X instr=0x%04X low_off=0x%08X LR_prev=0x%08X target=0x%08X\n",
+                   current_pc, instruction, low_offset, lr_value, parentCPU.R()[15]);
+        }
         
         if (g_trace_bios && current_pc < 0x4000) {
-            printf("[BL-PART2] PC=0x%08X: BL suffix, LR_prev=0x%08X, low_offset=0x%X, target=0x%08X, LR=0x%08X\n", 
+            LOG_BIOS("[BL-PART2] PC=0x%08X: BL suffix, LR_prev=0x%08X, low_offset=0x%X, target=0x%08X, LR=0x%08X\n", 
                    current_pc, lr_value, low_offset, parentCPU.R()[15], parentCPU.R()[14]);
         }
         DEBUG_INFO("Executing Thumb BL (second part): Branch to 0x" + debug_to_hex_string(parentCPU.R()[15], 8) + " with link, LR=0x" + debug_to_hex_string(parentCPU.R()[14], 8));
@@ -1525,23 +1580,23 @@ void ThumbCPU::executeOneInstruction() {
     // After 5 seconds (at ~16.78MHz, that's ~84M cycles), log the counts
     uint64_t current_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
     if (!logged_counts && current_cycle > 84000000) {
-        printf("\n=== EXECUTION COUNTS AFTER ~5 SECONDS ===\n");
-        printf("PC=0x0120 executed: %llu times\n", count_0x120);
-        printf("PC=0x0122 executed: %llu times\n", count_0x122);
-        printf("PC=0x0124 executed: %llu times\n", count_0x124);
-        printf("Current cycle: %llu\n", current_cycle);
-        printf("If 0x120 count >> 128 iterations expected, we have an infinite loop!\n");
-        printf("=========================================\n\n");
+        LOG_TRACE_CAT("\\n=== EXECUTION COUNTS AFTER ~5 SECONDS ===\\n");
+        LOG_TRACE_CAT("PC=0x0120 executed: %llu times\\n", count_0x120);
+        LOG_TRACE_CAT("PC=0x0122 executed: %llu times\\n", count_0x122);
+        LOG_TRACE_CAT("PC=0x0124 executed: %llu times\\n", count_0x124);
+        LOG_TRACE_CAT("Current cycle: %llu\\n", current_cycle);
+        LOG_TRACE_CAT("If 0x120 count >> 128 iterations expected, we have an infinite loop!\\n");
+        LOG_TRACE_CAT("=========================================\\n\\n");
         logged_counts = true;
     }
     
     // Track invalid PC values
     if (pc >= 0x10000000) {
-        printf("[THUMB ERROR] Invalid PC=0x%08X detected! Cycle=%llu\n", pc, current_cycle);
-        printf("  R0-R7: %08X %08X %08X %08X %08X %08X %08X %08X\n",
+        LOG_CRASH("[THUMB ERROR] Invalid PC=0x%08X detected! Cycle=%llu\n", pc, current_cycle);
+        LOG_CRASH("  R0-R7: %08X %08X %08X %08X %08X %08X %08X %08X\n",
                parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
                parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7]);
-        printf("  R8-R15: %08X %08X %08X %08X %08X %08X %08X %08X\n",
+        LOG_CRASH("  R8-R15: %08X %08X %08X %08X %08X %08X %08X %08X\n",
                parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
                parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[15]);
     }
@@ -1654,12 +1709,12 @@ void ThumbCPU::executeOneInstruction() {
     // Enable tracing when we leave BIOS
     if (pc >= 0x4000 && !rom_trace_enabled) {
         rom_trace_enabled = true;
-        printf("\n[THUMB TRACE] Enabled - left BIOS region\n");
+        LOG_REGION("\n[THUMB TRACE] Enabled - left BIOS region\n");
     }
     
     if (rom_trace_enabled && pc < 0x4000) {
         rom_trace_enabled = false;
-        printf("[THUMB TRACE] Disabled - entered BIOS\n");
+        LOG_REGION("[THUMB TRACE] Disabled - entered BIOS\n");
     }
     
     // Log ROM/RAM execution (disabled for now to check if trace causes crash)

@@ -35,6 +35,11 @@ void printUsage(const char* programName) {
     printf("  --trace-bios             Enable detailed BIOS execution tracing\n");
     printf("  --trace-instructions     Trace first 1000 instructions to /tmp/gba_instruction_trace.log\n");
     printf("  --trace-memory           Trace first 5000 instructions with memory to /tmp/gba_memory_trace.log\n\n");
+    printf("Logging Options:\n");
+    printf("  --log=CAT1,CAT2,...      Enable specific log categories (comma-separated)\n");
+    printf("  --log-all                Enable all log categories\n");
+    printf("  --log-frames=START-END   Only log within frame range (e.g., --log-frames=2230-2240)\n\n");
+    printf("Log Categories: BIOS, IRQ, DMA, STACK, LDR, BL, REGION, VRAM, FEATURE, REG, TRACE, TIMER, CRASH, ALL\n\n");
     printf("Examples:\n");
     printf("  %s game.gba                    # Load and run game.gba\n", programName);
     printf("  %s assets/roms/sonic.bin       # Load ROM from assets\n", programName);
@@ -92,6 +97,14 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "--trace-memory") == 0) {
             enableMemoryTrace = true;
             printf("Memory tracing enabled - writing to %s\n", memoryTraceFile);
+        } else if (strncmp(argv[i], "--log=", 6) == 0) {
+            g_log_categories = parse_log_categories(argv[i]);
+            printf("Log categories: 0x%08X\n", g_log_categories);
+        } else if (strcmp(argv[i], "--log-all") == 0) {
+            g_log_categories = LOG_CAT_ALL;
+            printf("All log categories enabled\n");
+        } else if (strncmp(argv[i], "--log-frames=", 13) == 0) {
+            parse_log_frames(argv[i]);
         } else if (argv[i][0] != '-') {
             // Assume it's a ROM path
             if (romPath != nullptr) {
@@ -216,7 +229,7 @@ int main(int argc, char* argv[]) {
             if (preDisplayCount < 10 && framebuffer) {
                 uint16_t pixel40 = framebuffer[45 * 240 + 40];
                 uint16_t pixel60 = framebuffer[45 * 240 + 60];
-                printf("[PRE-DISPLAY %d] scanline 45: x=40:0x%04X x=60:0x%04X (mode=%d)\n",
+                LOG_TRACE_CAT("[PRE-DISPLAY %d] scanline 45: x=40:0x%04X x=60:0x%04X (mode=%d)\n",
                        preDisplayCount, pixel40, pixel60, videoMode);
                 preDisplayCount++;
             }

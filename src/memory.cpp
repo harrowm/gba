@@ -159,12 +159,12 @@ inline uint8_t* get_region_base(uint8_t* const* regionTable, uint32_t address, u
         // Debug: Log mirroring for IntrWait check address
         static int mirror_log_count = 0;
         if ((address == 0x03FFFFF8 || (address >= 0x03007FF8 && address <= 0x03007FFC)) && mirror_log_count++ < 20) {
-            printf("[IWRAM MIRROR] addr=0x%08X → block=%u orig_offset=0x%X final_offset=0x%X (maps to 0x%08X)\n",
+            LOG_TRACE_CAT("[IWRAM MIRROR] addr=0x%08X → block=%u orig_offset=0x%X final_offset=0x%X (maps to 0x%08X)\n",
                    address, block, original_offset, offset, 0x03000000 + offset);
         }
         // Bounds check for IWRAM
         if (offset > 0x7FFC) {
-            printf("[IWRAM OOB] addr=0x%08X offset=0x%X (max 0x7FFF)\n", address, offset);
+            LOG_CRASH("[IWRAM OOB] addr=0x%08X offset=0x%X (max 0x7FFF)\n", address, offset);
         }
     }
     // VRAM mirroring is handled by the base pointer mapping in the regionTable
@@ -201,7 +201,7 @@ void Memory::write8(uint32_t address, uint8_t value) {
     // Feature detection: OAM writes (sprite data)
     static bool oam_logged = false;
     if (address >= 0x07000000 && address < 0x07000400 && !oam_logged) {
-        printf("[FEATURE] ROM writing to OAM (sprite attribute memory) at 0x%08X\n", address);
+        LOG_FEATURE("[FEATURE] ROM writing to OAM (sprite attribute memory) at 0x%08X\n", address);
         oam_logged = true;
     }
     
@@ -212,7 +212,7 @@ void Memory::write8(uint32_t address, uint8_t value) {
     
     // Debug: Track POSTFLG writes
     if (address == 0x04000300) {
-        printf("[Memory::write8] POSTFLG write: 0x%02X (was 0x%02X)\n", value, base[offset]);
+        LOG_FEATURE("[Memory::write8] POSTFLG write: 0x%02X (was 0x%02X)\n", value, base[offset]);
     }
     
     base[offset] = value;
@@ -229,11 +229,11 @@ uint16_t Memory::read16(uint32_t address) const {
             
             if (regOffset == 8) {  // Word count (DMAxCNT_L)
                 uint16_t count = dmaController->readWordCount(channelID);
-                printf("[DMA%d] Read Word Count: 0x%04X\n", channelID, count);
+                LOG_DMA("[DMA%d] Read Word Count: 0x%04X\n", channelID, count);
                 return count;
             } else if (regOffset == 10) {  // Control (DMAxCNT_H)
                 uint16_t ctrl = dmaController->readControl(channelID);
-                printf("[DMA%d] Read Control: 0x%04X (Enable=%d)\n", channelID, ctrl, (ctrl >> 15) & 1);
+                LOG_DMA("[DMA%d] Read Control: 0x%04X (Enable=%d)\n", channelID, ctrl, (ctrl >> 15) & 1);
                 return ctrl;
             }
         }
@@ -276,7 +276,7 @@ uint16_t Memory::read16(uint32_t address) const {
         static int intrwait_read_count = 0;
         if (intrwait_read_count++ < 50) {
             uint16_t result = (val >> rot) | (val << (16 - rot));
-            printf("[INTRWAIT READ16 #%d] addr=0x%08X → offset=0x%X val=0x%04X rot=%d result=0x%04X\n",
+            LOG_IRQ("[INTRWAIT READ16 #%d] addr=0x%08X → offset=0x%X val=0x%04X rot=%d result=0x%04X\n",
                    intrwait_read_count, address, offset, val, rot, result);
         }
     }
@@ -289,7 +289,7 @@ void Memory::write16(uint32_t address, uint16_t value) {
     
     // Log writes to BIOS work RAM for interrupt tracking
     if (address >= 0x03007F00 && address <= 0x03007FFC) {
-        printf("[IRQ HANDLER] Write16 to 0x%08X: value=0x%04X (BIOS work area)\n", address, value);
+        LOG_IRQ("[IRQ HANDLER] Write16 to 0x%08X: value=0x%04X (BIOS work area)\n", address, value);
     }
     
     // Handle DMA register writes (word count and control only)
@@ -299,11 +299,11 @@ void Memory::write16(uint32_t address, uint16_t value) {
             int regOffset = (address - 0x040000B0) % 12;
             
             if (regOffset == 8) {  // Word count (DMAxCNT_L)
-                printf("[DMA%d] Write Word Count: 0x%04X (%d transfers)\n", channelID, value, value ? value : 65536);
+                LOG_DMA("[DMA%d] Write Word Count: 0x%04X (%d transfers)\n", channelID, value, value ? value : 65536);
                 dmaController->writeWordCount(channelID, value);
                 return;  // Don't write to memory
             } else if (regOffset == 10) {  // Control (DMAxCNT_H)
-                printf("[DMA%d] Write Control: 0x%04X (Enable=%d, Mode=%d, 32bit=%d)\n", 
+                LOG_DMA("[DMA%d] Write Control: 0x%04X (Enable=%d, Mode=%d, 32bit=%d)\n", 
                        channelID, value, (value >> 15) & 1, (value >> 12) & 3, (value >> 10) & 1);
                 dmaController->writeControl(channelID, value);
                 return;  // Don't write to memory
@@ -350,10 +350,10 @@ void Memory::write16(uint32_t address, uint16_t value) {
         if (vram_writes++ < 200) {
             if (address >= 0x06010000) {
                 uint32_t tileNum = (address - 0x06010000) / 32;
-                printf("[OBJ VRAM Write #%d] addr=0x%08X (tile %d, offset 0x%06X) val=0x%04X\n",
+                LOG_VRAM("[OBJ VRAM Write #%d] addr=0x%08X (tile %d, offset 0x%06X) val=0x%04X\n",
                        vram_writes, address, tileNum, address - 0x06010000, val);
             } else {
-                printf("[BG VRAM Write #%d] addr=0x%08X (offset 0x%06X) val=0x%04X\n",
+                LOG_VRAM("[BG VRAM Write #%d] addr=0x%08X (offset 0x%06X) val=0x%04X\n",
                        vram_writes, address, address - 0x06000000, val);
             }
         }
@@ -373,19 +373,19 @@ void Memory::write16(uint32_t address, uint16_t value) {
     
     // Log writes to IE register (Interrupt Enable)
     if (address == 0x04000200) {  // REG_IE
-        printf("[REG Write] IE (Interrupt Enable) = 0x%04X\n", val);
+        LOG_REG("[REG Write] IE (Interrupt Enable) = 0x%04X\n", val);
     }
     
     // Log writes to IME register (Interrupt Master Enable)
     if (address == 0x04000208) {  // REG_IME
-        printf("[REG Write] IME (Interrupt Master Enable) = 0x%04X\n", val);
+        LOG_REG("[REG Write] IME (Interrupt Master Enable) = 0x%04X\n", val);
     }
     
     // Log writes to IntrWait check location at 0x03007FF8 (can be written via 0x03FFFFF8)
     if (address == 0x03007FF8 || address == 0x03FFFFF8) {
         static int intrwait_write_count = 0;
         if (intrwait_write_count++ < 50) {
-            printf("[INTRWAIT WRITE16 #%d] addr=0x%08X val=0x%04X (BIOS should write IF copy here)\n",
+            LOG_IRQ("[INTRWAIT WRITE16 #%d] addr=0x%08X val=0x%04X (BIOS should write IF copy here)\n",
                    intrwait_write_count, address, val);
         }
     }
@@ -398,7 +398,7 @@ void Memory::write16(uint32_t address, uint16_t value) {
         base[(offset + 1) % wrapSize] = (newIF >> 8) & 0xFF;
         static int if_write_count = 0;
         if (if_write_count++ < 10) {
-            printf("[REG Write #%d] IF acknowledge = 0x%04X, currentIF was = 0x%04X, new IF = 0x%04X\n", 
+            LOG_REG("[REG Write #%d] IF acknowledge = 0x%04X, currentIF was = 0x%04X, new IF = 0x%04X\n", 
                    if_write_count, val, currentIF, newIF);
         }
         return;
@@ -428,34 +428,34 @@ void Memory::write16(uint32_t address, uint16_t value) {
         bool win1 = (value >> 14) & 1;
         bool objWin = (value >> 15) & 1;
         
-        printf("[DISPCNT] Write 0x%04X: Mode=%d Blank=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d Win0=%d Win1=%d ObjWin=%d\n",
+        LOG_REG("[DISPCNT] Write 0x%04X: Mode=%d Blank=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d Win0=%d Win1=%d ObjWin=%d\n",
                value, mode, forcedBlank, bg0, bg1, bg2, bg3, obj, win0, win1, objWin);
         
 
         
         // Log features being used
         if (mode > 0 && !feature_logged[0]) {
-            printf("[FEATURE] ROM using video Mode %d (bitmap/affine modes)\n", mode);
+            LOG_FEATURE("[FEATURE] ROM using video Mode %d (bitmap/affine modes)\n", mode);
             feature_logged[0] = true;
         }
         if (bg1 && !feature_logged[1]) {
-            printf("[FEATURE] ROM enabling BG1 (text/affine background layer)\n");
+            LOG_FEATURE("[FEATURE] ROM enabling BG1 (text/affine background layer)\n");
             feature_logged[1] = true;
         }
         if (bg2 && !feature_logged[2]) {
-            printf("[FEATURE] ROM enabling BG2 (text/affine background layer)\n");
+            LOG_FEATURE("[FEATURE] ROM enabling BG2 (text/affine background layer)\n");
             feature_logged[2] = true;
         }
         if (bg3 && !feature_logged[3]) {
-            printf("[FEATURE] ROM enabling BG3 (text/affine background layer)\n");
+            LOG_FEATURE("[FEATURE] ROM enabling BG3 (text/affine background layer)\n");
             feature_logged[3] = true;
         }
         if (obj && !feature_logged[4]) {
-            printf("[FEATURE] ROM enabling OBJ (sprites/objects)\n");
+            LOG_FEATURE("[FEATURE] ROM enabling OBJ (sprites/objects)\n");
             feature_logged[4] = true;
         }
         if ((win0 || win1 || objWin) && !feature_logged[5]) {
-            printf("[FEATURE] ROM enabling Windows (win0=%d win1=%d objWin=%d)\n", win0, win1, objWin);
+            LOG_FEATURE("[FEATURE] ROM enabling Windows (win0=%d win1=%d objWin=%d)\n", win0, win1, objWin);
             feature_logged[5] = true;
         }
     }
@@ -471,27 +471,36 @@ void Memory::write16(uint32_t address, uint16_t value) {
         int wraparound = (value >> 13) & 0x1;
         int screenSize = (value >> 14) & 0x3;
         
-        printf("[BG%dCNT] Write 0x%04X: Priority=%d CharBase=%d Mosaic=%d Colors=%s ScreenBase=%d Wrap=%d Size=%d\n",
+        LOG_REG("[BG%dCNT] Write 0x%04X: Priority=%d CharBase=%d Mosaic=%d Colors=%s ScreenBase=%d Wrap=%d Size=%d\n",
                bgNum, value, priority, charBase, mosaic, colors ? "256" : "16", screenBase, wraparound, screenSize);
         feature_logged[10 + bgNum] = true;
     }
     
     // Track affine parameters (BG2/BG3 rotation/scaling)
     if (address >= 0x04000020 && address <= 0x0400003F && !feature_logged[20]) {
-        printf("[FEATURE] ROM writing BG affine parameters (rotation/scaling) at 0x%08X = 0x%04X\n", address, value);
+        LOG_FEATURE("[FEATURE] ROM writing BG affine parameters (rotation/scaling) at 0x%08X = 0x%04X\n", address, value);
         feature_logged[20] = true;
     }
     
     // Track blending registers
     if (address >= 0x04000050 && address <= 0x04000054 && !feature_logged[21]) {
-        printf("[FEATURE] ROM enabling color blending/effects at 0x%08X = 0x%04X\n", address, value);
+        LOG_FEATURE("[FEATURE] ROM enabling color blending/effects at 0x%08X = 0x%04X\n", address, value);
         feature_logged[21] = true;
     }
     
     // Track mosaic
     if (address == 0x0400004C && !feature_logged[22]) {
-        printf("[FEATURE] ROM enabling mosaic effect = 0x%04X\n", value);
+        LOG_FEATURE("[FEATURE] ROM enabling mosaic effect = 0x%04X\n", value);
         feature_logged[22] = true;
+    }
+    
+    // STACK CORRUPTION WATCH: Watch for writes to stack region
+    if (address >= 0x03000000 && address < 0x04000000) {
+        uint32_t iwram_offset = address & 0x7FFF;  // IWRAM 32KB mask
+        if (iwram_offset >= 0x7E80 && iwram_offset <= 0x7EA0) {
+            LOG_STACK("[STACK WATCH] Write16 to 0x%08X (IWRAM+0x%04X): value=0x%04X\n",
+                   address, iwram_offset, val);
+        }
     }
     
     base[offset] = val & 0xFF;
@@ -553,9 +562,8 @@ uint32_t Memory::readDirectIO32(uint32_t address) const {
     if (address == 0x00000018) {
         static int bios18_read_count = 0;
         bios18_read_count++;
-        printf("[BIOS 0x18 DirectIO READ #%d] offset=%u, bytes: %02X %02X %02X %02X = value 0x%08X (base=%p)\n",
+        LOG_BIOS("[BIOS 0x18 DirectIO READ #%d] offset=%u, bytes: %02X %02X %02X %02X = value 0x%08X (base=%p)\n",
                bios18_read_count, offset, b0, b1, b2, b3, val, (void*)base);
-        fflush(stdout);
     }
     
     return val;
@@ -584,7 +592,7 @@ uint32_t Memory::read32(uint32_t address) const {
     if (address == 0x03FFFFFC || address == 0x03007FFC) {
         static int irq_ptr_read_count = 0;
         if (irq_ptr_read_count++ < 100) {
-            printf("[IRQ PTR READ #%d] Reading from 0x%08X\n", irq_ptr_read_count, address);
+            LOG_IRQ("[IRQ PTR READ #%d] Reading from 0x%08X\n", irq_ptr_read_count, address);
         }
     }
     
@@ -637,9 +645,8 @@ uint32_t Memory::read32(uint32_t address) const {
     if (aligned_address == 0x00000018) {
         static int bios18_read_count = 0;
         bios18_read_count++;
-        printf("[BIOS 0x18 READ #%d] offset=%u, bytes: %02X %02X %02X %02X = value 0x%08X\n",
+        LOG_BIOS("[BIOS 0x18 READ #%d] offset=%u, bytes: %02X %02X %02X %02X = value 0x%08X\n",
                bios18_read_count, offset, base[offset], base[offset+1], base[offset+2], base[offset+3], val);
-        fflush(stdout);
     }
     
     // Rotate right by misalignment * 8 bits
@@ -651,7 +658,7 @@ uint32_t Memory::read32(uint32_t address) const {
     if (address >= 0x04000000 && address < 0x04000400) {
         static int ioReadCount = 0;
         if (ioReadCount < 20) {
-            printf("[I/O Read32] Address=0x%08X Value=0x%08X\n", address, val);
+            LOG_REG("[I/O Read32] Address=0x%08X Value=0x%08X\n", address, val);
             ioReadCount++;
         }
     }
@@ -664,7 +671,7 @@ uint32_t Memory::read32(uint32_t address) const {
     if (address == 0x03FFFFFC || address == 0x03007FFC) {
         static int irq_ptr_result_count = 0;
         if (irq_ptr_result_count++ < 100) {
-            printf("[IRQ PTR VALUE #%d] Read from 0x%08X = 0x%08X (offset=0x%X)\n", 
+            LOG_IRQ("[IRQ PTR VALUE #%d] Read from 0x%08X = 0x%08X (offset=0x%X)\n", 
                    irq_ptr_result_count, address, val, offset);
         }
     }
@@ -700,17 +707,17 @@ void Memory::write32(uint32_t address, uint32_t value) {
             int regOffset = (address - 0x040000B0) % 12;
             
             if (regOffset == 0) {  // Source address (DMAxSAD)
-                printf("[DMA%d] Write Source Address: 0x%08X\n", channelID, value);
+                LOG_DMA("[DMA%d] Write Source Address: 0x%08X\n", channelID, value);
                 dmaController->writeSourceAddress(channelID, value);
                 return;  // Don't write to memory
             } else if (regOffset == 4) {  // Dest address (DMAxDAD)
-                printf("[DMA%d] Write Dest Address: 0x%08X\n", channelID, value);
+                LOG_DMA("[DMA%d] Write Dest Address: 0x%08X\n", channelID, value);
                 dmaController->writeDestAddress(channelID, value);
                 return;  // Don't write to memory
             } else if (regOffset == 8) {  // Word count + Control (DMAxCNT as 32-bit write)
                 uint16_t word_count = value & 0xFFFF;
                 uint16_t control = (value >> 16) & 0xFFFF;
-                printf("[DMA%d] Write32 CNT: WordCount=0x%04X Control=0x%04X (Enable=%d, Mode=%d, 32bit=%d)\n", 
+                LOG_DMA("[DMA%d] Write32 CNT: WordCount=0x%04X Control=0x%04X (Enable=%d, Mode=%d, 32bit=%d)\n", 
                        channelID, word_count, control, 
                        (control >> 15) & 1, (control >> 12) & 3, (control >> 10) & 1);
                 dmaController->writeWordCount(channelID, word_count);
@@ -744,7 +751,7 @@ void Memory::write32(uint32_t address, uint32_t value) {
     
     // Log writes that overlap IE/IF/IME registers
     if (aligned_address >= 0x04000200 && aligned_address <= 0x04000208) {
-        printf("[REG Write32] Address=0x%08X Value=0x%08X (may write IE/IF/IME)\n", aligned_address, val);
+        LOG_REG("[REG Write32] Address=0x%08X Value=0x%08X (may write IE/IF/IME)\n", aligned_address, val);
     }
     
     // Log writes to IRQ handler pointer area AND interrupt acknowledge flags
@@ -755,7 +762,7 @@ void Memory::write32(uint32_t address, uint32_t value) {
     if (aligned_address == 0x03FFFFFC || aligned_address == 0x03007FFC) {
         static int irq_write_count = 0;
         if (irq_write_count++ < 50) {
-            printf("[IRQ HANDLER WRITE #%d] Writing 0x%08X to 0x%08X\n", 
+            LOG_IRQ("[IRQ HANDLER WRITE #%d] Writing 0x%08X to 0x%08X\n", 
                    irq_write_count, val, aligned_address);
         }
     }
@@ -766,11 +773,11 @@ void Memory::write32(uint32_t address, uint32_t value) {
                           ((val >> 28) == 0x6) ||  // 0x6xxxxxxx range
                           ((val >> 28) == 0x1);    // 0x1xxxxxxx range
         if (suspicious) {
-            printf("[CORRUPTION!] Write32 to 0x%08X: value=0x%08X (suspicious value in IRQ/BIOS work area)\n", 
+            LOG_CRASH("[CORRUPTION!] Write32 to 0x%08X: value=0x%08X (suspicious value in IRQ/BIOS work area)\n", 
                    aligned_address, val);
         }
         if (aligned_address == 0x03FFFFFC && (val < 0x02000000 || val > 0x0FFFFFFF)) {
-            printf("[IRQ HANDLER ERROR] Suspicious IRQ handler address 0x%08X written to 0x%08X!\n", val, aligned_address);
+            LOG_CRASH("[IRQ HANDLER ERROR] Suspicious IRQ handler address 0x%08X written to 0x%08X!\n", val, aligned_address);
         }
     }
     
@@ -786,30 +793,46 @@ void Memory::write32(uint32_t address, uint32_t value) {
         bool bg3 = (dispcnt_value >> 11) & 1;
         bool obj = (dispcnt_value >> 12) & 1;
         
-        printf("[DISPCNT32] Write 0x%04X: Mode=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d\n",
+        LOG_REG("[DISPCNT32] Write 0x%04X: Mode=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d\n",
                dispcnt_value, mode, bg0, bg1, bg2, bg3, obj);
         
         if (mode > 0 && !feature_logged32[0]) {
-            printf("[FEATURE] ROM using video Mode %d (detected in write32)\n", mode);
+            LOG_FEATURE("[FEATURE] ROM using video Mode %d (detected in write32)\n", mode);
             feature_logged32[0] = true;
         }
         if (obj && !feature_logged32[10]) {
-            printf("[FEATURE] ROM enabling sprites/OBJ (detected in write32)\n");
+            LOG_FEATURE("[FEATURE] ROM enabling sprites/OBJ (detected in write32)\n");
             feature_logged32[10] = true;
         }
     }
     
     // Track OAM writes (32-bit)
     if (aligned_address >= 0x07000000 && aligned_address < 0x07000400 && !feature_logged32[30]) {
-        printf("[FEATURE] ROM writing to OAM via write32 at 0x%08X\n", aligned_address);
+        LOG_FEATURE("[FEATURE] ROM writing to OAM via write32 at 0x%08X\n", aligned_address);
         feature_logged32[30] = true;
+    }
+    
+    // STACK CORRUPTION WATCH: Catch writes of suspicious values to stack region
+    // The crash at frame 2236 is caused by BX R3 where R3=0xF4F7FF46 loaded from stack ~0x03007E8C
+    uint32_t iwram_offset = aligned_address & 0x7FFF;  // IWRAM 32KB mask
+    if (aligned_address >= 0x03000000 && aligned_address < 0x04000000) {
+        // Watch for writes to stack region 0x03007E80-0x03007EA0
+        if (iwram_offset >= 0x7E80 && iwram_offset <= 0x7EA0) {
+            LOG_STACK("[STACK WATCH] Write32 to 0x%08X (IWRAM+0x%04X): value=0x%08X\n",
+                   aligned_address, iwram_offset, val);
+        }
+        // Also catch the specific corrupt value anywhere in IWRAM stack area
+        if (val == 0xF4F7FF46 || (val >= 0xF0000000 && val <= 0xFFFFFFFF)) {
+            LOG_CRASH("[STACK CORRUPT!] Write32 to 0x%08X: suspicious value 0x%08X\n",
+                   aligned_address, val);
+        }
     }
     
     // Debug: Track VRAM writes
     if (address >= 0x06000000 && address < 0x06018000) {
         static int vramWriteCount = 0;
         if (vramWriteCount < 10) {
-            printf("[VRAM Write32] Address: 0x%08X, Value: 0x%08X, base=%p, vram=%p, offset=%u\n", 
+            LOG_VRAM("[VRAM Write32] Address: 0x%08X, Value: 0x%08X, base=%p, vram=%p, offset=%u\n", 
                    address, value, (void*)base, (void*)vram, offset);
             vramWriteCount++;
         }

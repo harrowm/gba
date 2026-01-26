@@ -48,14 +48,14 @@ void ARMCPU::execute(uint32_t cycles) {
         // Track invalid PC values
         if (pc >= 0x10000000) {
             uint64_t current_cycle = parentCPU.getScheduler() ? parentCPU.getScheduler()->getCurrentCycle() : 0;
-            printf("[ARM ERROR] Invalid PC=0x%08X detected! Cycle=%llu\n", pc, current_cycle);
-            printf("  R0-R7: %08X %08X %08X %08X %08X %08X %08X %08X\n",
+            LOG_CRASH("[ARM ERROR] Invalid PC=0x%08X detected! Cycle=%llu\n", pc, current_cycle);
+            LOG_CRASH("  R0-R7: %08X %08X %08X %08X %08X %08X %08X %08X\n",
                    parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
                    parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7]);
-            printf("  R8-R15: %08X %08X %08X %08X %08X %08X %08X %08X\n",
+            LOG_CRASH("  R8-R15: %08X %08X %08X %08X %08X %08X %08X %08X\n",
                    parentCPU.R()[8], parentCPU.R()[9], parentCPU.R()[10], parentCPU.R()[11],
                    parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[15]);
-            printf("  CPSR: %08X\n", parentCPU.CPSR());
+            LOG_CRASH("  CPSR: %08X\n", parentCPU.CPSR());
             // Only log first occurrence
             static bool logged_invalid = false;
             if (!logged_invalid) {
@@ -68,7 +68,7 @@ void ARMCPU::execute(uint32_t cycles) {
         // Log when we enter ROM space
         static bool in_rom = false;
         if (!in_rom && pc >= 0x08000000 && pc < 0x0E000000) {
-            printf("\n*** ENTERING ROM CODE at PC=0x%08X ***\n\n", pc);
+            LOG_REGION("\n*** ENTERING ROM CODE at PC=0x%08X ***\n\n", pc);
             in_rom = true;
         }
         
@@ -79,19 +79,19 @@ void ARMCPU::execute(uint32_t cycles) {
 
         // Debug IntrWait function (0x330-0x378)
         if (pc >= 0x330 && pc <= 0x378) {
-            printf("\n[IntrWait TRACE] PC=0x%08X, instruction=0x%08X\n", pc, instruction);
-            printf("  R0=0x%08X R1=0x%08X R2=0x%08X R3=0x%08X\n",
+            LOG_IRQ("\n[IntrWait TRACE] PC=0x%08X, instruction=0x%08X\n", pc, instruction);
+            LOG_IRQ("  R0=0x%08X R1=0x%08X R2=0x%08X R3=0x%08X\n",
                    parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
-            printf("  R4=0x%08X R12=0x%08X LR=0x%08X PC=0x%08X\n",
+            LOG_IRQ("  R4=0x%08X R12=0x%08X LR=0x%08X PC=0x%08X\n",
                    parentCPU.R()[4], parentCPU.R()[12], parentCPU.R()[14], parentCPU.R()[15]);
-            printf("  CPSR=0x%08X (Z=%d N=%d C=%d V=%d)\n",
+            LOG_IRQ("  CPSR=0x%08X (Z=%d N=%d C=%d V=%d)\n",
                    parentCPU.CPSR(),
                    parentCPU.getFlag(CPU::FLAG_Z), parentCPU.getFlag(CPU::FLAG_N),
                    parentCPU.getFlag(CPU::FLAG_C), parentCPU.getFlag(CPU::FLAG_V));
             uint16_t ie = parentCPU.getMemory().readDirectIO16(0x04000200);
             uint16_t if_reg = parentCPU.getMemory().readDirectIO16(0x04000202);
             uint8_t ime = parentCPU.getMemory().readDirectIO8(0x04000208);
-            printf("  IE=0x%04X IF=0x%04X IME=0x%02X\n", ie, if_reg, ime);
+            LOG_IRQ("  IE=0x%04X IF=0x%04X IME=0x%02X\n", ie, if_reg, ime);
         }
 
         executeInstruction(pc, instruction);
@@ -214,7 +214,7 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
         uint32_t ime = parentCPU.getMemory().readDirectIO32(0x04000208);
         
         // Print in mGBA-compatible compact format (matches the format from the trace script)
-        printf("PC:%08X R00:%08X R01:%08X R02:%08X R03:%08X R04:%08X R05:%08X R06:%08X R07:%08X R08:%08X R09:%08X R10:%08X R11:%08X R12:%08X R13:%08X R14:%08X R15:%08X CPSR:%08X | IE:%04X IF:%04X IME:%08X\n",
+        LOG_TRACE_CAT("PC:%08X R00:%08X R01:%08X R02:%08X R03:%08X R04:%08X R05:%08X R06:%08X R07:%08X R08:%08X R09:%08X R10:%08X R11:%08X R12:%08X R13:%08X R14:%08X R15:%08X CPSR:%08X | IE:%04X IF:%04X IME:%08X\n",
                pc,
                parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
                parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7],
@@ -231,7 +231,7 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
                                      sizeof(instruction),
                                      pc, 1, &insn);
             if (count > 0) {
-                printf("     ; %s %s\n", insn[0].mnemonic, insn[0].op_str);
+                LOG_TRACE_CAT("     ; %s %s\n", insn[0].mnemonic, insn[0].op_str);
                 cs_free(insn, count);
             }
         }
@@ -239,7 +239,7 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     
     // Track BIOS exit
     if (!pc_in_bios && in_bios) {
-        printf("\n*** [%llu] PC LEFT BIOS at 0x%08X (last BIOS PC: 0x%08X) ***\n", 
+        LOG_BIOS("\n*** [%llu] PC LEFT BIOS at 0x%08X (last BIOS PC: 0x%08X) ***\n", 
                instruction_count, pc, last_pc);
         in_bios = false;
     }
@@ -302,12 +302,11 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     if (pc == 0x00000018) {
         static int irq_vec_count = 0;
         irq_vec_count++;
-        printf("[BIOS IRQ #%d] PC=0x%08X Instr=0x%08X CPSR=0x%08X\n", 
+        LOG_IRQ("[BIOS IRQ #%d] PC=0x%08X Instr=0x%08X CPSR=0x%08X\n", 
                irq_vec_count, pc, instruction, parentCPU.CPSR());
-        printf("  R0-R3: %08X %08X %08X %08X\n",
+        LOG_IRQ("  R0-R3: %08X %08X %08X %08X\n",
                parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
-        printf("  LR=%08X SP=%08X\n", parentCPU.R()[14], parentCPU.R()[13]);
-        fflush(stdout);
+        LOG_IRQ("  LR=%08X SP=%08X\n", parentCPU.R()[14], parentCPU.R()[13]);
     }
 
     uint32_t index = (bits<27,20>(instruction) << 1) | ((instruction & 0x90) == 0x90); // bit 7 and 4 are set
@@ -429,6 +428,15 @@ void ARMCPU::executeOneInstruction() {
     
     // Fetch instruction without charging wait cycles (pipelined - happens during previous instruction's execution)
     uint32_t instruction = parentCPU.getMemory().readDirectIO32(pc);
+
+    // Targeted trace around Sonic branch to UNKNOWN region
+    if (pc >= 0x08097240 && pc <= 0x08097260) {
+        static int trace_count = 0;
+        if (trace_count++ < 20) {
+            printf("[TRACE ROM] PC=0x%08X instr=0x%08X CPSR=0x%08X R0=0x%08X R1=0x%08X R2=0x%08X R3=0x%08X LR=0x%08X\n",
+                   pc, instruction, parentCPU.CPSR(), parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3], parentCPU.R()[14]);
+        }
+    }
     
     // Detect infinite loop (b . or 0xEAFFFFFE) - used by test ROMs to indicate completion
     static bool infinite_loop_detected = false;

@@ -216,10 +216,9 @@ void ARMCPU::exec_arm_ldr_imm_pre_nowb(uint32_t instruction) {
     if (rd == 15 && parentCPU.R()[15] < 0x4000) {
         static int ldr_pc_count = 0;
         ldr_pc_count++;
-        printf("[LDR PC #%d] @0x%08X: R%d = [R%d(%08X) %c %d] = [%08X] = %08X\n",
+        LOG_BIOS("[LDR PC #%d] @0x%08X: R%d = [R%d(%08X) %c %d] = [%08X] = %08X\n",
                ldr_pc_count, parentCPU.R()[15], rd, rn, parentCPU.R()[rn],
                up ? '+' : '-', imm, addr, value);
-        fflush(stdout);
     }
     
     parentCPU.R()[rd] = value;
@@ -288,7 +287,7 @@ void ARMCPU::exec_arm_ldr_reg_pre_nowb(uint32_t instruction) {
     // Debug: track BIOS LDR from jump table (address 0x1C0-0x250)
     static int ldr_trace = 0;
     if (addr >= 0x1C0 && addr < 0x250 && ldr_trace < 10) {
-        printf("[LDR JMP #%d] PC=0x%08X: R%d = [0x%08X] = 0x%08X (base=R%d=0x%08X, rm=R%d=0x%08X, shift=%d)\n",
+        LOG_BIOS("[LDR JMP #%d] PC=0x%08X: R%d = [0x%08X] = 0x%08X (base=R%d=0x%08X, rm=R%d=0x%08X, shift=%d)\n",
                ldr_trace++, parentCPU.R()[15], rd, addr, value, rn, base, rm, parentCPU.R()[rm], shift_amount);
     }
     parentCPU.R()[rd] = value;
@@ -458,7 +457,7 @@ void ARMCPU::exec_arm_ldrb_imm_pre_nowb(uint32_t instruction) {
     // Debug: track BIOS LDRB from ROM to get SWI comment
     static int ldrb_trace = 0;
     if (addr >= 0x08000000 && addr < 0x0A000000 && ldrb_trace < 10) {
-        printf("[LDRB #%d] PC=0x%08X: R%d = [0x%08X] = 0x%02X (base=0x%08X, imm=%d, up=%d)\n",
+        LOG_BIOS("[LDRB #%d] PC=0x%08X: R%d = [0x%08X] = 0x%02X (base=0x%08X, imm=%d, up=%d)\n",
                ldrb_trace++, parentCPU.R()[15], rd, addr, value, base, imm, up);
     }
     parentCPU.R()[rd] = value;

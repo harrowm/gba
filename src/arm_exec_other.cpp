@@ -116,7 +116,7 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
         // Debug: Log the CPSR restoration
         static int spsr_restore_count = 0;
         if (spsr_restore_count++ < 10) {
-            printf("[LDM ^] Restoring CPSR from SPSR: 0x%08X -> 0x%08X, new PC=0x%08X\n",
+            LOG_IRQ("[LDM ^] Restoring CPSR from SPSR: 0x%08X -> 0x%08X, new PC=0x%08X\n",
                    parentCPU.CPSR(), spsr, parentCPU.R()[15]);
         }
         parentCPU.setCPSR(spsr);
@@ -170,7 +170,7 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
         if (base >= 0x06000000 && base < 0x06018000) {
             static int vram_stm_count = 0;
             if (vram_stm_count < 20) {
-                printf("[STM VRAM #%d @PC=0x%08X] R%d writeback: 0x%08X -> 0x%08X (delta=%d)\n",
+                LOG_VRAM("[STM VRAM #%d @PC=0x%08X] R%d writeback: 0x%08X -> 0x%08X (delta=%d)\n",
                        vram_stm_count++, parentCPU.R()[15], rn, base, new_base, (int32_t)(new_base - base));
             }
         }
@@ -191,9 +191,8 @@ void ARMCPU::exec_arm_b(uint32_t instruction) {
         static int bios_b_count = 0;
         bios_b_count++;
         uint32_t target = pc_before + branch_offset;
-        printf("[BIOS B #%d] @0x%08X: offset=0x%06X, branch_offset=%d -> target=0x%08X CPSR=0x%08X\n",
+        LOG_BIOS("[BIOS B #%d] @0x%08X: offset=0x%06X, branch_offset=%d -> target=0x%08X CPSR=0x%08X\n",
                bios_b_count, pc_before, offset & 0xFFFFFF, branch_offset, target, parentCPU.CPSR());
-        fflush(stdout);
     }
     
     parentCPU.R()[15] += branch_offset;
@@ -274,10 +273,10 @@ void ARMCPU::exec_arm_undefined(uint32_t instruction) {
     static int undef_count = 0;
     undef_count++;
     if (undef_count <= 20) {
-        printf("[UNDEFINED INSTRUCTION #%d] PC=0x%08X Instr=0x%08X\n", undef_count, parentCPU.R()[15], instruction);
-        printf("  CPSR=0x%08X Mode=0x%02X T=%d\n", parentCPU.CPSR(), parentCPU.CPSR() & 0x1F, (parentCPU.CPSR() >> 5) & 1);
-        printf("  R0-R3: %08X %08X %08X %08X\n", parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
-        printf("  LR=%08X SP=%08X\n", parentCPU.R()[14], parentCPU.R()[13]);
+        LOG_CRASH("[UNDEFINED INSTRUCTION #%d] PC=0x%08X Instr=0x%08X\n", undef_count, parentCPU.R()[15], instruction);
+        LOG_CRASH("  CPSR=0x%08X Mode=0x%02X T=%d\n", parentCPU.CPSR(), parentCPU.CPSR() & 0x1F, (parentCPU.CPSR() >> 5) & 1);
+        LOG_CRASH("  R0-R3: %08X %08X %08X %08X\n", parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+        LOG_CRASH("  LR=%08X SP=%08X\n", parentCPU.R()[14], parentCPU.R()[13]);
         fflush(stdout);
     }
     
@@ -325,10 +324,10 @@ void ARMCPU::exec_arm_stc_reg(uint32_t instruction) {
 void ARMCPU::exec_arm_bx_possible(uint32_t instruction) {
     static int call_count = 0;
     if (call_count < 5) {
-        printf("[exec_arm_bx_possible #%d] PC=0x%08X, Instr=0x%08X\n", 
+        LOG_TRACE_CAT("[exec_arm_bx_possible #%d] PC=0x%08X, Instr=0x%08X\n", 
                call_count++, parentCPU.R()[15], instruction);
-        printf("  BX check: (instr & 0x0FFFFFF0) = 0x%08X (vs 0x012FFF10)\n", instruction & 0x0FFFFFF0);
-        printf("  MSR check: (instr & 0x0FF00FF0) = 0x%08X (vs 0x01200F00)\n", instruction & 0x0FF00FF0);
+        LOG_TRACE_CAT("  BX check: (instr & 0x0FFFFFF0) = 0x%08X (vs 0x012FFF10)\n", instruction & 0x0FFFFFF0);
+        LOG_TRACE_CAT("  MSR check: (instr & 0x0FF00FF0) = 0x%08X (vs 0x01200F00)\n", instruction & 0x0FF00FF0);
     }
     DEBUG_LOG(std::string("exec_arm_bx_possible: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
     // BX encoding: bits 27-4 == 0001 0010 1111 1111 1111 0001 (0x012FFF10)

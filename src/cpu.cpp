@@ -195,7 +195,7 @@ bool CPU::checkPendingInterrupts() {
         if (check_count % 1000 == 0) {
             uint16_t ie = memory.read16(0x04000200);
             uint16_t ifReg = memory.read16(0x04000202);
-            printf("[CHECK_IRQ #%d] IE=0x%04X IF=0x%04X (VBlank=%d HBlank=%d Timer0=%d)\n",
+            LOG_IRQ("[CHECK_IRQ #%d] IE=0x%04X IF=0x%04X (VBlank=%d HBlank=%d Timer0=%d)\n",
                    check_count, ie, ifReg, (ifReg & 0x01), (ifReg & 0x02) >> 1, (ifReg & 0x08) >> 3);
         }
     }
@@ -217,7 +217,7 @@ void CPU::handleInterrupt() {
     // Save current CPSR before mode switch
     uint32_t old_cpsr = cpsr;
     if (irq_count <= 5) {
-        printf("[IRQ #%d] handleInterrupt: CPSR before=0x%08X, PC=0x%08X\n", irq_count, cpsr, registers[15]);
+        LOG_IRQ("[IRQ #%d] handleInterrupt: CPSR before=0x%08X, PC=0x%08X\n", irq_count, cpsr, registers[15]);
         fflush(stdout);
     }
     
@@ -237,7 +237,7 @@ void CPU::handleInterrupt() {
     }
     
     if (irq_count <= 5) {
-        printf("[IRQ #%d] Calculated return address=0x%08X\n", irq_count, returnAddress);
+        LOG_IRQ("[IRQ #%d] Calculated return address=0x%08X\n", irq_count, returnAddress);
     }
     
     // Switch to IRQ mode (this handles register banking)
@@ -253,7 +253,7 @@ void CPU::handleInterrupt() {
     cpsr |= 0x80; // Set I flag (bit 7)
     
     if (irq_count <= 5) {
-        printf("[IRQ #%d] Set I flag, CPSR now=0x%08X\n", irq_count, cpsr);
+        LOG_IRQ("[IRQ #%d] Set I flag, CPSR now=0x%08X\n", irq_count, cpsr);
     }
     
     // Switch to ARM mode (clear T flag in CPSR)
@@ -263,7 +263,7 @@ void CPU::handleInterrupt() {
     registers[15] = 0x00000018;
     
     if (irq_count <= 5) {
-        printf("[IRQ #%d] Set PC to IRQ vector 0x00000018\n", irq_count);
+        LOG_IRQ("[IRQ #%d] Set PC to IRQ vector 0x00000018\n", irq_count);
         fflush(stdout);
     }
     

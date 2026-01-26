@@ -2,36 +2,112 @@
 #define DEBUG_H
 
 /*
- * Debug System - Macro-based debugging with complete production stripping
+ * Unified Debug & Logging System
  * 
+ * Two separate systems:
+ * 1. DEBUG_* macros - Development debugging (stripped in production builds)
+ * 2. LOG_* macros   - Runtime logging with category and frame filtering
+ *
+ * === LOGGING SYSTEM (always available) ===
+ * 
+ * Categories (can be combined with bitwise OR):
+ *   LOG_CAT_BIOS    - BIOS-related messages
+ *   LOG_CAT_IRQ     - Interrupt handling
+ *   LOG_CAT_DMA     - DMA transfers
+ *   LOG_CAT_STACK   - Stack operations and corruption detection
+ *   LOG_CAT_LDR     - Load instruction suspicious values
+ *   LOG_CAT_BL      - Branch with link tracing
+ *   LOG_CAT_REGION  - PC region transitions
+ *   LOG_CAT_VRAM    - VRAM/palette writes
+ *   LOG_CAT_FEATURE - Feature detection
+ *   LOG_CAT_REG     - Register writes (IE/IF/IME etc)
+ *   LOG_CAT_TRACE   - Instruction tracing
+ *   LOG_CAT_TIMER   - Timer operations
+ *   LOG_CAT_CRASH   - Crash/UNKNOWN region detection (always recommended)
+ *
  * Usage:
- *   - Define DEBUG_BUILD during compilation to enable debug output
- *   - Leave DEBUG_BUILD undefined for production builds (completely strips debug code)
- *   
- * Debug Macros:
- *   DEBUG_ERROR(msg)   - Always prints error messages (even in production via stderr)
- *   DEBUG_INFO(msg)    - Prints info messages (level >= BASIC)
- *   DEBUG_LOG(msg)     - Prints debug messages (level >= VERBOSE, respects file mask)
- *   DEBUG_TRACE(msg)   - Prints trace messages (level >= VERY_VERBOSE, respects file mask)
- *   
- * Convenience Macros:
- *   DEBUG_TO_HEX_STRING(value, width) - Convert value to hex string
- *   DEBUG_PRINT_HEX(name, value, width) - Print hex value with name
- *   DEBUG_PRINT_REG(name, value)        - Print register value (32-bit hex)
- *   DEBUG_ENTER_FUNCTION()              - Trace function entry
- *   DEBUG_EXIT_FUNCTION()               - Trace function exit
- *   
- * Configuration:
- *   - g_debug_level: Set runtime debug level (0-3)
- *   - g_debug_file_mask: Set which files to debug (bitwise OR of DEBUG_FILE_* flags)
+ *   LOG_CAT(LOG_CAT_IRQ, "[IRQ] Handler at 0x%08X\n", addr);
+ *
+ * Configuration (via globals or command line):
+ *   g_log_categories   - Bitmask of enabled categories (default: LOG_CAT_CRASH only)
+ *   g_log_start_frame  - First frame to log (default: 0)
+ *   g_log_end_frame    - Last frame to log (default: UINT32_MAX)
+ *   g_current_frame    - Current frame number (updated by GBA::runFrame)
+ *
+ * Command line:
+ *   --log=IRQ,STACK,LDR    Enable specific categories
+ *   --log-frames=2230-2240 Only log within frame range
+ *   --log-all              Enable all categories
  */
 
-// Debug build configuration
-// Define DEBUG_BUILD to enable debug output
-// Undefine DEBUG_BUILD for production builds to completely remove debug code
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+
+// ============================================================================
+// LOGGING SYSTEM - Runtime logging with category and frame filtering
+// ============================================================================
+
+// Log categories (bit flags)
+#define LOG_CAT_NONE    0x00000000
+#define LOG_CAT_BIOS    0x00000001
+#define LOG_CAT_IRQ     0x00000002
+#define LOG_CAT_DMA     0x00000004
+#define LOG_CAT_STACK   0x00000008
+#define LOG_CAT_LDR     0x00000010
+#define LOG_CAT_BL      0x00000020
+#define LOG_CAT_REGION  0x00000040
+#define LOG_CAT_VRAM    0x00000080
+#define LOG_CAT_FEATURE 0x00000100
+#define LOG_CAT_REG     0x00000200
+#define LOG_CAT_TRACE   0x00000400
+#define LOG_CAT_TIMER   0x00000800
+#define LOG_CAT_CRASH   0x00001000
+#define LOG_CAT_ALL     0xFFFFFFFF
+
+// Global logging configuration (defined in debug.cpp)
+extern uint32_t g_log_categories;
+extern uint32_t g_log_start_frame;
+extern uint32_t g_log_end_frame;
+extern uint32_t g_current_frame;
+
+// Main logging macro - checks category AND frame range
+#define LOG_CAT(cat, fmt, ...) \
+    do { \
+        if ((g_log_categories & (cat)) && \
+            g_current_frame >= g_log_start_frame && \
+            g_current_frame <= g_log_end_frame) { \
+            printf(fmt, ##__VA_ARGS__); \
+        } \
+    } while(0)
+
+// Convenience macros for common categories
+#define LOG_BIOS(fmt, ...)    LOG_CAT(LOG_CAT_BIOS, fmt, ##__VA_ARGS__)
+#define LOG_IRQ(fmt, ...)     LOG_CAT(LOG_CAT_IRQ, fmt, ##__VA_ARGS__)
+#define LOG_DMA(fmt, ...)     LOG_CAT(LOG_CAT_DMA, fmt, ##__VA_ARGS__)
+#define LOG_STACK(fmt, ...)   LOG_CAT(LOG_CAT_STACK, fmt, ##__VA_ARGS__)
+#define LOG_LDR(fmt, ...)     LOG_CAT(LOG_CAT_LDR, fmt, ##__VA_ARGS__)
+#define LOG_BL(fmt, ...)      LOG_CAT(LOG_CAT_BL, fmt, ##__VA_ARGS__)
+#define LOG_REGION(fmt, ...)  LOG_CAT(LOG_CAT_REGION, fmt, ##__VA_ARGS__)
+#define LOG_VRAM(fmt, ...)    LOG_CAT(LOG_CAT_VRAM, fmt, ##__VA_ARGS__)
+#define LOG_FEATURE(fmt, ...) LOG_CAT(LOG_CAT_FEATURE, fmt, ##__VA_ARGS__)
+#define LOG_REG(fmt, ...)     LOG_CAT(LOG_CAT_REG, fmt, ##__VA_ARGS__)
+#define LOG_TRACE_CAT(fmt, ...) LOG_CAT(LOG_CAT_TRACE, fmt, ##__VA_ARGS__)
+#define LOG_TIMER(fmt, ...)   LOG_CAT(LOG_CAT_TIMER, fmt, ##__VA_ARGS__)
+#define LOG_CRASH(fmt, ...)   LOG_CAT(LOG_CAT_CRASH, fmt, ##__VA_ARGS__)
+
+// Helper to parse --log= command line argument
+uint32_t parse_log_categories(const char* arg);
+
+// Helper to parse --log-frames= command line argument
+void parse_log_frames(const char* arg);
+
+// ============================================================================
+// DEBUG SYSTEM - Development debugging (stripped in production)
+// ============================================================================
+
 #ifdef DEBUG_BUILD
 
-#include <stdio.h>
 #include <string>
 #include <iostream>
 #include <iomanip>
@@ -53,29 +129,18 @@
 #define DEBUG_LEVEL_VERY_VERBOSE 3
 
 // File masks for filtering debug output
-#define DEBUG_FILE_MAIN  (1 << 0)
-#define DEBUG_FILE_ARM   (1 << 1) 
-#define DEBUG_FILE_CPU   (1 << 2)
-#define DEBUG_FILE_THUMB (1 << 3)
+#define DEBUG_FILE_MAIN   (1 << 0)
+#define DEBUG_FILE_ARM    (1 << 1)
+#define DEBUG_FILE_CPU    (1 << 2)
+#define DEBUG_FILE_THUMB  (1 << 3)
 #define DEBUG_FILE_MEMORY (1 << 4)
 
-// Global debug configuration (can be modified at runtime)
+// Global debug configuration
 extern int g_debug_level;
 extern int g_debug_file_mask;
-// Global flag to enable Capstone disassembly
 extern bool g_disassemble_enabled;
 
-// DEBUG: Print when debug macros are used and show mask/level logic
-#ifdef DEBUG_BUILD
-#include <cstdio>
-inline void debug_macro_trace(const char* macro, const char* file, int line, int level, int mask, bool enabled) {
-    fprintf(stderr, "[DEBUG_TRACE] macro=%s file=%s line=%d level=%d mask=0x%X enabled=%d\n", macro, file, line, level, mask, enabled);
-}
-#endif
-
-// Helper function to check if debug output is enabled for a file
 inline bool debug_is_file_enabled(const char* filename) {
-    // Simple filename matching - extend as needed
     if (strstr(filename, "main.cpp") && (g_debug_file_mask & DEBUG_FILE_MAIN)) return true;
     if (strstr(filename, "arm") && (g_debug_file_mask & DEBUG_FILE_ARM)) return true;
     if (strstr(filename, "cpu") && (g_debug_file_mask & DEBUG_FILE_CPU)) return true;
@@ -84,14 +149,12 @@ inline bool debug_is_file_enabled(const char* filename) {
     return false;
 }
 
-// Helper function to convert integer to hex string
 inline std::string debug_to_hex_string(uint32_t value, int width) {
     std::ostringstream oss;
     oss << std::hex << std::uppercase << std::setfill('0') << std::setw(width) << value;
     return oss.str();
 }
 
-// Debug macros - these expand to actual code when DEBUG_BUILD is defined
 #define DEBUG_ERROR(msg) \
     do { \
         std::string debug_msg = msg; \
@@ -110,8 +173,7 @@ inline std::string debug_to_hex_string(uint32_t value, int width) {
 
 #define DEBUG_LOG(msg) \
     do { \
-        bool enabled = (g_debug_level >= DEBUG_LEVEL_VERBOSE && debug_is_file_enabled(__FILE__)); \
-        if (enabled) { \
+        if (g_debug_level >= DEBUG_LEVEL_VERBOSE && debug_is_file_enabled(__FILE__)) { \
             std::string debug_msg = msg; \
             fprintf(stderr, "%s[DEBUG] %s:%d: %s%s\n", \
                 DEBUG_COLOR_CYAN, __FILE__, __LINE__, debug_msg.c_str(), DEBUG_COLOR_RESET); \
@@ -120,32 +182,29 @@ inline std::string debug_to_hex_string(uint32_t value, int width) {
 
 #define DEBUG_TRACE(msg) \
     do { \
-        bool enabled = (g_debug_level >= DEBUG_LEVEL_VERY_VERBOSE && debug_is_file_enabled(__FILE__)); \
-        if (enabled) { \
+        if (g_debug_level >= DEBUG_LEVEL_VERY_VERBOSE && debug_is_file_enabled(__FILE__)) { \
             std::string debug_msg = msg; \
             fprintf(stderr, "%s[TRACE] %s:%d: %s%s\n", \
                 DEBUG_COLOR_MAGENTA, __FILE__, __LINE__, debug_msg.c_str(), DEBUG_COLOR_RESET); \
         } \
     } while(0)
 
-// Define a macro to convert values to hex string
 #define DEBUG_TO_HEX_STRING(value, width) debug_to_hex_string(value, width)
 
+#else // DEBUG_BUILD not defined
 
-#else // DEBUG_BUILD not defined - strip out all debug code
-
-// When DEBUG_BUILD is not defined, all debug macros expand to nothing
 #define DEBUG_ERROR(msg)                    do { } while(0)
 #define DEBUG_INFO(msg)                     do { } while(0)
 #define DEBUG_LOG(msg)                      do { } while(0)
 #define DEBUG_TRACE(msg)                    do { } while(0)
 #define DEBUG_TO_HEX_STRING(value, width)   ""
-// No lazy log macros in production builds
 
-// Provide a no-op implementation of debug_to_hex_string for production builds
 #include <string>
-#include <cstdint>
 inline std::string debug_to_hex_string(uint32_t, int) { return ""; }
+
+extern int g_debug_level;
+extern int g_debug_file_mask;
+extern bool g_disassemble_enabled;
 
 #endif // DEBUG_BUILD
 

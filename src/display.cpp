@@ -96,18 +96,18 @@ void Display::renderFrame(const uint16_t* framebuffer, const uint16_t* palette, 
     // Debug: Print first few pixels to verify VRAM contents
     static int debugCount = 0;
     if (debugCount < 5) {
-        printf("[Display #%d] Mode=%d, framebuffer=%p, First 10 pixels/bytes: ", debugCount, videoMode, (void*)framebuffer);
+        LOG_TRACE_CAT("[Display #%d] Mode=%d, framebuffer=%p, First 10 pixels/bytes: ", debugCount, videoMode, (void*)framebuffer);
         if (videoMode == 4) {
             const uint8_t* fb8 = reinterpret_cast<const uint8_t*>(framebuffer);
             for (int i = 0; i < 10; i++) {
-                printf("0x%02X ", fb8[i]);
+                LOG_TRACE_CAT("0x%02X ", fb8[i]);
             }
         } else {
             for (int i = 0; i < 10; i++) {
-                printf("0x%04X ", framebuffer[i]);
+                LOG_TRACE_CAT("0x%04X ", framebuffer[i]);
             }
         }
-        printf("\n");
+        LOG_TRACE_CAT("\n");
         debugCount++;
     }
     

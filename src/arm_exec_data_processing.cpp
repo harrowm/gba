@@ -1005,7 +1005,7 @@ void ARMCPU::exec_arm_mrs(uint32_t instruction) {
     // Debug for BIOS
     static int mrs_count = 0;
     if (mrs_count < 10 && parentCPU.R()[15] < 0x4000) {
-        printf("[MRS #%d @0x%08X] R%d = %s (0x%08X), before: R%d=0x%08X, CPSR=0x%08X\n",
+        LOG_BIOS("[MRS #%d @0x%08X] R%d = %s (0x%08X), before: R%d=0x%08X, CPSR=0x%08X\n",
                mrs_count++, parentCPU.R()[15], rd,
                psr_source ? "SPSR" : "CPSR", value, rd, parentCPU.R()[rd],
                parentCPU.CPSR());
@@ -1026,7 +1026,11 @@ void ARMCPU::exec_arm_msr_imm(uint32_t instruction) {
     // Immediate operand: bits 7-0 and rotate
     uint32_t imm = instruction & 0xFF;
     uint32_t rotate = ((instruction >> 8) & 0xF) * 2;
-    value = (imm >> rotate) | (imm << (32 - rotate)); // ARM uses right rotation
+    if (rotate == 0) {
+        value = imm;
+    } else {
+        value = (imm >> rotate) | (imm << (32 - rotate)); // ARM uses right rotation
+    }
     value = (value & 0xFFFFFFFF); // Ensure 32-bit
 
     // Only implement CPSR write (SPSR not implemented)
@@ -1035,28 +1039,35 @@ void ARMCPU::exec_arm_msr_imm(uint32_t instruction) {
         uint32_t mask = (instruction >> 16) & 0xF;
         // Control field (bit 0) - includes mode bits
         if (mask & 1) {
-            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            uint32_t old_cpsr = parentCPU.CPSR();
+            uint32_t old_mode = old_cpsr & 0x1F;
             uint32_t new_mode = value & 0x1F;
             // If mode bits changed, call setMode to bank/unbank registers BEFORE changing CPSR
             // This allows setMode to read the old mode from CPSR correctly
-            if (old_mode != new_mode) {
+            if (old_mode != new_mode && new_mode >= 0x10 && new_mode <= 0x1F) {
                 printf("[MSR IMM] Mode switch: 0x%02X → 0x%02X\n", old_mode, new_mode);
                 parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
                 printf("[MSR IMM] After setMode: LR=0x%08X\n", parentCPU.R()[14]);
+            } else if (old_mode != new_mode) {
+                printf("[MSR IMM] Invalid mode 0x%02X, preserving old mode 0x%02X (instr=0x%08X)\n",
+                       new_mode, old_mode, instruction);
             }
             // Now update CPSR after setMode (setMode also updates CPSR, but we need to set all control bits)
-            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
+            if (new_mode < 0x10 || new_mode > 0x1F) {
+                uint32_t new_control = (value & 0xE0) | old_mode;
+                parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | new_control;
+            } else {
+                parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
+            }
             DEBUG_INFO("MSR IMM: CPSR control field set to " + debug_to_hex_string(value & 0xFF, 2));
         }
         // Extension field (bit 1)
         if (mask & 2) {
-            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF00) | (value & 0xFF00);
-            DEBUG_INFO("MSR IMM: CPSR extension field set to " + debug_to_hex_string(value & 0xFF00, 4));
+            DEBUG_INFO("MSR IMM: CPSR extension field ignored on ARM7TDMI");
         }
-        // Status field (bit 2) 
+        // Status field (bit 2)
         if (mask & 4) {
-            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF0000) | (value & 0xFF0000);
-            DEBUG_INFO("MSR IMM: CPSR status field set to " + debug_to_hex_string(value & 0xFF0000, 6));
+            DEBUG_INFO("MSR IMM: CPSR status field ignored on ARM7TDMI");
         }
         // Flag field (bit 3)
         if (mask & 8) {
@@ -1109,29 +1120,36 @@ void ARMCPU::exec_arm_msr_reg(uint32_t instruction) {
         uint32_t mask = (instruction >> 16) & 0xF;
         // Control field (bit 0) - includes mode bits
         if (mask & 1) {
-            uint32_t old_mode = parentCPU.CPSR() & 0x1F;
+            uint32_t old_cpsr = parentCPU.CPSR();
+            uint32_t old_mode = old_cpsr & 0x1F;
             uint32_t new_mode = value & 0x1F;
             // printf("[MSR REG] mask=0x%X, old_mode=0x%02X, new_mode=0x%02X\n", mask, old_mode, new_mode);
             // If mode bits changed, call setMode to bank/unbank registers BEFORE changing CPSR
             // This allows setMode to read the old mode from CPSR correctly
-            if (old_mode != new_mode) {
+            if (old_mode != new_mode && new_mode >= 0x10 && new_mode <= 0x1F) {
                 // printf("[MSR REG] Mode switch: 0x%02X → 0x%02X\n", old_mode, new_mode);
                 parentCPU.setMode(static_cast<CPU::Mode>(new_mode));
                 // printf("[MSR REG] After setMode: LR=0x%08X\n", parentCPU.R()[14]);
+            } else if (old_mode != new_mode) {
+                printf("[MSR REG] Invalid mode 0x%02X, preserving old mode 0x%02X (instr=0x%08X)\n",
+                       new_mode, old_mode, instruction);
             }
             // Now update CPSR after setMode (setMode also updates CPSR, but we need to set all control bits)
-            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
+            if (new_mode < 0x10 || new_mode > 0x1F) {
+                uint32_t new_control = (value & 0xE0) | old_mode;
+                parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | new_control;
+            } else {
+                parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
+            }
             DEBUG_INFO("MSR REG: CPSR control field set to " + debug_to_hex_string(value & 0xFF, 2));
         }
         // Extension field (bit 1)
         if (mask & 2) {
-            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF00) | (value & 0xFF00);
-            DEBUG_INFO("MSR REG: CPSR extension field set to " + debug_to_hex_string(value & 0xFF00, 4));
+            DEBUG_INFO("MSR REG: CPSR extension field ignored on ARM7TDMI");
         }
         // Status field (bit 2)
         if (mask & 4) {
-            parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF0000) | (value & 0xFF0000);
-            DEBUG_INFO("MSR REG: CPSR status field set to " + debug_to_hex_string(value & 0xFF0000, 6));
+            DEBUG_INFO("MSR REG: CPSR status field ignored on ARM7TDMI");
         }
         // Flag field (bit 3)
         if (mask & 8) {

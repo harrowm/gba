@@ -78,7 +78,7 @@ GBA::GBA(bool testMode)
     // This ensures our first instruction starts at the same cycle as mGBA
     uint64_t init_cycles = scheduler.getCurrentCycle();
     if (init_cycles > 0) {
-        printf("[GBA INIT] Resetting scheduler from cycle %llu to 0 (initialization overhead)\n", init_cycles);
+        LOG_TRACE_CAT("[GBA INIT] Resetting scheduler from cycle %llu to 0 (initialization overhead)\n", init_cycles);
         scheduler.reset();
         // Re-setup GPU timing at cycle 0
         gpu->setupTiming(&scheduler);
@@ -131,8 +131,8 @@ void GBA::skipBIOS() {
     // The IRQ handler pointer at 0x03FFFFFC/0x03007FFC is left uninitialized
     // Games that use interrupts will write their own handler address there
     
-    printf("[BIOS SKIP] Initialized: PC=0x08000000, VCOUNT=0x7E, POSTFLG=1, stacks set\n");
-    printf("[BIOS SKIP] SP_sys=0x03007F00, SP_irq=0x03007FA0, SP_svc=0x03007FE0\n");
+    LOG_BIOS("[BIOS SKIP] Initialized: PC=0x08000000, VCOUNT=0x7E, POSTFLG=1, stacks set\n");
+    LOG_BIOS("[BIOS SKIP] SP_sys=0x03007F00, SP_irq=0x03007FA0, SP_svc=0x03007FE0\n");
     DEBUG_INFO("Skipped BIOS, jumping directly to ROM at 0x08000000");
 }
 
@@ -159,12 +159,12 @@ void GBA::runFrame() {
             uint16_t irq_if = memory.readDirectIO16(0x04000202);
             uint8_t postflg = memory.readDirectIO8(0x03007FFA);  // POSTFLG register
             uint32_t irq_handler = memory.readDirectIO32(0x03007FFC);  // User IRQ handler address
-            printf("[Frame %d] Cycle: %llu, PC: 0x%08X, LR: 0x%08X, POSTFLG=0x%02X, IRQ_HANDLER=0x%08X, IME=%d, IE=0x%04X, IF=0x%04X\n", 
+            LOG_TRACE_CAT("[Frame %d] Cycle: %llu, PC: 0x%08X, LR: 0x%08X, POSTFLG=0x%02X, IRQ_HANDLER=0x%08X, IME=%d, IE=0x%04X, IF=0x%04X\n", 
                    frame_num, scheduler.getCurrentCycle(), pc, lr, postflg, irq_handler, ime, ie, irq_if);
             
             // Check if we've entered ROM
             if (pc >= 0x08000000) {
-                printf("***** ENTERED ROM AT FRAME %d, CYCLE %llu *****\n", frame_num, scheduler.getCurrentCycle());
+                LOG_TRACE_CAT("***** ENTERED ROM AT FRAME %d, CYCLE %llu *****\n", frame_num, scheduler.getCurrentCycle());
             }
         }
         
@@ -172,13 +172,13 @@ void GBA::runFrame() {
         static bool rom_entered = false;
         if (!rom_entered && cpu->R()[15] >= 0x08000000) {
             rom_entered = true;
-            printf("\n========== ROM ENTRY ==========\n");
-            printf("Frame: %d\n", frame_num);
-            printf("Cycle: %llu\n", scheduler.getCurrentCycle());
-            printf("PC: 0x%08X\n", cpu->R()[15]);
-            printf("LR: 0x%08X\n", cpu->R()[14]);
-            printf("SP: 0x%08X\n", cpu->R()[13]);
-            printf("================================\n\n");
+            LOG_TRACE_CAT("\n========== ROM ENTRY ==========\n");
+            LOG_TRACE_CAT("Frame: %d\n", frame_num);
+            LOG_TRACE_CAT("Cycle: %llu\n", scheduler.getCurrentCycle());
+            LOG_TRACE_CAT("PC: 0x%08X\n", cpu->R()[15]);
+            LOG_TRACE_CAT("LR: 0x%08X\n", cpu->R()[14]);
+            LOG_TRACE_CAT("SP: 0x%08X\n", cpu->R()[13]);
+            LOG_TRACE_CAT("================================\n\n");
         }    // One frame = 280,896 cycles (228 scanlines * 1232 cycles)
     uint64_t startCycle = scheduler.getCurrentCycle();
     // printf("[GBA::runFrame #%d] Got start cycle: %llu\n", frame_num, startCycle);
@@ -269,23 +269,23 @@ void GBA::runFrame() {
         
         // Log region transitions
         if (region != last_region && last_region != nullptr) {
-            printf("[PC REGION] %s -> %s at PC=0x%08X (frame %d)\n", 
+            LOG_REGION("[PC REGION] %s -> %s at PC=0x%08X (frame %d)\n", 
                    last_region, region, pc, frame_num);
             
             // CRITICAL: Detect when PC enters non-executable regions
             if (strcmp(region, "IO") == 0 || (pc >= 0x04000000 && pc < 0x05000000)) {
-                printf("[FATAL] PC entered I/O region! Dumping state:\n");
-                printf("  R0-R3:  %08X %08X %08X %08X\n",
+                LOG_CRASH("[FATAL] PC entered I/O region! Dumping state:\n");
+                LOG_CRASH("  R0-R3:  %08X %08X %08X %08X\n",
                        cpu->R()[0], cpu->R()[1], cpu->R()[2], cpu->R()[3]);
-                printf("  R4-R7:  %08X %08X %08X %08X\n",
+                LOG_CRASH("  R4-R7:  %08X %08X %08X %08X\n",
                        cpu->R()[4], cpu->R()[5], cpu->R()[6], cpu->R()[7]);
-                printf("  R8-R11: %08X %08X %08X %08X\n",
+                LOG_CRASH("  R8-R11: %08X %08X %08X %08X\n",
                        cpu->R()[8], cpu->R()[9], cpu->R()[10], cpu->R()[11]);
-                printf("  R12-R15: %08X %08X %08X %08X\n",
+                LOG_CRASH("  R12-R15: %08X %08X %08X %08X\n",
                        cpu->R()[12], cpu->R()[13], cpu->R()[14], cpu->R()[15]);
-                printf("  CPSR: %08X, Mode: 0x%02X, T=%d\n",
+                LOG_CRASH("  CPSR: %08X, Mode: 0x%02X, T=%d\n",
                        cpu->CPSR(), cpu->CPSR() & 0x1F, (cpu->CPSR() >> 5) & 1);
-                printf("  Last instruction fetch from: %s\n", last_region);
+                LOG_CRASH("  Last instruction fetch from: %s\n", last_region);
                 
                 // Dump the last 100 instructions before crash
                 printf("  Last 100 instructions before crash:\n");
@@ -313,6 +313,20 @@ void GBA::runFrame() {
                        cpu->R()[12], cpu->R()[13], cpu->R()[14], cpu->R()[15]);
                 printf("  CPSR: %08X, Mode: 0x%02X, T=%d\n",
                        cpu->CPSR(), cpu->CPSR() & 0x1F, (cpu->CPSR() >> 5) & 1);
+                printf("  IRQ handler dump @0x030004B0:\n");
+                for (int i = 0; i < 16; i++) {
+                    uint32_t addr = 0x030004B0 + (i * 4);
+                    uint32_t word = memory.readDirectIO32(addr);
+                    printf("    0x%08X: 0x%08X\n", addr, word);
+                }
+                  printf("  Last 100 instructions before UNKNOWN:\n");
+                  for (int i = 0; i < 100; i++) {
+                      int idx = (buf_idx + i) % 100;
+                      bool thumb = (last_cpsrs[idx] >> 5) & 1;
+                      printf("    [%2d] PC=0x%08X CPSR=%08X %s 0x%08X\n",
+                          i, last_pcs[idx], last_cpsrs[idx],
+                          thumb ? "THUMB" : "ARM  ", last_instrs[idx]);
+                  }
             }
         }
         last_region = region;
@@ -335,13 +349,13 @@ void GBA::runFrame() {
         if (pc_in_rom && !in_rom) {
             // Just entered ROM
             if (!rom_entered) {
-                printf("[ROM ENTRY] First entry into ROM at PC=0x%08X (frame %d)\n", pc, frame_num);
+                LOG_REGION("[ROM ENTRY] First entry into ROM at PC=0x%08X (frame %d)\n", pc, frame_num);
                 rom_entered = true;
             }
             in_rom = true;
         } else if (!pc_in_rom && in_rom) {
             // Just left ROM back to BIOS
-            printf("[ROM EXIT] Returned to BIOS at PC=0x%08X\n", pc);
+            LOG_REGION("[ROM EXIT] Returned to BIOS at PC=0x%08X\n", pc);
             in_rom = false;
         }
         
@@ -362,8 +376,12 @@ void GBA::runFrame() {
         //   - Execution: 1-3 cycles (depending on instruction type)
         //   - Data access: 0-2 cycles (if instruction reads/writes memory)
         // Average: 3-5 cycles per instruction
-        cpu->executeOneInstruction();
-        instructionCount++;
+        if (cpu->checkPendingInterrupts()) {
+            cpu->handleInterrupt();
+        } else {
+            cpu->executeOneInstruction();
+            instructionCount++;
+        }
         
         uint64_t cycleAfterInstr = scheduler.getCurrentCycle();
         
@@ -389,7 +407,7 @@ void GBA::runFrame() {
     uint64_t totalCyclesInLoop = loopEndCycle - loopStartCycle;
     
     if (!timing_logged) {
-        printf("[TIMING] Frame complete: instructions=%d, loop_start=%llu, loop_end=%llu, cycles_in_loop=%llu, target=%llu\n",
+        LOG_TRACE_CAT("[TIMING] Frame complete: instructions=%d, loop_start=%llu, loop_end=%llu, cycles_in_loop=%llu, target=%llu\n",
                instructionCount, loopStartCycle, loopEndCycle, totalCyclesInLoop, (uint64_t)CYCLES_PER_FRAME);
         timing_logged = true;
     }
@@ -414,6 +432,9 @@ void GBA::runFrame() {
     }
     
     frameCount++;
+    
+    // Update global frame counter for logging system
+    g_current_frame = frameCount;
     
     // In a real emulator, we'd also:
     // - Handle input
