@@ -62,4 +62,4 @@ dkms.conf
 traces/*.log
 traces/*.log.gz
 traces/*_trace.txt
-!traces/README.md
+!traces/README.mdtest_output.txt

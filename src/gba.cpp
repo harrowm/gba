@@ -376,12 +376,8 @@ void GBA::runFrame() {
         //   - Execution: 1-3 cycles (depending on instruction type)
         //   - Data access: 0-2 cycles (if instruction reads/writes memory)
         // Average: 3-5 cycles per instruction
-        if (cpu->checkPendingInterrupts()) {
-            cpu->handleInterrupt();
-        } else {
-            cpu->executeOneInstruction();
-            instructionCount++;
-        }
+        cpu->executeOneInstruction();
+        instructionCount++;
         
         uint64_t cycleAfterInstr = scheduler.getCurrentCycle();
         
