@@ -100,9 +100,8 @@ private:
     // Initialize wait state tables
     void initWaitStateTables();
     
-    // Get sequential and non-sequential wait states for an address
+    // Get non-sequential wait states for an address
     uint32_t getNonseqWaitStates(uint32_t address, uint32_t accessWidth) const;
-    uint32_t getSeqWaitStates(uint32_t address, uint32_t accessWidth) const;
 };
 
 #endif // MEMORY_H

@@ -1124,8 +1124,3 @@ uint32_t Memory::getNonseqWaitStates(uint32_t address, uint32_t accessWidth) con
     uint8_t region = (address >> 24) & 0xFF;
     return (accessWidth == 32) ? waitstatesNonseq32[region] : waitstatesNonseq16[region];
 }
-
-uint32_t Memory::getSeqWaitStates(uint32_t address, uint32_t accessWidth) const {
-    uint8_t region = (address >> 24) & 0xFF;
-    return (accessWidth == 32) ? waitstatesSeq32[region] : waitstatesSeq16[region];
-}

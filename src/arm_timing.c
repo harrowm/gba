@@ -24,23 +24,6 @@ static const uint8_t arm_instruction_cycles_lut[256] = {
     3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
 };
 
-// Get sequential access cycles for PC location (for prefetch)
-static uint32_t get_seq_cycles_for_pc(uint32_t pc) {
-    uint8_t region = (pc >> 24) & 0xFF;
-    switch (region) {
-        case 0x00: return 1; // BIOS - 1 cycle sequential
-        case 0x02: return 3; // EWRAM - 3 cycles sequential for 32-bit
-        case 0x03: return 1; // IWRAM - 1 cycle sequential
-        case 0x08:
-        case 0x09:
-        case 0x0A:
-        case 0x0B:
-        case 0x0C:
-        case 0x0D: return 3; // ROM - 3 cycles sequential (default wait state)
-        default: return 1; // Other regions default to 1
-    }
-}
-
 // Calculate cycles for an ARM instruction before execution
 uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uint32_t* registers, uint32_t cpsr) {
     // ARM7TDMI Pipeline Model:
@@ -48,6 +31,9 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
     // While instruction N executes, instruction N+1 is decoded and N+2 is fetched.
     // Therefore, we only charge the INTERNAL execution cycles, not the fetch.
     // Exception: Pipeline breaks (branches, PC writes) require 2 cycles to refill.
+    
+    // Suppress unused parameter warning (pc reserved for future timing refinement)
+    (void)pc;
     
     // Fast-path optimization for ARM_COND_AL (always execute) - most common case
     ARMCondition condition = (ARMCondition)ARM_GET_CONDITION(instruction);
@@ -60,7 +46,7 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
     
     // Try lookup table first for common patterns
     uint32_t lut_index = (instruction >> 20) & 0xFF; // Bits 27-20
-    uint32_t base_cycles = arm_instruction_cycles_lut[lut_index];
+    (void)arm_instruction_cycles_lut[lut_index]; // LUT currently unused, kept for future optimization
     
     // For simple cases, return the base cycles
     uint32_t format = ARM_GET_FORMAT(instruction);
