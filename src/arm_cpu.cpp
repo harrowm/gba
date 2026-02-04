@@ -14,6 +14,9 @@ bool g_trace_bios = false;
 bool g_trace_all = false;
 uint32_t g_trace_max_instructions = 50000;
 
+// External PC tracker for debug output from memory.cpp
+extern uint32_t g_cpu_pc;
+
 
 // Secondary decode function for ambiguous region (data processing/MUL/MLA overlap)
 // Phase 1: New entry point for ambiguous region
@@ -94,6 +97,7 @@ void ARMCPU::execute(uint32_t cycles) {
             LOG_IRQ("  IE=0x%04X IF=0x%04X IME=0x%02X\n", ie, if_reg, ime);
         }
 
+        g_cpu_pc = pc; // Track PC for debug output in memory.cpp
         executeInstruction(pc, instruction);
         if (exception_taken) {
             break;
@@ -460,6 +464,9 @@ void ARMCPU::executeOneInstruction() {
     
     // Calculate how many cycles this instruction will take
     uint32_t instruction_cycles = calculateInstructionCycles(instruction);
+    
+    // Track PC for debug output in memory.cpp
+    g_cpu_pc = pc;
     
     // Debug: Log first few instructions (DISABLED FOR PERFORMANCE)
     // static int debug_count = 0;

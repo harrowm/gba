@@ -844,20 +844,6 @@ void ARMCPU::exec_arm_cmp_reg(uint32_t instruction) {
     uint32_t op1 = readOperand(rn, reg_shift);
     uint32_t result = op1 - shifted.value;
     
-    // Special logging for BIOS VRAM clear loop at PC=0xC04
-    uint32_t pc = parentCPU.R()[15];
-    if (pc == 0xC04) {
-        static int vram_loop_count = 0;
-        static uint32_t last_target = 0;
-        // Only log when the target (r10) changes - indicates new memory region
-        if (shifted.value != last_target) {
-            printf("[BIOS CLEAR] Loop #%d: CMP r%d(0x%08X), r%d(0x%08X) - Starting new region\n",
-                   vram_loop_count, rn, op1, rm, shifted.value);
-            last_target = shifted.value;
-        }
-        vram_loop_count++;
-    }
-    
     updateFlagsSub(op1, shifted.value, result);
     parentCPU.R()[15] += 4; // Increment PC for next instruction
 }

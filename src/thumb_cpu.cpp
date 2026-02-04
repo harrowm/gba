@@ -17,6 +17,9 @@ extern bool g_trace_all;
 extern uint32_t g_trace_max_instructions;
 static uint64_t thumb_instruction_count = 0;
 
+// External PC tracker for debug output from memory.cpp
+extern uint32_t g_cpu_pc;
+
 // Define the static constexpr members
 constexpr void (ThumbCPU::*ThumbCPU::thumb_instruction_table[256])(uint16_t);
 constexpr void (ThumbCPU::*ThumbCPU::thumb_alu_operations_table[16])(uint8_t, uint8_t);
@@ -138,6 +141,7 @@ void ThumbCPU::execute(uint32_t cycles) {
             }
         }
         // Decode and execute the instruction
+        g_cpu_pc = current_pc; // Track PC for debug output in memory.cpp
         if (thumb_instruction_table[opcode]) {
             (this->*thumb_instruction_table[opcode])(instruction);
         } else {
@@ -1517,10 +1521,21 @@ void ThumbCPU::thumb_swi(uint16_t instruction) {
 
     // Track SWI calls
     static uint64_t swi_count = 0;
-    if (swi_count < 10) {
-        LOG_BIOS("[SWI THUMB #%llu] PC=0x%08X, Comment=0x%02X, R0=%08X R1=%08X R2=%08X R3=%08X\n",
-               swi_count++, parentCPU.R()[15], comment,
-               parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
+    extern uint32_t g_current_frame;
+    if (swi_count < 10 || g_current_frame > 130) {
+        fprintf(stderr, "[SWI THUMB] Frame %u: SWI 0x%02X from PC=0x%08X R0=%08X\n",
+               g_current_frame, comment, parentCPU.R()[15], parentCPU.R()[0]);
+        swi_count++;
+    }
+    
+    // Special logging for SoftReset (SWI 0x00)
+    if (comment == 0x00) {
+        // BIOS SoftReset reads 0x03FFFFFA to determine return address
+        // 0 = return to ROM (0x08000000), non-zero = return to EWRAM (0x02000000)
+        uint8_t reset_flag = parentCPU.getMemory().read8(0x03FFFFFA);
+        uint16_t keyinput = parentCPU.getMemory().read16(0x04000130);
+        fprintf(stderr, "[SoftReset] Frame %u: reset_flag=0x%02X KEYINPUT=0x%04X (low4=0x%X)\n",
+               g_current_frame, reset_flag, keyinput, keyinput & 0xF);
     }
     
     // Handle the software interrupt - trigger SVC exception
@@ -1798,6 +1813,9 @@ void ThumbCPU::executeOneInstruction() {
     
     // Calculate how many cycles this instruction will take
     uint32_t instruction_cycles = calculateInstructionCycles(instruction);
+    
+    // Track PC for debug output in memory.cpp
+    g_cpu_pc = pc;
     
     // Increment PC before execution (Thumb instructions do this)
     parentCPU.R()[15] += 2;

@@ -1,6 +1,13 @@
 #include "dma.h"
 
 extern uint32_t g_current_frame;
+extern uint32_t g_cpu_pc;
+
+// DMA debug tracking - when DMA is active, set g_cpu_pc to indicate DMA transfer
+int g_current_dma_channel = -1;
+uint32_t g_dma_source_addr = 0;
+uint32_t g_dma_dest_addr = 0;
+
 #include "memory.h"
 #include "scheduler.h"
 #include "interrupt.h"
@@ -185,6 +192,11 @@ void DMAController::performTransfer(int channelId) {
     LOG_DMA("[DMA%d] STARTING TRANSFER: src=0x%08X dst=0x%08X count=%d size=%s\n",
            channelId, srcAddr, destAddr, count, is32bit ? "32bit" : "16bit");
     
+    // Track DMA for debug output (when memory writes happen, we can see it's from DMA)
+    g_current_dma_channel = channelId;
+    g_dma_source_addr = srcAddr;
+    g_dma_dest_addr = destAddr;
+    
     // Perform all transfers
     for (uint16_t i = 0; i < count; i++) {
         // Read from source
@@ -194,6 +206,10 @@ void DMAController::performTransfer(int channelId) {
         } else {
             value = memory->read16(srcAddr);
         }
+        
+        // Update tracking before write (so memory.cpp can see what DMA is doing)
+        g_dma_source_addr = srcAddr;
+        g_dma_dest_addr = destAddr;
         
         // Write to destination
         if (is32bit) {
@@ -254,6 +270,9 @@ void DMAController::performTransfer(int channelId) {
         uint16_t irqFlags[4] = { 0x0100, 0x0200, 0x0400, 0x0800 };  // DMA0-3 IRQ bits
         interruptController->requestInterrupt(irqFlags[channelId]);
     }
+    
+    // Clear DMA tracking
+    g_current_dma_channel = -1;
 }
 
 void DMAController::updateAddresses(int channelId, uint32_t& srcAddr, uint32_t& destAddr) {

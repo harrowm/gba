@@ -160,6 +160,17 @@ void GBA::skipBIOS() {
            cpu->R()[13], cpu->R()[13] == 0x03007F00 ? "OK" : "FAIL!");
     printf("=== END PHASE 2 VERIFICATION ===\n\n");
     
+    // Print ROM ENTRY style state for comparison with BIOS boot
+    uint16_t ime = memory.read16(0x04000208);
+    uint16_t ie = memory.read16(0x04000200);
+    uint16_t if_reg = memory.read16(0x04000202);
+    uint8_t postflg = memory.read8(0x04000300);
+    uint16_t dispcnt = memory.read16(0x04000000);
+    fprintf(stderr, "[SKIP-BIOS] IME=0x%04X IE=0x%04X IF=0x%04X POSTFLG=0x%02X DISPCNT=0x%04X\n",
+            ime, ie, if_reg, postflg, dispcnt);
+    fprintf(stderr, "[SKIP-BIOS] R13(SP)=0x%08X R14(LR)=0x%08X\n",
+            cpu->R()[13], cpu->R()[14]);
+
     DEBUG_INFO("Skipped BIOS, jumping directly to ROM at 0x08000000");
 }
 
@@ -376,7 +387,33 @@ void GBA::runFrame() {
         if (pc_in_rom && !in_rom) {
             // Just entered ROM
             if (!rom_entered) {
-                LOG_REGION("[ROM ENTRY] First entry into ROM at PC=0x%08X (frame %d)\n", pc, frame_num);
+                // Clear IF register - BIOS should do this before jumping to ROM
+                // Some games check IF to detect whether they're starting fresh
+                uint16_t if_reg = memory.read16(0x04000202);
+                if (if_reg != 0) {
+                    fprintf(stderr, "[ROM ENTRY FIX] Clearing IF register (was 0x%04X)\n", if_reg);
+                    // Write to IF clears the bits that are written (W1C - write 1 to clear)
+                    memory.write16(0x04000202, if_reg);
+                }
+                
+                uint32_t cpsr = cpu->CPSR();
+                fprintf(stderr, "[ROM ENTRY] First entry into ROM at PC=0x%08X (frame %d)\n", pc, frame_num);
+                fprintf(stderr, "[ROM ENTRY] CPSR=0x%08X Mode=0x%02X IRQ=%s FIQ=%s Thumb=%s\n",
+                        cpsr, cpsr & 0x1F,
+                        (cpsr & 0x80) ? "disabled" : "ENABLED",
+                        (cpsr & 0x40) ? "disabled" : "ENABLED", 
+                        (cpsr & 0x20) ? "yes" : "no");
+                // Dump key IO registers
+                uint16_t ime = memory.read16(0x04000208);
+                uint16_t ie = memory.read16(0x04000200);
+                uint16_t if_reg_final = memory.read16(0x04000202);
+                uint8_t postflg = memory.read8(0x04000300);
+                uint16_t dispcnt = memory.read16(0x04000000);
+                fprintf(stderr, "[ROM ENTRY] IME=0x%04X IE=0x%04X IF=0x%04X POSTFLG=0x%02X DISPCNT=0x%04X\n",
+                        ime, ie, if_reg_final, postflg, dispcnt);
+                // Dump stack pointers
+                fprintf(stderr, "[ROM ENTRY] R13(SP)=0x%08X R14(LR)=0x%08X\n",
+                        cpu->R()[13], cpu->R()[14]);
                 rom_entered = true;
             }
             in_rom = true;

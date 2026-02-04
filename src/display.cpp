@@ -211,8 +211,16 @@ void Display::renderFrame(const uint16_t* framebuffer, const uint16_t* palette, 
 }
 
 void Display::handleEvents() {
+    static int callCount = 0;
+    if (callCount < 10) {
+        fprintf(stderr, "[handleEvents] call #%d this=%p\n", callCount, (void*)this);
+    }
+    
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        if (callCount < 10) {
+            fprintf(stderr, "[handleEvents] got event type=%d\n", event.type);
+        }
         switch (event.type) {
             case SDL_QUIT:
                 quit = true;
@@ -234,5 +242,10 @@ void Display::handleEvents() {
             default:
                 break;
         }
+    }
+    
+    if (callCount < 10) {
+        fprintf(stderr, "[handleEvents] done #%d\n", callCount);
+        callCount++;
     }
 }

@@ -17,6 +17,7 @@ uint32_t g_log_categories = LOG_CAT_CRASH;  // Default: only crash detection ena
 uint32_t g_log_start_frame = 0;             // Start logging from frame 0
 uint32_t g_log_end_frame = UINT32_MAX;      // End at max (effectively no limit)
 uint32_t g_current_frame = 0;               // Current frame counter
+uint32_t g_cpu_pc = 0;                      // Current CPU PC for debug tracking
 
 // ============================================================================
 // Helper functions for command-line parsing

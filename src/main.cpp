@@ -235,9 +235,19 @@ int main(int argc, char* argv[]) {
         
         // Main loop
         while (!display.shouldQuit()) {
+            // Debug: Track frame progress
+            static int debugFrameCount = 0;
+            if (debugFrameCount < 20) {
+                fprintf(stderr, "[MAIN] Frame %d start\n", debugFrameCount);
+            }
+            
             // Run one frame of emulation (280,896 cycles)
             // This will trigger scanline rendering and V-Blank
             gba.runFrame();
+            
+            if (debugFrameCount < 20) {
+                fprintf(stderr, "[MAIN] Frame %d runFrame done\n", debugFrameCount);
+            }
             
             // Exit if memory tracing is complete
             if (enableMemoryTrace && cpu.isMemoryTracingComplete()) {
@@ -270,8 +280,17 @@ int main(int argc, char* argv[]) {
             // Render the frame to display
             display.renderFrame(framebuffer, palette, videoMode);
             
+            if (debugFrameCount < 20) {
+                fprintf(stderr, "[MAIN] Frame %d renderFrame done\n", debugFrameCount);
+            }
+            
             // Handle SDL events (keyboard, window close)
             display.handleEvents();
+            
+            if (debugFrameCount < 20) {
+                fprintf(stderr, "[MAIN] Frame %d handleEvents done\n", debugFrameCount);
+                debugFrameCount++;
+            }
             
             frameCount++;
             if (frameCount % 60 == 0) {

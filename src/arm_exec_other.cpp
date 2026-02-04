@@ -297,9 +297,14 @@ void ARMCPU::exec_arm_undefined(uint32_t instruction) {
 
 void ARMCPU::exec_arm_software_interrupt(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_software_interrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
-    uint32_t swi_imm = bits<23,0>(instruction); UNUSED(swi_imm);
+    uint32_t swi_imm = bits<23,0>(instruction);
+    // Log SWI calls after BIOS animation (frame > 130)
+    extern uint32_t g_current_frame;
+    if (g_current_frame > 130) {
+        fprintf(stderr, "[SWI] Frame %u: SWI 0x%02X from PC=0x%08X\n", 
+                g_current_frame, swi_imm >> 16, parentCPU.R()[15]);
+    }
     // Handle software interrupt (SWI) here. Triggers Supervisor exception.
-    // DEBUG_ERROR(std::string("SWI executed: immediate=0x") + DEBUG_TO_HEX_STRING(swi_imm, 8) + ", pc=0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8));
     handleException(0x08, 0x13, true, false); // Vector 0x08, mode 0x13 (SVC), disable IRQ
 }
 

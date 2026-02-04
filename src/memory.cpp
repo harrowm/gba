@@ -11,10 +11,16 @@
 // External globals for watchpoint logging
 extern uint32_t g_current_frame;
 extern uint64_t g_total_instruction_count;
+extern uint32_t g_cpu_pc; // For debug tracking - set by CPU before each instruction
+
+// DMA debug tracking (from dma.cpp)
+extern int g_current_dma_channel;
+extern uint32_t g_dma_source_addr;
+extern uint32_t g_dma_dest_addr;
 
 // Watchpoint configuration
 #define WATCHPOINT_ADDR 0x03007EA0
-#define WATCHPOINT_ENABLED 1
+#define WATCHPOINT_ENABLED 0
 
 Memory::Memory(bool testMode) {
     if (testMode) {
@@ -232,6 +238,11 @@ void Memory::write8(uint32_t address, uint8_t value) {
     // Debug: Track POSTFLG writes
     if (address == 0x04000300) {
         LOG_FEATURE("[Memory::write8] POSTFLG write: 0x%02X (was 0x%02X)\n", value, base[offset]);
+    }
+    
+    // KEYINPUT (0x04000130-0x04000131) is READ-ONLY - ignore writes
+    if (address == 0x04000130 || address == 0x04000131) {
+        return;  // Silently ignore writes to KEYINPUT
     }
     
     base[offset] = value;
@@ -460,9 +471,22 @@ void Memory::write16(uint32_t address, uint16_t value) {
         
         // Debug: log DISPCNT changes
         static int dispcntLogCount = 0;
-        if (dispcntLogCount++ < 20 || (oldValue & 0x80) != (value & 0x80)) {
-            fprintf(stderr, "[DISPCNT] 0x%04X -> 0x%04X: Mode=%d Blank=%d BG=%d%d%d%d OBJ=%d\n",
-                   oldValue, value, mode, forcedBlank, bg0, bg1, bg2, bg3, obj);
+        if (dispcntLogCount++ < 20 || (oldValue & 0x80) != (value & 0x80) || g_current_frame > 139) {
+            fprintf(stderr, "[DISPCNT @ F%u PC=0x%08X] 0x%04X -> 0x%04X: Mode=%d Blank=%d BG=%d%d%d%d OBJ=%d\n",
+                   g_current_frame, g_cpu_pc, oldValue, value, mode, forcedBlank, bg0, bg1, bg2, bg3, obj);
+        }
+        
+        // CRITICAL DEBUG: Log when forced blank is SET after animation (frame > 100)
+        // This will tell us what code is causing the white screen
+        if (forcedBlank && g_current_frame > 100 && (oldValue & 0x80) == 0) {
+            if (g_current_dma_channel >= 0) {
+                fprintf(stderr, "\n!!! [FORCED BLANK SET] Frame %u: DISPCNT 0x%04X -> 0x%04X VIA DMA%d (src=0x%08X) !!!\n",
+                       g_current_frame, oldValue, value, g_current_dma_channel, g_dma_source_addr);
+            } else {
+                fprintf(stderr, "\n!!! [FORCED BLANK SET] Frame %u: DISPCNT 0x%04X -> 0x%04X at PC=0x%08X !!!\n",
+                       g_current_frame, oldValue, value, g_cpu_pc);
+            }
+            fprintf(stderr, "!!! This is likely the cause of the white screen after Nintendo logo !!!\n\n");
         }
         
         LOG_REG("[DISPCNT] Write 0x%04X: Mode=%d Blank=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d Win0=%d Win1=%d ObjWin=%d\n",
@@ -529,6 +553,12 @@ void Memory::write16(uint32_t address, uint16_t value) {
     if (address == 0x0400004C && !feature_logged[22]) {
         LOG_FEATURE("[FEATURE] ROM enabling mosaic effect = 0x%04X\n", value);
         feature_logged[22] = true;
+    }
+    
+    // KEYINPUT (0x04000130) is READ-ONLY - ignore writes
+    // This register reflects physical button state, not software-writeable
+    if (address == 0x04000130) {
+        return;  // Silently ignore writes to KEYINPUT
     }
     
     // STACK CORRUPTION WATCH: Watch for writes to stack region
@@ -796,6 +826,11 @@ void Memory::write32(uint32_t address, uint32_t value) {
     // Log writes that overlap IE/IF/IME registers
     if (aligned_address >= 0x04000200 && aligned_address <= 0x04000208) {
         LOG_REG("[REG Write32] Address=0x%08X Value=0x%08X (may write IE/IF/IME)\n", aligned_address, val);
+    }
+    
+    // KEYINPUT (0x04000130) is READ-ONLY - ignore writes that would affect it
+    if (aligned_address == 0x04000130) {
+        return;  // Silently ignore writes to KEYINPUT
     }
     
     // Log writes to IRQ handler pointer area AND interrupt acknowledge flags
