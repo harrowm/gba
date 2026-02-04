@@ -113,6 +113,17 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     // This is used for returning from exception handlers (IRQ, SWI, etc.)
     if (s_bit && r15_in_list) {
         uint32_t spsr = parentCPU.SPSR();
+        // PHASE 4: Log IRQ exit with full register state
+        static int irq_exit_count = 0;
+        if (irq_exit_count < 20) {
+            fprintf(stderr, "[IRQ EXIT #%d] PC=0x%08X->0x%08X CPSR=0x%08X->0x%08X SP=0x%08X LR=0x%08X\n",
+                    irq_exit_count, parentCPU.R()[15], parentCPU.R()[15], parentCPU.CPSR(), spsr, 
+                    parentCPU.R()[13], parentCPU.R()[14]);
+            fprintf(stderr, "  R0-R3: %08X %08X %08X %08X  R4-R7: %08X %08X %08X %08X\n",
+                    parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
+                    parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7]);
+            irq_exit_count++;
+        }
         // Debug: Log the CPSR restoration
         static int spsr_restore_count = 0;
         if (spsr_restore_count++ < 10) {

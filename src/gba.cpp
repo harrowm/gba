@@ -41,8 +41,13 @@ GBA::GBA(bool testMode)
     });
     
     gpu->setHBlankCallback([this]() {
+        // HBlank IRQ can trigger on any scanline
         interruptController.triggerHBlank();
-        dmaController.triggerHBlank();
+        // HBlank DMA only triggers during visible scanlines (0-159)
+        // During VBlank (160-227), HBlank DMA is paused
+        if (gpu->getCurrentScanline() < 160) {
+            dmaController.triggerHBlank();
+        }
     });
     
     // Initialize video timing
@@ -133,6 +138,28 @@ void GBA::skipBIOS() {
     
     LOG_BIOS("[BIOS SKIP] Initialized: PC=0x08000000, VCOUNT=0x7E, POSTFLG=1, stacks set\n");
     LOG_BIOS("[BIOS SKIP] SP_sys=0x03007F00, SP_irq=0x03007FA0, SP_svc=0x03007FE0\n");
+    
+    // PHASE 2 VERIFICATION: Dump SP values for each mode to verify initialization
+    printf("\n=== PHASE 2: SP INITIALIZATION VERIFICATION ===\n");
+    printf("Current mode: 0x%02X (should be SYS=0x1F)\n", cpu->CPSR() & 0x1F);
+    printf("Current SP (SYS): 0x%08X (expected: 0x03007F00)\n", cpu->R()[13]);
+    
+    // Switch to IRQ and check SP
+    cpu->setMode(CPU::IRQ);
+    printf("IRQ mode SP: 0x%08X (expected: 0x03007FA0) %s\n", 
+           cpu->R()[13], cpu->R()[13] == 0x03007FA0 ? "OK" : "FAIL!");
+    
+    // Switch to SVC and check SP
+    cpu->setMode(CPU::SVC);
+    printf("SVC mode SP: 0x%08X (expected: 0x03007FE0) %s\n", 
+           cpu->R()[13], cpu->R()[13] == 0x03007FE0 ? "OK" : "FAIL!");
+    
+    // Switch back to SYS and check SP
+    cpu->setMode(CPU::SYS);
+    printf("SYS mode SP: 0x%08X (expected: 0x03007F00) %s\n", 
+           cpu->R()[13], cpu->R()[13] == 0x03007F00 ? "OK" : "FAIL!");
+    printf("=== END PHASE 2 VERIFICATION ===\n\n");
+    
     DEBUG_INFO("Skipped BIOS, jumping directly to ROM at 0x08000000");
 }
 

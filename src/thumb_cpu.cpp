@@ -49,6 +49,11 @@ void ThumbCPU::execute(uint32_t cycles) {
         
         // HACK - do we need to model the cpu pipeline?
         uint32_t current_pc = parentCPU.R()[15];
+        
+        // SP tracing for comparison with mGBA
+        extern void trace_sp(uint32_t pc, uint32_t sp, const char* mode);
+        trace_sp(current_pc, parentCPU.R()[13], "THUMB");
+        
         if (thumb_instruction_count < 3) {
             LOG_TRACE_CAT("[THUMB DEBUG #%llu] Read current_pc=0x%08X from R[15], FLAG_T=%d\n",
                    thumb_instruction_count, current_pc, parentCPU.getFlag(CPU::FLAG_T));
@@ -153,6 +158,10 @@ void ThumbCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
             DEBUG_INFO("Mode switched to ARM during timing execution, breaking out of Thumb execution");
             break;
         }
+        
+        // SP tracing for comparison with mGBA
+        extern void trace_sp(uint32_t pc, uint32_t sp, const char* mode);
+        trace_sp(parentCPU.R()[15], parentCPU.R()[13], "THUMB");
         
         // Calculate cycles until next timing event
         uint32_t cycles_until_event = timing_cycles_until_next_event(timing);
@@ -816,7 +825,7 @@ void ThumbCPU::thumb_format5(uint16_t instruction) {
                 
                 // Set PC to target address with bit 0 cleared
                 uint32_t new_pc = target & ~1;
-                if (new_pc >= 0x10000000) {
+                if (new_pc >= 0x10000000 || new_pc == 0) {
                     uint32_t bx_pc = parentCPU.R()[15] - 2;
                     LOG_CRASH("[THUMB BX] PC=0x%08X rs=R%d target=0x%08X (CPSR=0x%08X) R0-R3=%08X %08X %08X %08X\n",
                            bx_pc, rs, new_pc, parentCPU.CPSR(),
@@ -925,9 +934,17 @@ void ThumbCPU::thumb_str_byte(uint16_t instruction) {
 
     // Calculate the address to store to
     uint32_t address = parentCPU.R()[rn] + parentCPU.R()[rm];
+    
+    // PHASE 4: Log STRB to crash addresses
+    uint8_t byteVal = parentCPU.R()[rd] & 0xFF;
+    uint32_t iwram_off = address & 0x7FFF;
+    if (address >= 0x03000000 && address < 0x04000000 && iwram_off >= 0x7EA0 && iwram_off <= 0x7EA7) {
+        fprintf(stderr, "[STRB REG] PC=0x%08X addr=0x%08X val=0x%02X (R%d=0x%08X R%d=0x%08X R%d=0x%08X)\n",
+                parentCPU.R()[15] - 2, address, byteVal, rn, parentCPU.R()[rn], rm, parentCPU.R()[rm], rd, parentCPU.R()[rd]);
+    }
 
     // Perform the store operation using memory_write_8
-    parentCPU.getMemory().write8(address, parentCPU.R()[rd] & 0xFF); // Store only the least significant byte
+    parentCPU.getMemory().write8(address, byteVal); // Store only the least significant byte
 
     DEBUG_INFO("Executing Thumb STR (byte): [0x" + debug_to_hex_string(address, 8) + "] = R" + std::to_string(rd) + 
         " (R" + std::to_string(rn) + "=0x" + debug_to_hex_string(parentCPU.R()[rn], 8) + 
@@ -1042,9 +1059,17 @@ void ThumbCPU::thumb_str_immediate_offset_byte(uint16_t instruction) {
 
     // Calculate the address to store to
     uint32_t address = parentCPU.R()[rb] + offset5; // Byte offset
+    
+    // PHASE 4: Log STRB to crash addresses
+    uint8_t byteVal = parentCPU.R()[rd] & 0xFF;
+    uint32_t iwram_off = address & 0x7FFF;
+    if (address >= 0x03000000 && address < 0x04000000 && iwram_off >= 0x7EA0 && iwram_off <= 0x7EA7) {
+        fprintf(stderr, "[STRB IMM] PC=0x%08X addr=0x%08X val=0x%02X (Rb(R%d)=0x%08X off=%d Rd=0x%08X)\n",
+                parentCPU.R()[15] - 2, address, byteVal, rb, parentCPU.R()[rb], offset5, parentCPU.R()[rd]);
+    }
 
     // Perform the store operation using memory_write_8
-    parentCPU.getMemory().write8(address, parentCPU.R()[rd] & 0xFF); // Store only the least significant byte
+    parentCPU.getMemory().write8(address, byteVal); // Store only the least significant byte
 
     DEBUG_INFO("Executing Thumb STR (immediate offset byte): [0x" + std::to_string(address) + "] = R" + std::to_string(rd));
 }
@@ -1218,9 +1243,17 @@ void ThumbCPU::thumb_push_registers_and_lr(uint16_t instruction) {
     }
     register_count++; // Add 1 for LR
 
+    uint32_t sp_before = parentCPU.R()[13];
+    
     // Decrement SP by total amount first
     parentCPU.R()[13] -= register_count * 4;
     uint32_t base_address = parentCPU.R()[13];
+    
+    // Track when SP enters the danger zone (0x03007EA0-0x03007EA8) - DISABLED FOR SPEED
+    // if (base_address <= 0x03007EA8 && base_address >= 0x03007E00) {
+    //     fprintf(stderr, "[SP DANGER PUSH] PC=0x%08X: SP %08X -> %08X (pushed %d regs + LR = %d bytes) LR=0x%08X\n",
+    //             parentCPU.R()[15], sp_before, base_address, register_count - 1, register_count * 4, parentCPU.R()[14]);
+    // }
 
     // Push registers onto the stack in ascending order of addresses
     int offset = 0;
@@ -1241,11 +1274,27 @@ void ThumbCPU::thumb_push_registers_and_lr(uint16_t instruction) {
 
 void ThumbCPU::thumb_pop_registers(uint16_t instruction) {
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
-
+    
     // Pop registers from the stack
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
-            parentCPU.R()[i] = parentCPU.getMemory().read32(parentCPU.R()[13]); // Read register from memory
+            uint32_t sp = parentCPU.R()[13];
+            uint32_t val = parentCPU.getMemory().read32(sp);
+            
+            // PHASE 4: Detect corrupt values being popped (0xA0xxxxxx range - FATAL crash values)
+            if ((val & 0xFF000000) == 0xA0000000) {
+                fprintf(stderr, "[FATAL POP] PC=0x%08X: Popping R%d from SP=0x%08X, val=0x%08X\n",
+                        parentCPU.R()[15] - 2, i, sp, val);
+                // Also dump what's at nearby stack locations
+                fprintf(stderr, "  Stack dump: [SP-8]=0x%08X [SP-4]=0x%08X [SP]=0x%08X [SP+4]=0x%08X [SP+8]=0x%08X\n",
+                        parentCPU.getMemory().read32(sp - 8),
+                        parentCPU.getMemory().read32(sp - 4),
+                        val,
+                        parentCPU.getMemory().read32(sp + 4),
+                        parentCPU.getMemory().read32(sp + 8));
+            }
+            
+            parentCPU.R()[i] = val;
             DEBUG_INFO("Popping R" + std::to_string(i) + " from stack: R" + std::to_string(i) + " = [0x" + std::to_string(parentCPU.R()[13]) + "]");
             parentCPU.R()[13] += 4; // Increment SP by 4
         }
@@ -1540,6 +1589,13 @@ void ThumbCPU::thumb_bl(uint16_t instruction) {
         
         // Branch to target
         parentCPU.R()[15] = target & 0xFFFFFFFE; // Clear bit 0 for alignment
+        
+        // Track call stack when SP is in danger zone - DISABLED FOR SPEED
+        // uint32_t sp = parentCPU.R()[13];
+        // if (sp <= 0x03007F00 && sp >= 0x03007E00) {
+        //     fprintf(stderr, "[BL DANGER] PC=0x%08X: calling 0x%08X, SP=0x%08X, LR=0x%08X\n",
+        //             current_pc, target & 0xFFFFFFFE, sp, parentCPU.R()[14]);
+        // }
 
         if (current_pc >= 0x08097240 && current_pc <= 0x08097260) {
             LOG_BL("[TRACE BL2] PC=0x%08X instr=0x%04X low_off=0x%08X LR_prev=0x%08X target=0x%08X\n",
@@ -1566,6 +1622,10 @@ void ThumbCPU::executeOneInstruction() {
     }
     
     uint32_t pc = parentCPU.R()[15];
+    
+    // SP tracing for comparison with mGBA
+    extern void trace_sp(uint32_t pc, uint32_t sp, const char* mode);
+    trace_sp(pc, parentCPU.R()[13], "THUMB");
     
     // Count executions at PC=0x120
     static uint64_t count_0x120 = 0;

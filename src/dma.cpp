@@ -1,4 +1,6 @@
 #include "dma.h"
+
+extern uint32_t g_current_frame;
 #include "memory.h"
 #include "scheduler.h"
 #include "interrupt.h"
@@ -213,14 +215,20 @@ void DMAController::performTransfer(int channelId) {
     
     // Check if we should repeat
     if (channel.isRepeat() && channel.getTimingMode() != DMATimingMode::IMMEDIATE) {
-        // For repeat mode, reload both source and destination addresses
-        channel.internalSource = channel.getSourceAddress();
-        if (channel.getDestControl() == DMAAddressControl::INCREMENT_RELOAD) {
-            channel.internalDest = channel.getDestAddress();
-        } else {
-            // Even without INCREMENT_RELOAD, dest should reload in repeat mode
-            channel.internalDest = channel.getDestAddress();
-        }
+        // For repeat mode with HBlank/VBlank timing:
+        // - Source address does NOT reload (continues from where it left off)
+        //   This allows games to use incrementing source to read different values each scanline
+        // - Destination with INCREMENT_RELOAD mode DOES reload
+        // - Count is always reloaded
+        
+        // NOTE: Source is only reloaded when DMA is re-enabled by CPU (writing to control register)
+        // or at VBlank for HBlank DMA. We keep the incremented source address.
+        // (The srcAddr was already updated after the transfer above)
+        
+        // Destination always reloads in repeat mode for HBlank/VBlank DMA
+        // This ensures scroll registers etc get the correct destination address each time
+        channel.internalDest = channel.getDestAddress();
+        
         // Word count is reloaded automatically
         if (channel.getWordCount() == 0) {
             // Cast 65536 to uint16_t (wraps to 0, which represents max transfer count for DMA3)
@@ -285,10 +293,44 @@ void DMAController::updateAddresses(int channelId, uint32_t& srcAddr, uint32_t& 
 }
 
 void DMAController::triggerVBlank() {
+    // For HBlank DMA channels with repeat mode, reload source addresses at VBlank
+    // This is the proper time to reset the scanline scroll table pointer
+    for (int i = 0; i < 4; i++) {
+        DMAChannel& channel = channels[i];
+        if (channel.isEnabled() && channel.isRepeat() && 
+            channel.getTimingMode() == DMATimingMode::HBLANK) {
+            // Reload source address from register at VBlank
+            channel.internalSource = channel.getSourceAddress();
+            // Reload count as well
+            if (channel.getWordCount() == 0) {
+                channel.internalCount = (i == 3) ? static_cast<uint16_t>(65536) : 16384;
+            } else {
+                channel.internalCount = channel.getWordCount();
+            }
+            LOG_DMA("[DMA%d] VBlank: reloading HBlank DMA source to 0x%08X\n", 
+                   i, channel.internalSource);
+        }
+    }
     startTriggeredTransfers(DMATimingMode::VBLANK);
 }
 
 void DMAController::triggerHBlank() {
+    #define HBLANK_DMA_DEBUG 0
+    #if HBLANK_DMA_DEBUG
+    // Debug: check if any channel is configured for HBlank DMA
+    static int frame30_scanline_count = 0;
+    for (int i = 0; i < 4; i++) {
+        DMAChannel& channel = channels[i];
+        if (channel.isEnabled() && channel.getTimingMode() == DMATimingMode::HBLANK) {
+            // Log first 5 scanlines of frame 30 to see source address progression
+            if (g_current_frame == 30 && frame30_scanline_count < 5) {
+                frame30_scanline_count++;
+                fprintf(stderr, "[HBLANK F30 S%d] DMA%d src=0x%08X dst=0x%08X cnt=%d\n",
+                        frame30_scanline_count, i, channel.internalSource, channel.internalDest, channel.internalCount);
+            }
+        }
+    }
+    #endif
     startTriggeredTransfers(DMATimingMode::HBLANK);
 }
 

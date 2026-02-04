@@ -1,8 +1,37 @@
 #include "gba.h"
 #include "display.h"
 #include "debug.h"
+#include "sp_trace.h"
 #include <cstdio>
 #include <cstring>
+
+// Global variables for SP tracing
+uint64_t g_total_instruction_count = 0;
+FILE* g_sp_trace_file = nullptr;
+
+void init_sp_trace() {
+    g_sp_trace_file = fopen("/tmp/sp_trace_gba.txt", "w");
+    if (g_sp_trace_file) {
+        fprintf(g_sp_trace_file, "# instruction_count,PC,SP,mode\n");
+    }
+}
+
+void close_sp_trace() {
+    if (g_sp_trace_file) {
+        fclose(g_sp_trace_file);
+        g_sp_trace_file = nullptr;
+    }
+}
+
+void trace_sp(uint32_t pc, uint32_t sp, const char* mode) {
+    g_total_instruction_count++;
+    
+    if (g_sp_trace_file && (g_total_instruction_count % SP_TRACE_INTERVAL == 0)) {
+        fprintf(g_sp_trace_file, "%llu,0x%08X,0x%08X,%s\n", 
+                g_total_instruction_count, pc, sp, mode);
+        fflush(g_sp_trace_file);
+    }
+}
 
 // Simple test pattern generator
 void fillTestPattern(uint16_t* framebuffer) {
@@ -198,6 +227,10 @@ int main(int argc, char* argv[]) {
         printf("\nStarting main loop...\n");
         printf("Press ESC or close window to quit\n\n");
         
+        // Initialize SP tracing
+        init_sp_trace();
+        printf("SP tracing initialized - writing to /tmp/sp_trace_gba.txt\n");
+        
         int frameCount = 0;
         
         // Main loop
@@ -251,6 +284,9 @@ int main(int argc, char* argv[]) {
         
         printf("\nEmulator shutdown cleanly\n");
         printf("Total frames rendered: %d\n", frameCount);
+        
+        // Close SP tracing
+        close_sp_trace();
         
     } catch (const std::exception& e) {
         fprintf(stderr, "Fatal error: %s\n", e.what());

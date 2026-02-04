@@ -90,13 +90,32 @@ Display::~Display() {
 
 void Display::renderFrame(const uint16_t* framebuffer, const uint16_t* palette, int videoMode) {
     if (!initialized || !framebuffer) {
+        static int noFramebufCount = 0;
+        if (noFramebufCount++ < 5) {
+            fprintf(stderr, "[Display] renderFrame skipped: init=%d fb=%p\n", initialized, (void*)framebuffer);
+        }
         return;
     }
     
-    // Debug: Print first few pixels to verify VRAM contents
+    // Debug: Print pixels from center of screen where logo would be
     static int debugCount = 0;
-    if (debugCount < 5) {
-        LOG_TRACE_CAT("[Display #%d] Mode=%d, framebuffer=%p, First 10 pixels/bytes: ", debugCount, videoMode, (void*)framebuffer);
+    static int lastMode = -1;
+    if (debugCount < 20 || videoMode != lastMode) {
+        // Check center of screen (y=80, x around 100-140)
+        int centerY = 80;
+        int nonWhiteCount = 0;
+        for (int x = 0; x < 240; x++) {
+            uint16_t px = framebuffer[centerY * 240 + x];
+            if (px != 0x7FFF && px != 0xFFFF && px != 0) {
+                nonWhiteCount++;
+            }
+        }
+        fprintf(stderr, "[Display #%d] Mode=%d, centerRow nonWhite=%d, center: 0x%04X 0x%04X 0x%04X 0x%04X\n", 
+                debugCount, videoMode, nonWhiteCount,
+                framebuffer[centerY*240+100], framebuffer[centerY*240+110], 
+                framebuffer[centerY*240+120], framebuffer[centerY*240+130]);
+        lastMode = videoMode;
+        debugCount++;
         if (videoMode == 4) {
             const uint8_t* fb8 = reinterpret_cast<const uint8_t*>(framebuffer);
             for (int i = 0; i < 10; i++) {

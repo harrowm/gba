@@ -8,6 +8,14 @@
 #include <cstdint>
 #include <cstdlib>
 
+// External globals for watchpoint logging
+extern uint32_t g_current_frame;
+extern uint64_t g_total_instruction_count;
+
+// Watchpoint configuration
+#define WATCHPOINT_ADDR 0x03007EA0
+#define WATCHPOINT_ENABLED 1
+
 Memory::Memory(bool testMode) {
     if (testMode) {
         // Only allocate and map test RAM at 0x00000000 (32KB)
@@ -198,6 +206,17 @@ void Memory::write8(uint32_t address, uint8_t value) {
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
     
+#if WATCHPOINT_ENABLED
+    // Watchpoint: Monitor ALL write8 to 0x03007EA0-0x03007EA7
+    if (address >= 0x03000000 && address < 0x04000000) {
+        uint32_t iwram_off = address & 0x7FFF;
+        if (iwram_off >= 0x7EA0 && iwram_off <= 0x7EA7) {
+            fprintf(stderr, "[WATCH8] frame=%u instr=%llu addr=0x%08X val=0x%02X\n",
+                    g_current_frame, (unsigned long long)g_total_instruction_count, address, value);
+        }
+    }
+#endif
+    
     // Feature detection: OAM writes (sprite data)
     static bool oam_logged = false;
     if (address >= 0x07000000 && address < 0x07000400 && !oam_logged) {
@@ -344,6 +363,17 @@ void Memory::write16(uint32_t address, uint16_t value) {
     // IWRAM is only 32KB (0x8000 bytes), not 64KB like BLOCK_SIZE
     uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
     
+#if WATCHPOINT_ENABLED
+    // Watchpoint: Monitor ALL write16 to 0x03007EA0-0x03007EA6
+    if (address >= 0x03000000 && address < 0x04000000) {
+        uint32_t iwram_off = address & 0x7FFF;
+        if (iwram_off >= 0x7EA0 && iwram_off <= 0x7EA6) {
+            fprintf(stderr, "[WATCH16] frame=%u instr=%llu addr=0x%08X val=0x%04X\n",
+                    g_current_frame, (unsigned long long)g_total_instruction_count, address, val);
+        }
+    }
+#endif
+    
     // Log writes to OBJ VRAM and OBJ Palette (Nintendo logo investigation)
     if (address >= 0x06000000 && address < 0x06018000) {
         static int vram_writes = 0;
@@ -427,6 +457,13 @@ void Memory::write16(uint32_t address, uint16_t value) {
         bool win0 = (value >> 13) & 1;
         bool win1 = (value >> 14) & 1;
         bool objWin = (value >> 15) & 1;
+        
+        // Debug: log DISPCNT changes
+        static int dispcntLogCount = 0;
+        if (dispcntLogCount++ < 20 || (oldValue & 0x80) != (value & 0x80)) {
+            fprintf(stderr, "[DISPCNT] 0x%04X -> 0x%04X: Mode=%d Blank=%d BG=%d%d%d%d OBJ=%d\n",
+                   oldValue, value, mode, forcedBlank, bg0, bg1, bg2, bg3, obj);
+        }
         
         LOG_REG("[DISPCNT] Write 0x%04X: Mode=%d Blank=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d Win0=%d Win1=%d ObjWin=%d\n",
                value, mode, forcedBlank, bg0, bg1, bg2, bg3, obj, win0, win1, objWin);
@@ -641,6 +678,13 @@ uint32_t Memory::read32(uint32_t address) const {
         | (base[(offset + 2) % wrapSize] << 16)
         | (base[(offset + 3) % wrapSize] << 24);
     
+    // PHASE 4: Catch corrupt reads from stack addresses
+    if ((aligned_address == 0x03007EA0 || aligned_address == 0x03007EA4) && val >= 0xA0000000) {
+        fprintf(stderr, "[CORRUPT READ!] addr=0x%08X offset=0x%X val=0x%08X bytes=%02X %02X %02X %02X base=%p\n",
+                aligned_address, offset, val, 
+                base[offset], base[(offset+1)%wrapSize], base[(offset+2)%wrapSize], base[(offset+3)%wrapSize], (void*)base);
+    }
+    
     // Debug: Trace BIOS reads at 0x18 (IRQ vector)
     if (aligned_address == 0x00000018) {
         static int bios18_read_count = 0;
@@ -766,7 +810,20 @@ void Memory::write32(uint32_t address, uint32_t value) {
                    irq_write_count, val, aligned_address);
         }
     }
+    
+#if WATCHPOINT_ENABLED
+    // Watchpoint: Monitor ALL write32 to 0x03007EA0-0x03007EA7
+    uint32_t iwram_offset = aligned_address & 0x7FFF; // IWRAM 32KB mask
+    if ((aligned_address >= 0x03000000 && aligned_address < 0x04000000) &&
+        (iwram_offset >= 0x7EA0 && iwram_offset <= 0x7EA7)) {
+        fprintf(stderr, "[WATCH32] frame=%u instr=%llu addr=0x%08X val=0x%08X\n",
+                g_current_frame, (unsigned long long)g_total_instruction_count, aligned_address, val);
+    }
+#endif
+
     if (aligned_address == 0x03FFFFFC || (aligned_address >= 0x03007F00 && aligned_address <= 0x03007FFC)) {
+        // TEMPORARILY DISABLED FOR PHASE 1 TESTING
+        #if 0
         // Get current PC for debugging (requires CPU context)
         // Detect corrupted values (addresses outside valid GBA memory)
         bool suspicious = (val >= 0x10000000 && val < 0x80000000) || // Outside valid ranges
@@ -779,6 +836,7 @@ void Memory::write32(uint32_t address, uint32_t value) {
         if (aligned_address == 0x03FFFFFC && (val < 0x02000000 || val > 0x0FFFFFFF)) {
             LOG_CRASH("[IRQ HANDLER ERROR] Suspicious IRQ handler address 0x%08X written to 0x%08X!\n", val, aligned_address);
         }
+        #endif
     }
     
     // Feature detection: Track display register writes in write32
@@ -812,7 +870,9 @@ void Memory::write32(uint32_t address, uint32_t value) {
         feature_logged32[30] = true;
     }
     
-    // STACK CORRUPTION WATCH: Catch writes of suspicious values to stack region
+    // STACK CORRUPTION WATCH: TEMPORARILY DISABLED FOR PHASE 1 TESTING
+    // TODO: Re-enable after Phase 1 verification
+    #if 0
     // The crash at frame 2236 is caused by BX R3 where R3=0xF4F7FF46 loaded from stack ~0x03007E8C
     uint32_t iwram_offset = aligned_address & 0x7FFF;  // IWRAM 32KB mask
     if (aligned_address >= 0x03000000 && aligned_address < 0x04000000) {
@@ -827,6 +887,7 @@ void Memory::write32(uint32_t address, uint32_t value) {
                    aligned_address, val);
         }
     }
+    #endif
     
     // Debug: Track VRAM writes
     if (address >= 0x06000000 && address < 0x06018000) {
@@ -844,6 +905,15 @@ void Memory::write32(uint32_t address, uint32_t value) {
     base[(offset + 1) % wrapSize] = (val >> 8) & 0xFF;
     base[(offset + 2) % wrapSize] = (val >> 16) & 0xFF;
     base[(offset + 3) % wrapSize] = (val >> 24) & 0xFF;
+    
+    // PHASE 4: Verify write to crash addresses - DISABLED FOR SPEED
+    // if ((aligned_address >= 0x03000000 && aligned_address < 0x04000000) &&
+    //     (offset >= 0x7EA0 && offset <= 0x7EA4)) {
+    //     uint32_t readback = base[offset] | (base[(offset+1) % wrapSize] << 8) |
+    //                         (base[(offset+2) % wrapSize] << 16) | (base[(offset+3) % wrapSize] << 24);
+    //     fprintf(stderr, "[VERIFY WRITE] addr=0x%08X offset=0x%X wrote=0x%08X readback=0x%08X base=%p\n",
+    //             aligned_address, offset, val, readback, (void*)base);
+    // }
 }
 
 // ============================================================================

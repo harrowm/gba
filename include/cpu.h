@@ -200,6 +200,16 @@ public:
                     ", IRQ SP=0x" + debug_to_hex_string(banked_r13_irq,8) + ", LR=0x" + debug_to_hex_string(banked_r14_irq,8) +
                     ", UND SP=0x" + debug_to_hex_string(banked_r13_und,8) + ", LR=0x" + debug_to_hex_string(banked_r14_und,8));
         Mode oldMode = getMode();
+        
+        // PHASE 3: Mode switch logging (DISABLED - didn't find issue)
+        // static int modeSwitch_count = 0;
+        // modeSwitch_count++;
+        // if (modeSwitch_count % 10000 == 0 || 
+        //     registers[13] < 0x02000000 || registers[13] > 0x04000000) {
+        //     fprintf(stderr, "[MODE SWITCH #%d] 0x%02X->0x%02X: SP=0x%08X, LR=0x%08X\n",
+        //             modeSwitch_count, (int)oldMode, (int)newMode, registers[13], registers[14]);
+        // }
+        
         // printf("[setMode] Called: oldMode=0x%02X, newMode=0x%02X, current LR=0x%08X\n", (int)oldMode, (int)newMode, registers[14]);
         DEBUG_INFO("setMode: BEFORE swap, mode=" + std::to_string((int)oldMode) + ", SP=0x" + debug_to_hex_string(registers[13], 8) + ", LR=0x" + debug_to_hex_string(registers[14], 8));
         DEBUG_INFO(std::string("setMode: switching from ") + std::to_string((int)oldMode) + " to " + std::to_string((int)newMode));

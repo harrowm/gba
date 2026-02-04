@@ -7,6 +7,8 @@
 #include <cstring>
 #include <set>
 
+extern uint32_t g_current_frame;
+
 GPU::GPU(Memory& mem) 
     : memory(mem), currentScanline(0), inVBlank(false), inHBlank(false) {
     // Initialize GPU state
@@ -37,10 +39,20 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
         dispstat |= DISPSTAT_HBLANK;
         memory.write16(REG_DISPSTAT, dispstat);
         
-        if ((dispstat & DISPSTAT_HBLANK_IRQ_ENABLE) && hblankCallback) {
-            hblankCallback();
+        // Debug HBlank
+        static int hblankDebug = 0;
+        if (hblankDebug++ < 5) {
+            fprintf(stderr, "[HBlank #%d] scanline=%d visible=%d\n", hblankDebug, currentScanline, currentScanline < SCANLINES_VISIBLE);
         }
         
+        // HBlank callback triggers both IRQ and DMA.
+        // During visible scanlines (0-159): trigger both DMA and IRQ
+        // During VBlank (160-227): HBlank DMA should NOT trigger
+        // The callback sets isVisibleScanline so DMA can decide
+        if (hblankCallback) {
+            hblankCallback();
+        }
+
         if (currentScanline < SCANLINES_VISIBLE) {
             renderScanline();
         }
@@ -79,7 +91,9 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
                            vblankCallback ? 1 : 0, scheduler->getCurrentCycle());
                 }
                 
-                if ((dispstat & DISPSTAT_VBLANK_IRQ_ENABLE) && vblankCallback) {
+                // Always call vblankCallback for DMA triggering
+                // The interrupt controller internally checks if VBlank IRQ is enabled
+                if (vblankCallback) {
                     LOG_TRACE_CAT("[GPU] Calling vblankCallback() #%d\n", vblank_count);
                     vblankCallback();
                 }
@@ -108,13 +122,40 @@ void GPU::setupTiming(Scheduler* scheduler) {
 }
 
 void GPU::renderScanline() {
-    // Debug: trace first few scanlines
+    // Debug: trace scanlines periodically
     static int scanline_trace = 0;
-    if (scanline_trace < 10) {
+    static int last_dispcnt = -1;
+    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    
+    // Log when DISPCNT changes or first few times
+    if (scanline_trace < 10 || (int)dispcnt != last_dispcnt) {
         scanline_trace++;
-        LOG_TRACE_CAT("[GPU::renderScanline] scanline=%d DISPCNT=0x%04X forcedBlank=%d\n",
-               currentScanline, memory.read16(REG_DISPCNT), isForcedBlank());
+        fprintf(stderr, "[GPU::renderScanline #%d] scanline=%d DISPCNT=0x%04X forcedBlank=%d mode=%d\n",
+               scanline_trace, currentScanline, dispcnt, isForcedBlank(), dispcnt & 7);
+        last_dispcnt = dispcnt;
     }
+    
+    // SEGA logo effect debug: log BG scroll registers during frames 30-90
+    // to understand the scrolling/trail effect
+    #define SEGA_LOGO_DEBUG 0
+    #if SEGA_LOGO_DEBUG
+    if (g_current_frame >= 30 && g_current_frame <= 60) {
+        // Log once per frame at specific scanlines to see variation
+        if (currentScanline == 0 || currentScanline == 40 || currentScanline == 80 || currentScanline == 120) {
+            uint16_t dispcnt_dbg = memory.read16(REG_DISPCNT);
+            int mode_dbg = dispcnt_dbg & 0x7;
+            uint16_t bg0hofs = memory.read16(REG_BG0HOFS) & 0x1FF;
+            uint16_t bg0vofs = memory.read16(REG_BG0VOFS) & 0x1FF;
+            uint16_t bg1hofs = memory.read16(REG_BG1HOFS) & 0x1FF;
+            uint16_t bg1vofs = memory.read16(REG_BG1VOFS) & 0x1FF;
+            uint16_t bg2hofs = memory.read16(REG_BG2HOFS) & 0x1FF;
+            uint16_t bg2vofs = memory.read16(REG_BG2VOFS) & 0x1FF;
+            fprintf(stderr, "[SEGA F%d S%d] Mode=%d BG0(%d,%d) BG1(%d,%d) BG2(%d,%d)\n",
+                    g_current_frame, currentScanline, mode_dbg, bg0hofs, bg0vofs, 
+                    bg1hofs, bg1vofs, bg2hofs, bg2vofs);
+        }
+    }
+    #endif
     
     // Skip rendering during VBlank
     if (currentScanline >= SCANLINES_VISIBLE) {
@@ -127,8 +168,7 @@ void GPU::renderScanline() {
         return;
     }
     
-    // Check video mode from DISPCNT
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    // Check video mode from DISPCNT (reuse from debug above)
     uint16_t mode = dispcnt & DISPCNT_MODE_MASK;
     
     // Debug: Log DISPCNT value once per frame (on scanline 0)
@@ -1614,6 +1654,20 @@ void GPU::renderScanline(uint16_t scanline) {
     
     // 4. Copy line buffer to framebuffer
     int fbOffset = scanline * 240;
+    
+    // Debug: Check if any non-backdrop pixels were rendered
+    static int renderDebug = 0;
+    if (renderDebug < 10) {
+        int nonBackdrop = 0;
+        for (int x = 0; x < 240; x++) {
+            if (lineBuffer[x] != backdrop) nonBackdrop++;
+        }
+        if (nonBackdrop > 0) {
+            fprintf(stderr, "[RENDER scanline=%d] %d non-backdrop pixels, first: 0x%04X 0x%04X 0x%04X\n",
+                    scanline, nonBackdrop, lineBuffer[0], lineBuffer[120], lineBuffer[239]);
+            renderDebug++;
+        }
+    }
     
     for (int x = 0; x < 240; x++) {
         tiledFramebuffer[fbOffset + x] = lineBuffer[x];

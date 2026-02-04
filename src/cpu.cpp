@@ -216,24 +216,42 @@ void CPU::handleInterrupt() {
     
     // Save current CPSR before mode switch
     uint32_t old_cpsr = cpsr;
+    
+    // PHASE 4: Log IRQ entry with full register state
+    static int phase4_count = 0;
+    if (phase4_count < 20) {
+        fprintf(stderr, "[IRQ ENTRY #%d] PC=0x%08X CPSR=0x%08X SP=0x%08X LR=0x%08X\n",
+                phase4_count, registers[15], cpsr, registers[13], registers[14]);
+        fprintf(stderr, "  R0-R3: %08X %08X %08X %08X  R4-R7: %08X %08X %08X %08X\n",
+                registers[0], registers[1], registers[2], registers[3],
+                registers[4], registers[5], registers[6], registers[7]);
+        phase4_count++;
+    }
+    
     if (irq_count <= 5) {
         LOG_IRQ("[IRQ #%d] handleInterrupt: CPSR before=0x%08X, PC=0x%08X\n", irq_count, cpsr, registers[15]);
         fflush(stdout);
     }
     
-    // Calculate return address (like mGBA: LR = PC - instructionWidth + 4)
-    // ARM PC is +8 ahead of current instruction, THUMB PC is +4 ahead
-    // After IRQ completes, "SUBS PC, LR, #4" returns to the interrupted instruction
+    // Calculate return address for IRQ
+    // After IRQ completes, "SUBS PC, LR, #4" returns to resume execution
+    // 
+    // Our architecture:
+    // - Step increments PC by instructionWidth BEFORE execution
+    // - After normal instruction at addr: R[15] = addr + 2 (Thumb) or addr + 4 (ARM)
+    // - After PC-modifying instruction (POP, BX, etc.): R[15] = target (not incremented)
+    //
+    // For both cases, we want LR = R[15] + 4 so SUBS PC, LR, #4 gives R[15]
+    // - Normal: Return = (addr+2) + 4 - 4 = addr+2 (next instruction) ✓
+    // - PC-mod: Return = target + 4 - 4 = target (correct destination) ✓
     uint32_t returnAddress;
     if (getFlag(FLAG_T)) {
-        // Thumb mode: LR = PC - 2 + 4 = PC + 2
-        // PC is +4 ahead, so PC-2 is the interrupted instruction, +4 accounts for SUBS adjustment
-        returnAddress = registers[15] + 2;
+        // Thumb mode: LR = PC + 4, so SUBS PC, LR, #4 returns to PC
+        returnAddress = registers[15] + 4;
     } else {
-        // ARM mode: LR = PC - 4 + 4 = PC  
-        // PC is +8 ahead, so PC-4 is the next instruction, but we want current, so PC-8+4 = PC-4
-        // But mGBA uses PC (not PC-4), maybe because PC offset differs?
-        returnAddress = registers[15];
+        // ARM mode: LR = PC + 4, so SUBS PC, LR, #4 returns to PC
+        // (ARM step increments by 4, so same logic applies)
+        returnAddress = registers[15] + 4;
     }
     
     if (irq_count <= 5) {

@@ -194,6 +194,10 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     
     instruction_count++;
     
+    // SP tracing for comparison with mGBA
+    extern void trace_sp(uint32_t pc, uint32_t sp, const char* mode);
+    trace_sp(pc, parentCPU.R()[13], "ARM");
+    
     // Progress indicator every 100K instructions (DISABLED FOR PERFORMANCE)
     // if (instruction_count % 100000 == 0) {
     //     printf("[Progress] %llu instructions executed, PC=0x%08X\n", instruction_count, pc);
