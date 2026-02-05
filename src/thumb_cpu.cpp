@@ -938,14 +938,7 @@ void ThumbCPU::thumb_str_byte(uint16_t instruction) {
 
     // Calculate the address to store to
     uint32_t address = parentCPU.R()[rn] + parentCPU.R()[rm];
-    
-    // PHASE 4: Log STRB to crash addresses
     uint8_t byteVal = parentCPU.R()[rd] & 0xFF;
-    uint32_t iwram_off = address & 0x7FFF;
-    if (address >= 0x03000000 && address < 0x04000000 && iwram_off >= 0x7EA0 && iwram_off <= 0x7EA7) {
-        fprintf(stderr, "[STRB REG] PC=0x%08X addr=0x%08X val=0x%02X (R%d=0x%08X R%d=0x%08X R%d=0x%08X)\n",
-                parentCPU.R()[15] - 2, address, byteVal, rn, parentCPU.R()[rn], rm, parentCPU.R()[rm], rd, parentCPU.R()[rd]);
-    }
 
     // Perform the store operation using memory_write_8
     parentCPU.getMemory().write8(address, byteVal); // Store only the least significant byte
@@ -1063,14 +1056,7 @@ void ThumbCPU::thumb_str_immediate_offset_byte(uint16_t instruction) {
 
     // Calculate the address to store to
     uint32_t address = parentCPU.R()[rb] + offset5; // Byte offset
-    
-    // PHASE 4: Log STRB to crash addresses
     uint8_t byteVal = parentCPU.R()[rd] & 0xFF;
-    uint32_t iwram_off = address & 0x7FFF;
-    if (address >= 0x03000000 && address < 0x04000000 && iwram_off >= 0x7EA0 && iwram_off <= 0x7EA7) {
-        fprintf(stderr, "[STRB IMM] PC=0x%08X addr=0x%08X val=0x%02X (Rb(R%d)=0x%08X off=%d Rd=0x%08X)\n",
-                parentCPU.R()[15] - 2, address, byteVal, rb, parentCPU.R()[rb], offset5, parentCPU.R()[rd]);
-    }
 
     // Perform the store operation using memory_write_8
     parentCPU.getMemory().write8(address, byteVal); // Store only the least significant byte
@@ -1521,28 +1507,6 @@ void ThumbCPU::thumb_swi(uint16_t instruction) {
 
     // Track SWI calls - only log decompression SWIs
     extern uint32_t g_current_frame;
-    
-    // Log decompression SWIs (0x10-0x18) always
-    if (comment >= 0x10 && comment <= 0x18) {
-        static uint32_t decompress_calls = 0;
-        static uint32_t last_decompress_frame = 0;
-        decompress_calls++;
-        if (g_current_frame != last_decompress_frame) {
-            fprintf(stderr, "[DECOMPRESS] Frame %u: SWI 0x%02X (total: %u) from PC=0x%08X R0=%08X R1=%08X\n",
-                   g_current_frame, comment, decompress_calls, parentCPU.R()[15], parentCPU.R()[0], parentCPU.R()[1]);
-            last_decompress_frame = g_current_frame;
-        }
-    }
-    
-    // Special logging for SoftReset (SWI 0x00)
-    if (comment == 0x00) {
-        // BIOS SoftReset reads 0x03FFFFFA to determine return address
-        // 0 = return to ROM (0x08000000), non-zero = return to EWRAM (0x02000000)
-        uint8_t reset_flag = parentCPU.getMemory().read8(0x03FFFFFA);
-        uint16_t keyinput = parentCPU.getMemory().read16(0x04000130);
-        fprintf(stderr, "[SoftReset] Frame %u: reset_flag=0x%02X KEYINPUT=0x%04X (low4=0x%X)\n",
-               g_current_frame, reset_flag, keyinput, keyinput & 0xF);
-    }
     
     // Handle the software interrupt - trigger SVC exception
     DEBUG_INFO("Executing Thumb SWI: Software interrupt with comment 0x" + std::to_string(comment));

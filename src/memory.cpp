@@ -346,16 +346,6 @@ void Memory::write16(uint32_t address, uint16_t value) {
         }
     }
     
-    // Debug palette writes
-    if (address >= 0x05000000 && address < 0x05000400) {
-        static int pal_count = 0;
-        if (pal_count++ < 10) {
-            uint32_t index = (address - 0x05000000) / 2;
-            printf("[Palette Write #%d] Index %d (addr=0x%08X): 0x%04X (R=%d, G=%d, B=%d)\n", 
-                   pal_count, index, address, value, value & 0x1F, (value >> 5) & 0x1F, (value >> 10) & 0x1F);
-        }
-    }
-    
     uint32_t rot = (address & 1) * 8;
     uint16_t val = (value << rot) | (value >> (16 - rot));
     uint32_t offset;
@@ -387,18 +377,6 @@ void Memory::write16(uint32_t address, uint16_t value) {
                 LOG_VRAM("[BG VRAM Write #%d] addr=0x%08X (offset 0x%06X) val=0x%04X\n",
                        vram_writes, address, address - 0x06000000, val);
             }
-        }
-    }
-    
-    // Log writes to OBJ Palette RAM
-    if (address >= 0x05000200 && address < 0x05000400) {
-        static int pal_writes = 0;
-        if (pal_writes++ < 100) {
-            uint32_t colorNum = (address - 0x05000200) / 2;
-            uint32_t paletteNum = colorNum / 16;
-            uint32_t colorInPal = colorNum % 16;
-            printf("[OBJ PALETTE Write #%d] addr=0x%08X Pal%d[%d] = 0x%04X\n",
-                   pal_writes, address, paletteNum, colorInPal, val);
         }
     }
     
@@ -686,13 +664,6 @@ uint32_t Memory::read32(uint32_t address) const {
         | (base[(offset + 1) % wrapSize] << 8)
         | (base[(offset + 2) % wrapSize] << 16)
         | (base[(offset + 3) % wrapSize] << 24);
-    
-    // PHASE 4: Catch corrupt reads from stack addresses
-    if ((aligned_address == 0x03007EA0 || aligned_address == 0x03007EA4) && val >= 0xA0000000) {
-        fprintf(stderr, "[CORRUPT READ!] addr=0x%08X offset=0x%X val=0x%08X bytes=%02X %02X %02X %02X base=%p\n",
-                aligned_address, offset, val, 
-                base[offset], base[(offset+1)%wrapSize], base[(offset+2)%wrapSize], base[(offset+3)%wrapSize], (void*)base);
-    }
     
     // Debug: Trace BIOS reads at 0x18 (IRQ vector)
     if (aligned_address == 0x00000018) {

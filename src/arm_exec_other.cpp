@@ -113,23 +113,6 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     // This is used for returning from exception handlers (IRQ, SWI, etc.)
     if (s_bit && r15_in_list) {
         uint32_t spsr = parentCPU.SPSR();
-        // PHASE 4: Log IRQ exit with full register state
-        static int irq_exit_count = 0;
-        if (irq_exit_count < 20) {
-            fprintf(stderr, "[IRQ EXIT #%d] PC=0x%08X->0x%08X CPSR=0x%08X->0x%08X SP=0x%08X LR=0x%08X\n",
-                    irq_exit_count, parentCPU.R()[15], parentCPU.R()[15], parentCPU.CPSR(), spsr, 
-                    parentCPU.R()[13], parentCPU.R()[14]);
-            fprintf(stderr, "  R0-R3: %08X %08X %08X %08X  R4-R7: %08X %08X %08X %08X\n",
-                    parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
-                    parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7]);
-            irq_exit_count++;
-        }
-        // Debug: Log the CPSR restoration
-        static int spsr_restore_count = 0;
-        if (spsr_restore_count++ < 10) {
-            LOG_IRQ("[LDM ^] Restoring CPSR from SPSR: 0x%08X -> 0x%08X, new PC=0x%08X\n",
-                   parentCPU.CPSR(), spsr, parentCPU.R()[15]);
-        }
         parentCPU.setCPSR(spsr);
     }
     
@@ -297,21 +280,8 @@ void ARMCPU::exec_arm_undefined(uint32_t instruction) {
 
 void ARMCPU::exec_arm_software_interrupt(uint32_t instruction) {
     DEBUG_LOG(std::string("exec_arm_software_interrupt: pc=0x") + DEBUG_TO_HEX_STRING(parentCPU.R()[15], 8) + ", instr=0x" + DEBUG_TO_HEX_STRING(instruction, 8));
-    uint32_t swi_imm = bits<23,0>(instruction);
-    uint8_t swi_num = swi_imm >> 16;
+    UNUSED(instruction);
     
-    // Log decompression SWIs (0x10-0x18) always
-    extern uint32_t g_current_frame;
-    if (swi_num >= 0x10 && swi_num <= 0x18) {
-        static uint32_t decompress_calls = 0;
-        static uint32_t last_decompress_frame = 0;
-        decompress_calls++;
-        if (g_current_frame != last_decompress_frame) {
-            fprintf(stderr, "[DECOMPRESS ARM] Frame %u: SWI 0x%02X (total: %u) from PC=0x%08X\n", 
-                    g_current_frame, swi_num, decompress_calls, parentCPU.R()[15]);
-            last_decompress_frame = g_current_frame;
-        }
-    }
     // Handle software interrupt (SWI) here. Triggers Supervisor exception.
     handleException(0x08, 0x13, true, false); // Vector 0x08, mode 0x13 (SVC), disable IRQ
 }

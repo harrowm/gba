@@ -230,10 +230,6 @@ int main(int argc, char* argv[]) {
         printf("\nStarting main loop...\n");
         printf("Press ESC or close window to quit\n\n");
         
-        // Initialize SP tracing
-        init_sp_trace();
-        printf("SP tracing initialized - writing to /tmp/sp_trace_gba.txt\n");
-        
         int frameCount = 0;
         auto lastFrameTime = std::chrono::high_resolution_clock::now();
         
@@ -246,9 +242,10 @@ int main(int argc, char* argv[]) {
             auto frameEnd = std::chrono::high_resolution_clock::now();
             auto frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart).count();
             
-            // Log slow frames (> 50ms = less than 20 FPS)
-            if (frameDuration > 50) {
-                fprintf(stderr, "[SLOW FRAME] Frame %d took %ldms\n", frameCount, frameDuration);
+            // Log slow frames (> 33ms = less than 30 FPS)
+            if (frameDuration > 33) {
+                fprintf(stderr, "[SLOW FRAME] Frame %d took %ldms (%.1f FPS)\n", 
+                        frameCount, frameDuration, 1000.0 / frameDuration);
             }
             
             // Exit if memory tracing is complete
@@ -276,12 +273,6 @@ int main(int argc, char* argv[]) {
             display.handleEvents();
             
             frameCount++;
-            if (frameCount % 60 == 0) {
-                // Print PC to see where execution is
-                CPU& cpu = gba.getCPU();
-                uint32_t pc = cpu.R()[15];
-                printf("Frame %d - PC: 0x%08X\n", frameCount, pc);
-            }
         }
         
         printf("\nEmulator shutdown cleanly\n");

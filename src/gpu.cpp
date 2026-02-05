@@ -1499,35 +1499,8 @@ void GPU::renderScanline(uint16_t scanline) {
     // Mode 2: BG2-3 (affine) + sprites
     if (mode != 0 && mode != 1 && mode != 2) {
         // Other modes not implemented yet
-        static int modeWarning = 0;
-        if (modeWarning++ < 10) {
-            fprintf(stderr, "[GPU] Unimplemented mode %d, clearing to backdrop\n", mode);
-        }
         clearScanlineToBackdrop(scanline);
         return;
-    }
-    
-    // Debug: Track when we're rendering with green backdrop
-    uint16_t backdrop_check = memory.read16(0x05000000);
-    static int greenBackdropLog = 0;
-    // Green in GBA 15-bit: high green bits (bits 5-9), low red/blue
-    bool isGreenish = ((backdrop_check >> 5) & 0x1F) > 15 && 
-                      (backdrop_check & 0x1F) < 10 && 
-                      ((backdrop_check >> 10) & 0x1F) < 10;
-    if (isGreenish && scanline == 80 && greenBackdropLog++ < 50) {
-        fprintf(stderr, "[GREEN SCREEN] Frame %u: Mode=%d DISPCNT=0x%04X Backdrop=0x%04X BG_EN=%d%d%d%d OBJ=%d\n",
-                g_current_frame, mode, dispcnt, backdrop_check,
-                (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
-                (dispcnt >> 12) & 1);
-        // Log BG control registers
-        for (int bg = 0; bg < 4; bg++) {
-            if (dispcnt & (1 << (8 + bg))) {
-                uint16_t bgcnt = memory.read16(0x04000008 + bg * 2);
-                fprintf(stderr, "  BG%d: CNT=0x%04X Pri=%d CharBase=0x%X MapBase=0x%X Size=%d\n",
-                        bg, bgcnt, bgcnt & 3, ((bgcnt >> 2) & 3) * 0x4000,
-                        ((bgcnt >> 8) & 0x1F) * 0x800, (bgcnt >> 14) & 3);
-            }
-        }
     }
 
     // Read blend and window control once per scanline (optimization)
