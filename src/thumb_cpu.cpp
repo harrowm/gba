@@ -1519,13 +1519,19 @@ void ThumbCPU::thumb_ble(uint16_t instruction) {
 void ThumbCPU::thumb_swi(uint16_t instruction) {
     uint8_t comment = instruction & 0xFF; // Software interrupt comment (bits 0-7)
 
-    // Track SWI calls
-    static uint64_t swi_count = 0;
+    // Track SWI calls - only log decompression SWIs
     extern uint32_t g_current_frame;
-    if (swi_count < 10 || g_current_frame > 130) {
-        fprintf(stderr, "[SWI THUMB] Frame %u: SWI 0x%02X from PC=0x%08X R0=%08X\n",
-               g_current_frame, comment, parentCPU.R()[15], parentCPU.R()[0]);
-        swi_count++;
+    
+    // Log decompression SWIs (0x10-0x18) always
+    if (comment >= 0x10 && comment <= 0x18) {
+        static uint32_t decompress_calls = 0;
+        static uint32_t last_decompress_frame = 0;
+        decompress_calls++;
+        if (g_current_frame != last_decompress_frame) {
+            fprintf(stderr, "[DECOMPRESS] Frame %u: SWI 0x%02X (total: %u) from PC=0x%08X R0=%08X R1=%08X\n",
+                   g_current_frame, comment, decompress_calls, parentCPU.R()[15], parentCPU.R()[0], parentCPU.R()[1]);
+            last_decompress_frame = g_current_frame;
+        }
     }
     
     // Special logging for SoftReset (SWI 0x00)

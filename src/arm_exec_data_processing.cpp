@@ -164,17 +164,6 @@ void ARMCPU::exec_arm_sub_imm(uint32_t instruction) {
         if (set_flags) {
             uint32_t spsr = parentCPU.SPSR();
             
-            // PHASE 4: Log IRQ exit via SUBS PC, LR, #imm
-            static int subs_pc_count = 0;
-            if (subs_pc_count < 20) {
-                fprintf(stderr, "[IRQ EXIT via SUBS] #%d PC=0x%08X->0x%08X CPSR=0x%08X->0x%08X SP=0x%08X\n",
-                        subs_pc_count, parentCPU.R()[15], result, parentCPU.CPSR(), spsr, parentCPU.R()[13]);
-                fprintf(stderr, "  R0-R3: %08X %08X %08X %08X  R4-R7: %08X %08X %08X %08X\n",
-                        parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3],
-                        parentCPU.R()[4], parentCPU.R()[5], parentCPU.R()[6], parentCPU.R()[7]);
-                subs_pc_count++;
-            }
-            
             uint32_t new_mode = spsr & 0x1F;
             uint32_t old_mode = parentCPU.CPSR() & 0x1F;
             // If mode changes, call setMode to bank/unbank registers

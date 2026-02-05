@@ -291,16 +291,6 @@ uint16_t Memory::read16(uint32_t address) const {
     uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
     uint16_t val = base[offset] | (base[(offset + 1) % wrapSize] << 8);
     
-    // Log IF register reads to debug the 0x0080 vs 0x0001 issue
-    if (address == 0x04000202) {
-        static int if_read_count = 0;
-        if (if_read_count++ < 20) {
-            uint16_t result = (val >> rot) | (val << (16 - rot));
-            printf("[IF READ #%d] addr=0x%08X offset=0x%X val=0x%04X rot=%d result=0x%04X\n",
-                   if_read_count, address, offset, val, rot, result);
-        }
-    }
-    
     // Log IntrWait's read from 0x03FFFFF8 (mirrors to 0x03007FF8)
     if (address == 0x03FFFFF8 || address == 0x03007FF8) {
         static int intrwait_read_count = 0;
@@ -469,26 +459,6 @@ void Memory::write16(uint32_t address, uint16_t value) {
         bool win1 = (value >> 14) & 1;
         bool objWin = (value >> 15) & 1;
         
-        // Debug: log DISPCNT changes
-        static int dispcntLogCount = 0;
-        if (dispcntLogCount++ < 20 || (oldValue & 0x80) != (value & 0x80) || g_current_frame > 139) {
-            fprintf(stderr, "[DISPCNT @ F%u PC=0x%08X] 0x%04X -> 0x%04X: Mode=%d Blank=%d BG=%d%d%d%d OBJ=%d\n",
-                   g_current_frame, g_cpu_pc, oldValue, value, mode, forcedBlank, bg0, bg1, bg2, bg3, obj);
-        }
-        
-        // CRITICAL DEBUG: Log when forced blank is SET after animation (frame > 100)
-        // This will tell us what code is causing the white screen
-        if (forcedBlank && g_current_frame > 100 && (oldValue & 0x80) == 0) {
-            if (g_current_dma_channel >= 0) {
-                fprintf(stderr, "\n!!! [FORCED BLANK SET] Frame %u: DISPCNT 0x%04X -> 0x%04X VIA DMA%d (src=0x%08X) !!!\n",
-                       g_current_frame, oldValue, value, g_current_dma_channel, g_dma_source_addr);
-            } else {
-                fprintf(stderr, "\n!!! [FORCED BLANK SET] Frame %u: DISPCNT 0x%04X -> 0x%04X at PC=0x%08X !!!\n",
-                       g_current_frame, oldValue, value, g_cpu_pc);
-            }
-            fprintf(stderr, "!!! This is likely the cause of the white screen after Nintendo logo !!!\n\n");
-        }
-        
         LOG_REG("[DISPCNT] Write 0x%04X: Mode=%d Blank=%d BG0=%d BG1=%d BG2=%d BG3=%d OBJ=%d Win0=%d Win1=%d ObjWin=%d\n",
                value, mode, forcedBlank, bg0, bg1, bg2, bg3, obj, win0, win1, objWin);
         
@@ -585,6 +555,15 @@ void Memory::writeDirectIO(uint32_t address, uint16_t value) {
     uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
     base[offset] = value & 0xFF;
     base[(offset + 1) % wrapSize] = (value >> 8) & 0xFF;
+}
+
+void Memory::setKeyState(uint16_t keyState) {
+    // Directly set KEYINPUT register (0x04000130) - bypasses read-only protection
+    // This is called from Display::handleEvents() to update key state from SDL
+    if (io) {
+        io[0x130] = keyState & 0xFF;
+        io[0x131] = (keyState >> 8) & 0xFF;
+    }
 }
 
 // Direct I/O reads (bypass wait cycle counting)

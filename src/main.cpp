@@ -158,6 +158,9 @@ int main(int argc, char* argv[]) {
         GBA gba;
         printf("GBA initialized\n");
         
+        // Connect display to memory for key input
+        display.setMemory(&gba.getMemory());
+        
         // Load ROM or use test pattern
         if (useTestPattern || !romPath) {
             if (!romPath && !useTestPattern) {
@@ -232,21 +235,20 @@ int main(int argc, char* argv[]) {
         printf("SP tracing initialized - writing to /tmp/sp_trace_gba.txt\n");
         
         int frameCount = 0;
+        auto lastFrameTime = std::chrono::high_resolution_clock::now();
         
         // Main loop
         while (!display.shouldQuit()) {
-            // Debug: Track frame progress
-            static int debugFrameCount = 0;
-            if (debugFrameCount < 20) {
-                fprintf(stderr, "[MAIN] Frame %d start\n", debugFrameCount);
-            }
-            
             // Run one frame of emulation (280,896 cycles)
             // This will trigger scanline rendering and V-Blank
+            auto frameStart = std::chrono::high_resolution_clock::now();
             gba.runFrame();
+            auto frameEnd = std::chrono::high_resolution_clock::now();
+            auto frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart).count();
             
-            if (debugFrameCount < 20) {
-                fprintf(stderr, "[MAIN] Frame %d runFrame done\n", debugFrameCount);
+            // Log slow frames (> 50ms = less than 20 FPS)
+            if (frameDuration > 50) {
+                fprintf(stderr, "[SLOW FRAME] Frame %d took %ldms\n", frameCount, frameDuration);
             }
             
             // Exit if memory tracing is complete
@@ -267,30 +269,11 @@ int main(int argc, char* argv[]) {
             int videoMode = dispcnt & 0x7;
             uint16_t* palette = reinterpret_cast<uint16_t*>(mem.getPaletteRAM());
             
-            // Check highlight sprite pixels (scanline 45, x=40 and x=60)
-            static int preDisplayCount = 0;
-            if (preDisplayCount < 10 && framebuffer) {
-                uint16_t pixel40 = framebuffer[45 * 240 + 40];
-                uint16_t pixel60 = framebuffer[45 * 240 + 60];
-                LOG_TRACE_CAT("[PRE-DISPLAY %d] scanline 45: x=40:0x%04X x=60:0x%04X (mode=%d)\n",
-                       preDisplayCount, pixel40, pixel60, videoMode);
-                preDisplayCount++;
-            }
-            
             // Render the frame to display
             display.renderFrame(framebuffer, palette, videoMode);
             
-            if (debugFrameCount < 20) {
-                fprintf(stderr, "[MAIN] Frame %d renderFrame done\n", debugFrameCount);
-            }
-            
             // Handle SDL events (keyboard, window close)
             display.handleEvents();
-            
-            if (debugFrameCount < 20) {
-                fprintf(stderr, "[MAIN] Frame %d handleEvents done\n", debugFrameCount);
-                debugFrameCount++;
-            }
             
             frameCount++;
             if (frameCount % 60 == 0) {

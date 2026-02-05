@@ -1,4 +1,5 @@
 #include "display.h"
+#include "memory.h"
 #include "debug.h"
 #include <cstring>
 
@@ -11,6 +12,8 @@ Display::Display(int scale)
     , scale(scale)
     , initialized(false)
     , quit(false)
+    , keyState(0x03FF)  // All buttons released (active low)
+    , memory(nullptr)
 {
     // Initialize SDL video subsystem
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -90,44 +93,7 @@ Display::~Display() {
 
 void Display::renderFrame(const uint16_t* framebuffer, const uint16_t* palette, int videoMode) {
     if (!initialized || !framebuffer) {
-        static int noFramebufCount = 0;
-        if (noFramebufCount++ < 5) {
-            fprintf(stderr, "[Display] renderFrame skipped: init=%d fb=%p\n", initialized, (void*)framebuffer);
-        }
         return;
-    }
-    
-    // Debug: Print pixels from center of screen where logo would be
-    static int debugCount = 0;
-    static int lastMode = -1;
-    if (debugCount < 20 || videoMode != lastMode) {
-        // Check center of screen (y=80, x around 100-140)
-        int centerY = 80;
-        int nonWhiteCount = 0;
-        for (int x = 0; x < 240; x++) {
-            uint16_t px = framebuffer[centerY * 240 + x];
-            if (px != 0x7FFF && px != 0xFFFF && px != 0) {
-                nonWhiteCount++;
-            }
-        }
-        fprintf(stderr, "[Display #%d] Mode=%d, centerRow nonWhite=%d, center: 0x%04X 0x%04X 0x%04X 0x%04X\n", 
-                debugCount, videoMode, nonWhiteCount,
-                framebuffer[centerY*240+100], framebuffer[centerY*240+110], 
-                framebuffer[centerY*240+120], framebuffer[centerY*240+130]);
-        lastMode = videoMode;
-        debugCount++;
-        if (videoMode == 4) {
-            const uint8_t* fb8 = reinterpret_cast<const uint8_t*>(framebuffer);
-            for (int i = 0; i < 10; i++) {
-                LOG_TRACE_CAT("0x%02X ", fb8[i]);
-            }
-        } else {
-            for (int i = 0; i < 10; i++) {
-                LOG_TRACE_CAT("0x%04X ", framebuffer[i]);
-            }
-        }
-        LOG_TRACE_CAT("\n");
-        debugCount++;
     }
     
     // Lock texture for pixel updates
@@ -210,17 +176,24 @@ void Display::renderFrame(const uint16_t* framebuffer, const uint16_t* palette, 
     SDL_RenderPresent(renderer);
 }
 
-void Display::handleEvents() {
-    static int callCount = 0;
-    if (callCount < 10) {
-        fprintf(stderr, "[handleEvents] call #%d this=%p\n", callCount, (void*)this);
+void Display::updateButton(GBAButton button, bool pressed) {
+    if (pressed) {
+        // Active low: 0 = pressed
+        keyState &= ~(1 << button);
+    } else {
+        // Active low: 1 = released
+        keyState |= (1 << button);
     }
     
+    // Update KEYINPUT register in memory
+    if (memory) {
+        memory->setKeyState(keyState);
+    }
+}
+
+void Display::handleEvents() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-        if (callCount < 10) {
-            fprintf(stderr, "[handleEvents] got event type=%d\n", event.type);
-        }
         switch (event.type) {
             case SDL_QUIT:
                 quit = true;
@@ -228,24 +201,44 @@ void Display::handleEvents() {
                 break;
                 
             case SDL_KEYDOWN:
-                if (event.key.keysym.sym == SDLK_ESCAPE) {
+            case SDL_KEYUP: {
+                bool pressed = (event.type == SDL_KEYDOWN);
+                
+                // ESC always quits
+                if (event.key.keysym.sym == SDLK_ESCAPE && pressed) {
                     quit = true;
                     DEBUG_INFO("ESC pressed, quitting");
+                    break;
                 }
-                // TODO: Add GBA button mappings here later
-                break;
                 
-            case SDL_KEYUP:
-                // TODO: Add GBA button handling here later
+                // Map SDL keys to GBA buttons
+                // Default mapping:
+                //   Arrow keys = D-pad
+                //   Z = A button
+                //   X = B button
+                //   Enter = Start
+                //   Backspace/RShift = Select
+                //   A = L shoulder
+                //   S = R shoulder
+                switch (event.key.keysym.sym) {
+                    case SDLK_UP:     updateButton(BTN_UP, pressed);     break;
+                    case SDLK_DOWN:   updateButton(BTN_DOWN, pressed);   break;
+                    case SDLK_LEFT:   updateButton(BTN_LEFT, pressed);   break;
+                    case SDLK_RIGHT:  updateButton(BTN_RIGHT, pressed);  break;
+                    case SDLK_z:      updateButton(BTN_A, pressed);      break;
+                    case SDLK_x:      updateButton(BTN_B, pressed);      break;
+                    case SDLK_RETURN: updateButton(BTN_START, pressed);  break;
+                    case SDLK_BACKSPACE:
+                    case SDLK_RSHIFT: updateButton(BTN_SELECT, pressed); break;
+                    case SDLK_a:      updateButton(BTN_L, pressed);      break;
+                    case SDLK_s:      updateButton(BTN_R, pressed);      break;
+                    default: break;
+                }
                 break;
+            }
                 
             default:
                 break;
         }
-    }
-    
-    if (callCount < 10) {
-        fprintf(stderr, "[handleEvents] done #%d\n", callCount);
-        callCount++;
     }
 }

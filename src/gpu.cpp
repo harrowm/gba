@@ -39,12 +39,6 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
         dispstat |= DISPSTAT_HBLANK;
         memory.write16(REG_DISPSTAT, dispstat);
         
-        // Debug HBlank
-        static int hblankDebug = 0;
-        if (hblankDebug++ < 5) {
-            fprintf(stderr, "[HBlank #%d] scanline=%d visible=%d\n", hblankDebug, currentScanline, currentScanline < SCANLINES_VISIBLE);
-        }
-        
         // HBlank callback triggers both IRQ and DMA.
         // During visible scanlines (0-159): trigger both DMA and IRQ
         // During VBlank (160-227): HBlank DMA should NOT trigger
@@ -123,17 +117,7 @@ void GPU::setupTiming(Scheduler* scheduler) {
 
 void GPU::renderScanline() {
     // Debug: trace scanlines periodically
-    static int scanline_trace = 0;
-    static int last_dispcnt = -1;
     uint16_t dispcnt = memory.read16(REG_DISPCNT);
-    
-    // Log when DISPCNT changes or first few times
-    if (scanline_trace < 10 || (int)dispcnt != last_dispcnt) {
-        scanline_trace++;
-        fprintf(stderr, "[GPU::renderScanline #%d] scanline=%d DISPCNT=0x%04X forcedBlank=%d mode=%d\n",
-               scanline_trace, currentScanline, dispcnt, isForcedBlank(), dispcnt & 7);
-        last_dispcnt = dispcnt;
-    }
     
     // SEGA logo effect debug: log BG scroll registers during frames 30-90
     // to understand the scrolling/trail effect
@@ -1509,15 +1493,43 @@ void GPU::renderScanline(uint16_t scanline) {
         return;
     }
     
-    // Mode 0 and Mode 2: Tiled backgrounds with priority system and sprites
+    // Mode 0, Mode 1 and Mode 2: Tiled backgrounds with priority system and sprites
     // Mode 0: BG0-3 (regular tiled)
+    // Mode 1: BG0-1 (regular tiled) + BG2 (affine)
     // Mode 2: BG2-3 (affine) + sprites
-    if (mode != 0 && mode != 2) {
+    if (mode != 0 && mode != 1 && mode != 2) {
         // Other modes not implemented yet
+        static int modeWarning = 0;
+        if (modeWarning++ < 10) {
+            fprintf(stderr, "[GPU] Unimplemented mode %d, clearing to backdrop\n", mode);
+        }
         clearScanlineToBackdrop(scanline);
         return;
     }
     
+    // Debug: Track when we're rendering with green backdrop
+    uint16_t backdrop_check = memory.read16(0x05000000);
+    static int greenBackdropLog = 0;
+    // Green in GBA 15-bit: high green bits (bits 5-9), low red/blue
+    bool isGreenish = ((backdrop_check >> 5) & 0x1F) > 15 && 
+                      (backdrop_check & 0x1F) < 10 && 
+                      ((backdrop_check >> 10) & 0x1F) < 10;
+    if (isGreenish && scanline == 80 && greenBackdropLog++ < 50) {
+        fprintf(stderr, "[GREEN SCREEN] Frame %u: Mode=%d DISPCNT=0x%04X Backdrop=0x%04X BG_EN=%d%d%d%d OBJ=%d\n",
+                g_current_frame, mode, dispcnt, backdrop_check,
+                (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
+                (dispcnt >> 12) & 1);
+        // Log BG control registers
+        for (int bg = 0; bg < 4; bg++) {
+            if (dispcnt & (1 << (8 + bg))) {
+                uint16_t bgcnt = memory.read16(0x04000008 + bg * 2);
+                fprintf(stderr, "  BG%d: CNT=0x%04X Pri=%d CharBase=0x%X MapBase=0x%X Size=%d\n",
+                        bg, bgcnt, bgcnt & 3, ((bgcnt >> 2) & 3) * 0x4000,
+                        ((bgcnt >> 8) & 0x1F) * 0x800, (bgcnt >> 14) & 3);
+            }
+        }
+    }
+
     // Read blend and window control once per scanline (optimization)
     BlendControl blend = readBlendControl();
     WindowControl winCtrl = readWindowControl();
@@ -1654,20 +1666,6 @@ void GPU::renderScanline(uint16_t scanline) {
     
     // 4. Copy line buffer to framebuffer
     int fbOffset = scanline * 240;
-    
-    // Debug: Check if any non-backdrop pixels were rendered
-    static int renderDebug = 0;
-    if (renderDebug < 10) {
-        int nonBackdrop = 0;
-        for (int x = 0; x < 240; x++) {
-            if (lineBuffer[x] != backdrop) nonBackdrop++;
-        }
-        if (nonBackdrop > 0) {
-            fprintf(stderr, "[RENDER scanline=%d] %d non-backdrop pixels, first: 0x%04X 0x%04X 0x%04X\n",
-                    scanline, nonBackdrop, lineBuffer[0], lineBuffer[120], lineBuffer[239]);
-            renderDebug++;
-        }
-    }
     
     for (int x = 0; x < 240; x++) {
         tiledFramebuffer[fbOffset + x] = lineBuffer[x];

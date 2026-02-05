@@ -54,6 +54,9 @@ public:
     uint8_t* getOAM() { return oam; }
     uint8_t* getPaletteRAM() { return palette; }
     uint8_t* getROM() { return rom; }
+    
+    // Key input - set KEYINPUT register state directly (bypasses read-only protection)
+    void setKeyState(uint16_t keyState);
 
 private:
     // Region pointer table: each entry points to the start of a mapped region or nullptr

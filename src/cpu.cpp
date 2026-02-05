@@ -217,17 +217,6 @@ void CPU::handleInterrupt() {
     // Save current CPSR before mode switch
     uint32_t old_cpsr = cpsr;
     
-    // PHASE 4: Log IRQ entry with full register state
-    static int phase4_count = 0;
-    if (phase4_count < 20) {
-        fprintf(stderr, "[IRQ ENTRY #%d] PC=0x%08X CPSR=0x%08X SP=0x%08X LR=0x%08X\n",
-                phase4_count, registers[15], cpsr, registers[13], registers[14]);
-        fprintf(stderr, "  R0-R3: %08X %08X %08X %08X  R4-R7: %08X %08X %08X %08X\n",
-                registers[0], registers[1], registers[2], registers[3],
-                registers[4], registers[5], registers[6], registers[7]);
-        phase4_count++;
-    }
-    
     if (irq_count <= 5) {
         LOG_IRQ("[IRQ #%d] handleInterrupt: CPSR before=0x%08X, PC=0x%08X\n", irq_count, cpsr, registers[15]);
         fflush(stdout);
