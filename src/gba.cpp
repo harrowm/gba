@@ -4,6 +4,7 @@
 #include "memory.h"
 #include "interrupt.h"
 #include "scheduler.h"
+#include "apu.h"
 #include "debug.h"
 #include <thread>
 #include <mutex>
@@ -11,7 +12,7 @@
 
 GBA::GBA(bool testMode) 
     : memory(testMode), scheduler(), interruptController(), 
-      timerController(), dmaController(), running(false), frameCount(0) {
+      timerController(), dmaController(), apu(), running(false), frameCount(0) {
     
     // Create CPU and GPU on heap to avoid stack overflow
     cpu = new CPU(memory, interruptController);
@@ -63,6 +64,15 @@ GBA::GBA(bool testMode)
     dmaController.setScheduler(&scheduler);
     dmaController.setInterruptController(&interruptController);
     memory.setDMAController(&dmaController);
+    
+    // Initialize APU (Audio Processing Unit)
+    apu.init(&memory);
+    memory.setAPU(&apu);
+    
+    // Setup timer overflow callback for FIFO audio
+    timerController.setTimerOverflowCallback([this](int timerIndex) {
+        apu.onTimerOverflow(timerIndex);
+    });
     
     // Reset CPU to initial state (PC starts at 0x00000000 - BIOS entry point)
     cpu->reset();

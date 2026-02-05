@@ -39,7 +39,8 @@ CPP_SOURCES = \
 	$(SRC_DIR)/timer_controller.cpp \
 	$(SRC_DIR)/dma.cpp \
 	$(SRC_DIR)/debug.cpp \
-	$(SRC_DIR)/display.cpp
+	$(SRC_DIR)/display.cpp \
+	$(SRC_DIR)/apu.cpp
 
 C_SOURCES = \
 	$(SRC_DIR)/arm_timing.c \

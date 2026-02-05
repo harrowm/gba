@@ -8,6 +8,7 @@
 #include "scheduler.h"
 #include "timer_controller.h"
 #include "dma.h"
+#include "apu.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -22,6 +23,7 @@ private:
     InterruptController interruptController;
     TimerController timerController;
     DMAController dmaController;
+    APU apu;
 
     std::mutex syncMutex;
     std::condition_variable syncCondition;
@@ -54,6 +56,7 @@ public:
     GPU& getGPU() { return *gpu; }
     Scheduler& getScheduler() { return scheduler; }
     DMAController& getDMAController() { return dmaController; }
+    APU& getAPU() { return apu; }
     uint64_t getFrameCount() const { return frameCount; }
 };
 

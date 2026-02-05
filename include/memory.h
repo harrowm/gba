@@ -10,6 +10,7 @@
 class Scheduler;
 class TimerController;
 class DMAController;
+class APU;
 
 class Memory {
 public:
@@ -23,6 +24,7 @@ public:
     void setScheduler(Scheduler* sched) { scheduler = sched; }
     void setTimerController(TimerController* tc) { timerController = tc; }
     void setDMAController(DMAController* dma) { dmaController = dma; }
+    void setAPU(APU* a) { apu = a; }
 
     // Accessors (now with cycle-accurate timing)
     uint8_t read8(uint32_t address) const;
@@ -82,6 +84,9 @@ private:
     
     // DMA controller for DMA register handling
     DMAController* dmaController = nullptr;
+    
+    // APU for sound register handling
+    APU* apu = nullptr;
     
     // Flag to temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
     mutable bool disableWaitCycles = false;

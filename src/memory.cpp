@@ -3,6 +3,7 @@
 #include "scheduler.h"
 #include "timer_controller.h"
 #include "dma.h"
+#include "apu.h"
 #include "debug.h"
 #include <cstring>
 #include <cstdint>
@@ -343,6 +344,14 @@ void Memory::write16(uint32_t address, uint16_t value) {
                 timerController->writeReload(timerID, value);
             }
             // Don't return - also write to memory for debugging
+        }
+    }
+    
+    // Handle sound register writes (0x04000060 - 0x040000A7)
+    if (apu) {
+        if (address >= 0x04000060 && address <= 0x040000A6) {
+            apu->write16(address, value);
+            // Also write to memory for debug reads
         }
     }
     
@@ -748,6 +757,22 @@ void Memory::write32(uint32_t address, uint32_t value) {
                 dmaController->writeControl(channelID, control);
                 return;  // Don't write to memory
             }
+        }
+    }
+    
+    // Handle sound FIFO writes (0x040000A0 = FIFO_A, 0x040000A4 = FIFO_B)
+    if (apu) {
+        if (address == 0x040000A0) {
+            apu->writeFIFO_A(value);
+            return;  // FIFO is write-only, don't store in memory
+        } else if (address == 0x040000A4) {
+            apu->writeFIFO_B(value);
+            return;
+        }
+        // Handle other sound register 32-bit writes
+        if (address >= 0x04000060 && address <= 0x040000A6) {
+            apu->write32(address, value);
+            // Also write to memory for debug reads
         }
     }
     

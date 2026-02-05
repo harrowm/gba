@@ -147,6 +147,11 @@ void TimerController::onTimerOverflow(int timerID) {
         DEBUG_INFO("Timer " + std::to_string(timerID) + " triggered IRQ");
     }
     
+    // Call external overflow callback (for APU FIFO timing)
+    if (timerOverflowCallback) {
+        timerOverflowCallback(timerID);
+    }
+    
     // Handle cascade mode: if next timer is in count-up mode, increment it
     if (timerID < 3) {
         Timer& nextTimer = timers[timerID + 1];

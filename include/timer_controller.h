@@ -62,6 +62,11 @@ public:
     // Timer event callbacks (called by scheduler)
     void onTimerOverflow(int timerID);
     
+    // Set external overflow callback (for APU FIFO timing)
+    void setTimerOverflowCallback(std::function<void(int)> callback) {
+        timerOverflowCallback = callback;
+    }
+    
     // Reset all timers
     void reset();
     
@@ -69,6 +74,7 @@ private:
     Timer timers[4];
     Scheduler* scheduler;
     InterruptController* interruptController;
+    std::function<void(int)> timerOverflowCallback;
     
     // Helper methods
     void scheduleTimer(int timerID);
