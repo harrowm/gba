@@ -863,23 +863,12 @@ void Memory::write32(uint32_t address, uint32_t value) {
         }
     }
     
-    // ARM7TDMI Misaligned Word Store (STR):
-    // On ARM7TDMI, misaligned word stores:
-    // 1. Align address down to 4-byte boundary
-    // 2. Rotate value LEFT by (misalignment * 8) bits
-    // 3. Write rotated value to aligned address
-    // Example: STR 0xAABBCCDD to 0x1003 (misaligned by 3):
-    //   - Rotates left by 24 bits: 0xDDAABBCC
-    //   - Writes to aligned 0x1000
+    // ARM7TDMI Word Store (STR):
+    // The bus force-aligns the address (bits [1:0] ignored).
+    // Unlike LDR, STR does NOT rotate the value — it writes as-is to the
+    // aligned address. Only LDR applies rotation for misaligned addresses.
     uint32_t aligned_address = address & ~3u;  // Align to 4-byte boundary
-    uint32_t misalignment = address & 3u;       // Get misalignment (0-3)
     uint32_t val = value;
-    
-    // Rotate left by misalignment * 8 bits
-    if (misalignment != 0) {
-        uint32_t rotate_amount = misalignment * 8;
-        val = (val << rotate_amount) | (val >> (32 - rotate_amount));
-    }
     
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, aligned_address, offset);
