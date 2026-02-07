@@ -79,10 +79,10 @@ Memory::Memory(bool testMode) {
             }
         }
 
-        // --- WRAM: 256KB at 0x02000000 ---
+        // --- WRAM: 256KB at 0x02000000, mirrored every 256KB throughout 0x02000000-0x02FFFFFF ---
         wram = (uint8_t*)std::calloc(256 * 1024, 1);
-        for (uint32_t addr = 0x02000000; addr < 0x02040000; addr += BLOCK_SIZE)
-            regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = wram + (addr - 0x02000000);
+        for (uint32_t addr = 0x02000000; addr < 0x03000000; addr += BLOCK_SIZE)
+            regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = wram + ((addr - 0x02000000) % (256 * 1024));
 
         // --- IWRAM: 32KB at 0x03000000, mirrored throughout 0x03000000-0x03FFFFFF ---
         iwram = (uint8_t*)std::calloc(32 * 1024, 1);
