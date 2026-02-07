@@ -905,13 +905,6 @@ void ThumbCPU::thumb_ldr_word(uint16_t instruction) {
     // Perform the load operation using memory_read_32
     uint32_t value = parentCPU.getMemory().read32(address);
     
-    // Debug: Log suspicious values being loaded
-    uint32_t pc = parentCPU.R()[15];
-    if (value >= 0xF0000000 || (value >= 0x10000000 && value < 0x02000000)) {
-        LOG_LDR("[LDR SUSPECT] PC=0x%08X: LDR R%d, [R%d + R%d] = [0x%08X + 0x%08X] = [0x%08X] => 0x%08X\n",
-               pc, rd, rn, rm, parentCPU.R()[rn], parentCPU.R()[rm], address, value);
-    }
-    
     parentCPU.R()[rd] = value;
 
     DEBUG_INFO("Executing Thumb LDR (word): R" + std::to_string(rd) + " = [0x" + debug_to_hex_string(address, 8) + "]");
@@ -1036,13 +1029,6 @@ void ThumbCPU::thumb_ldr_immediate_offset(uint16_t instruction) {
 
     // Perform the load operation using memory_read_32
     uint32_t value = parentCPU.getMemory().read32(address);
-    
-    // Debug: Log suspicious values being loaded
-    uint32_t pc = parentCPU.R()[15];
-    if (value >= 0xF0000000 || (value >= 0x10000000 && value < 0x02000000)) {
-        LOG_LDR("[LDR IMM SUSPECT] PC=0x%08X: LDR R%d, [R%d, #%d] = [0x%08X] => 0x%08X\n",
-               pc, rd, rb, offset5 << 2, address, value);
-    }
     
     parentCPU.R()[rd] = value;
 
@@ -1233,8 +1219,6 @@ void ThumbCPU::thumb_push_registers_and_lr(uint16_t instruction) {
     }
     register_count++; // Add 1 for LR
 
-    uint32_t sp_before = parentCPU.R()[13];
-    
     // Decrement SP by total amount first
     parentCPU.R()[13] -= register_count * 4;
     uint32_t base_address = parentCPU.R()[13];

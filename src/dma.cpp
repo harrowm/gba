@@ -3,18 +3,6 @@
 extern uint32_t g_current_frame;
 extern uint32_t g_cpu_pc;
 
-// DMA debug tracking - when DMA is active, set g_cpu_pc to indicate DMA transfer
-int g_current_dma_channel = -1;
-uint32_t g_dma_source_addr = 0;
-uint32_t g_dma_dest_addr = 0;
-
-// Sound DMA diagnostic: track source addresses and data content
-uint32_t g_soundDmaSourceA = 0, g_soundDmaSourceB = 0;
-int g_soundDmaZeroWordsA = 0, g_soundDmaNonZeroWordsA = 0;
-int g_soundDmaZeroWordsB = 0, g_soundDmaNonZeroWordsB = 0;
-uint32_t g_soundDmaFirstWordA = 0, g_soundDmaFirstWordB = 0;
-int g_soundDmaClampCountA = 0, g_soundDmaClampCountB = 0;
-
 #include "memory.h"
 #include "scheduler.h"
 #include "interrupt.h"
@@ -97,8 +85,6 @@ void DMAController::writeSourceAddress(int channelId, uint32_t value) {
     };
     
     uint32_t maskedValue = value & masks[channelId];
-    uint32_t oldValue = channels[channelId].getSourceAddress();
-    uint32_t oldIntSrc = channels[channelId].internalSource;
     channels[channelId].setSourceAddress(maskedValue);
     
     // IMPORTANT: On real GBA hardware, writing to DMAxSAD always updates the internal
@@ -208,12 +194,6 @@ void DMAController::performTransfer(int channelId) {
     bool isSoundDMA = (channelId == 1 || channelId == 2) && 
                       (destAddr == 0x040000A0 || destAddr == 0x040000A4);
     
-    // Track sound DMA source addresses and data content
-    if (isSoundDMA) {
-        if (destAddr == 0x040000A0) { g_soundDmaSourceA = srcAddr; g_soundDmaFirstWordA = 0; }
-        else { g_soundDmaSourceB = srcAddr; g_soundDmaFirstWordB = 0; }
-    }
-    
     // For sound FIFO DMA: clamp reads to prevent buffer overrun.
     // M4A's PCM DMA buffers are sized as pcmDmaPeriod * samplesPerVBlank (typically 0x630).
     // Due to timer overflows occurring between VBlank start and the M4A VBlank handler
@@ -272,53 +252,25 @@ void DMAController::performTransfer(int channelId) {
     LOG_DMA("[DMA%d] STARTING TRANSFER: src=0x%08X dst=0x%08X count=%d size=%s\n",
            channelId, srcAddr, destAddr, count, is32bit ? "32bit" : "16bit");
     
-    // Track DMA for debug output (when memory writes happen, we can see it's from DMA)
-    g_current_dma_channel = channelId;
-    g_dma_source_addr = srcAddr;
-    g_dma_dest_addr = destAddr;
-    
     // Perform all transfers
     for (uint16_t i = 0; i < count; i++) {
         // Read from source
         uint32_t value;
         
         // Sound DMA buffer overrun safety clamp
-        bool soundClamped = false;
         if (isSoundDMA && srcAddr >= soundDmaBase + soundBufferLimit) {
             value = 0;
-            soundClamped = true;
         } else if (is32bit) {
             value = memory->read32(srcAddr);
         } else {
             value = memory->read16(srcAddr);
         }
         
-        // Update tracking before write (so memory.cpp can see what DMA is doing)
-        g_dma_source_addr = srcAddr;
-        g_dma_dest_addr = destAddr;
-        
         // Write to destination
         if (is32bit) {
             memory->write32(destAddr, value);
         } else {
             memory->write16(destAddr, static_cast<uint16_t>(value));
-        }
-        
-        // Track sound DMA data content
-        if (isSoundDMA) {
-            if (soundClamped) {
-                if (destAddr == 0x040000A0) g_soundDmaClampCountA++;
-                else g_soundDmaClampCountB++;
-            }
-            if (destAddr == 0x040000A0) {
-                if (i == 0) g_soundDmaFirstWordA = value;
-                if (value == 0) g_soundDmaZeroWordsA++;
-                else g_soundDmaNonZeroWordsA++;
-            } else {
-                if (i == 0) g_soundDmaFirstWordB = value;
-                if (value == 0) g_soundDmaZeroWordsB++;
-                else g_soundDmaNonZeroWordsB++;
-            }
         }
         
         // Advance scheduler: 2 cycles per transfer (internal + 1 access)
@@ -373,9 +325,6 @@ void DMAController::performTransfer(int channelId) {
         uint16_t irqFlags[4] = { 0x0100, 0x0200, 0x0400, 0x0800 };  // DMA0-3 IRQ bits
         interruptController->requestInterrupt(irqFlags[channelId]);
     }
-    
-    // Clear DMA tracking
-    g_current_dma_channel = -1;
 }
 
 void DMAController::updateAddresses(int channelId, uint32_t& srcAddr, uint32_t& destAddr) {
@@ -462,8 +411,6 @@ void DMAController::triggerHBlank() {
     #endif
     startTriggeredTransfers(DMATimingMode::HBLANK);
 }
-
-static int g_sound_dma_debug_count = 0;
 
 void DMAController::triggerSoundFIFO(int fifoIndex) {
     // Sound DMA uses channels 1 and 2 with SPECIAL timing mode

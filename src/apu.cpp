@@ -5,24 +5,6 @@
 #include <cstdio>
 #include <cstring>
 
-// Per-frame pipeline counters for diagnostics
-static int g_timerOverflowCount[4] = {0,0,0,0};
-static int g_fifoAReadCount = 0, g_fifoBReadCount = 0;
-static int g_fifoADmaCount = 0, g_fifoBDmaCount = 0;
-
-// Sound DMA tracking (defined in dma.cpp)
-extern uint32_t g_soundDmaSourceA, g_soundDmaSourceB;
-extern int g_soundDmaZeroWordsA, g_soundDmaNonZeroWordsA;
-extern int g_soundDmaZeroWordsB, g_soundDmaNonZeroWordsB;
-
-// VBlank IRQ tracking counters (defined in interrupt.cpp)
-extern uint32_t g_vblank_requested;
-extern uint32_t g_vblank_delivered;
-extern uint32_t g_irq_trigger_i1;
-extern uint32_t g_vblank_called;
-extern uint32_t g_vblank_ie_miss;
-extern int g_soundDmaClampCountA, g_soundDmaClampCountB;
-
 // Sound register addresses
 constexpr uint32_t REG_SOUND1CNT_L = 0x04000060;
 constexpr uint32_t REG_SOUND1CNT_H = 0x04000062;
@@ -123,15 +105,6 @@ void APU::pushAudio() {
     if (frameSamples.empty()) return;
 
     uint32_t queued = getQueuedSamples();
-    int produced = (int)frameSamples.size() / 2;
-
-    // Reset per-frame counters
-    g_timerOverflowCount[0] = g_timerOverflowCount[1] = g_timerOverflowCount[2] = g_timerOverflowCount[3] = 0;
-    g_fifoAReadCount = g_fifoBReadCount = 0;
-    g_fifoADmaCount = g_fifoBDmaCount = 0;
-    g_soundDmaZeroWordsA = g_soundDmaNonZeroWordsA = 0;
-    g_soundDmaZeroWordsB = g_soundDmaNonZeroWordsB = 0;
-    g_soundDmaClampCountA = g_soundDmaClampCountB = 0;
 
     // Push raw samples — no resampling, no interpolation.
     // Rate adjustment happens in tick() via adjustedRate, which smoothly
@@ -266,8 +239,6 @@ void APU::startSampling() {
 }
 
 void APU::onTimerOverflow(int timerIndex) {
-    if (timerIndex >= 0 && timerIndex < 4) g_timerOverflowCount[timerIndex]++;
-
     // Check master sound enable (matches mGBA: gba->audio.enable check)
     if (!(soundcnt_x & 0x80)) return;
 
@@ -278,18 +249,14 @@ void APU::onTimerOverflow(int timerIndex) {
     // 1. Check DMA refill FIRST (before consuming)
     // 2. Consume one byte from internal buffer
     if (timerIndex == fifoA_timer) {
-        g_fifoAReadCount++;
         if (fifoA.needsRefill() && dmaController) {
-            g_fifoADmaCount++;
             dmaController->triggerSoundFIFO(0);
         }
         fifoA.consume();
     }
 
     if (timerIndex == fifoB_timer) {
-        g_fifoBReadCount++;
         if (fifoB.needsRefill() && dmaController) {
-            g_fifoBDmaCount++;
             dmaController->triggerSoundFIFO(1);
         }
         fifoB.consume();

@@ -209,8 +209,6 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
     
     bool pc_in_rom = (pc >= 0x08000000 && pc < 0x0E000000);
     bool pc_in_bios = (pc < 0x00004000);
-    bool pc_in_iwram = (pc >= 0x03000000 && pc < 0x03008000);
-    bool pc_in_ewram = (pc >= 0x02000000 && pc < 0x02040000);
     
     // Detailed BIOS tracing
     bool should_trace = (g_trace_bios && pc_in_bios) || (g_trace_all && instruction_count <= g_trace_max_instructions);

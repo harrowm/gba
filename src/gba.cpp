@@ -28,8 +28,6 @@ GBA::GBA(bool testMode)
     interruptController.setScheduler(&scheduler);
     
     // Setup interrupt callback (CPU will handle interrupt when scheduled event fires)
-    extern uint32_t g_vblank_delivered;
-    extern uint32_t g_irq_trigger_i1;
     interruptController.setIRQCallback([this]() {
         // Always wake from HALT — real hardware wakes on ANY interrupt
         // (IE & IF match), regardless of IME or CPSR I-flag.
@@ -39,10 +37,7 @@ GBA::GBA(bool testMode)
         // This is called by the scheduled IRQ_TRIGGER event after IRQ_LATENCY_CYCLES
         // Check the CPU's I flag before raising IRQ (like mGBA's _triggerIRQ)
         if (!(cpu->CPSR() & 0x80)) {  // I flag is bit 7
-            g_vblank_delivered++;
             cpu->handleInterrupt();
-        } else {
-            g_irq_trigger_i1++;
         }
     });
     
@@ -270,28 +265,22 @@ void GBA::runFrame() {
         }
         
         uint32_t pc = cpu->R()[15];
-        uint64_t cycleBeforeInstr = scheduler.getCurrentCycle();
         
         // DEBUG: Check for CPSR corruption (bits 8-27 should always be 0)
         uint32_t cpsr = cpu->CPSR();
         uint32_t suspicious_bits = cpsr & 0x0FFFFF00; // Bits 8-27 (NOT including flags 28-31)
         static bool cpsr_corruption_detected = false;
         if (!cpsr_corruption_detected && suspicious_bits != 0 && suspicious_bits != 0x00000080) {
-            printf("\n[CPSR CORRUPTION!] PC=0x%08X, CPSR=0x%08X (suspicious bits 8-27: 0x%08X)\n",
+            LOG_CRASH("\n[CPSR CORRUPTION!] PC=0x%08X, CPSR=0x%08X (suspicious bits 8-27: 0x%08X)\n",
                    pc, cpsr, suspicious_bits);
-            printf("  Mode: 0x%02X, I:%d F:%d T:%d, Flags: N:%d Z:%d C:%d V:%d\n",
+            LOG_CRASH("  Mode: 0x%02X, I:%d F:%d T:%d, Flags: N:%d Z:%d C:%d V:%d\n",
                    cpsr & 0x1F, (cpsr >> 7) & 1, (cpsr >> 6) & 1, (cpsr >> 5) & 1,
                    (cpsr >> 31) & 1, (cpsr >> 30) & 1, (cpsr >> 29) & 1, (cpsr >> 28) & 1);
-            fflush(stdout);
             cpsr_corruption_detected = true;
         }
         
         // Track execution patterns to find loops
-        static uint32_t last_pc __attribute__((unused)) = 0;
         static const char* last_region = nullptr;
-        static uint32_t pc_counts[256] = {0}; // Track hot spots by PC high byte
-        static uint64_t total_instructions = 0;
-        static uint64_t last_report_cycle = 0;
         
         // Circular buffer to track last 100 instructions before crash
         static uint32_t last_pcs[100] = {0};
@@ -334,11 +323,6 @@ void GBA::runFrame() {
             region = "IO";
         }
         
-        // Track execution counts by region (every 256 bytes)
-        uint8_t pc_bucket = (pc >> 16) & 0xFF;
-        pc_counts[pc_bucket]++;
-        total_instructions++;
-        
         // Log region transitions
         if (region != last_region && last_region != nullptr) {
             LOG_REGION("[PC REGION] %s -> %s at PC=0x%08X (frame %d)\n", 
@@ -360,11 +344,11 @@ void GBA::runFrame() {
                 LOG_CRASH("  Last instruction fetch from: %s\n", last_region);
                 
                 // Dump the last 100 instructions before crash
-                printf("  Last 100 instructions before crash:\n");
+                LOG_CRASH("  Last 100 instructions before crash:\n");
                 for (int i = 0; i < 100; i++) {
                     int idx = (buf_idx + i) % 100;
                     bool thumb = (last_cpsrs[idx] >> 5) & 1;
-                    printf("    [%2d] PC=0x%08X CPSR=%08X %s 0x%08X\n",
+                    LOG_CRASH("    [%2d] PC=0x%08X CPSR=%08X %s 0x%08X\n",
                            i, last_pcs[idx], last_cpsrs[idx],
                            thumb ? "THUMB" : "ARM  ", last_instrs[idx]);
                 }
@@ -374,47 +358,34 @@ void GBA::runFrame() {
             static bool first_unknown = true;
             if (strcmp(region, "UNKNOWN") == 0 && first_unknown) {
                 first_unknown = false;
-                printf("[FIRST UNKNOWN] Detailed state dump:\n");
-                printf("  R0-R3:  %08X %08X %08X %08X\n",
+                LOG_CRASH("[FIRST UNKNOWN] Detailed state dump:\n");
+                LOG_CRASH("  R0-R3:  %08X %08X %08X %08X\n",
                        cpu->R()[0], cpu->R()[1], cpu->R()[2], cpu->R()[3]);
-                printf("  R4-R7:  %08X %08X %08X %08X\n",
+                LOG_CRASH("  R4-R7:  %08X %08X %08X %08X\n",
                        cpu->R()[4], cpu->R()[5], cpu->R()[6], cpu->R()[7]);
-                printf("  R8-R11: %08X %08X %08X %08X\n",
+                LOG_CRASH("  R8-R11: %08X %08X %08X %08X\n",
                        cpu->R()[8], cpu->R()[9], cpu->R()[10], cpu->R()[11]);
-                printf("  R12-R15: %08X %08X %08X %08X\n",
+                LOG_CRASH("  R12-R15: %08X %08X %08X %08X\n",
                        cpu->R()[12], cpu->R()[13], cpu->R()[14], cpu->R()[15]);
-                printf("  CPSR: %08X, Mode: 0x%02X, T=%d\n",
+                LOG_CRASH("  CPSR: %08X, Mode: 0x%02X, T=%d\n",
                        cpu->CPSR(), cpu->CPSR() & 0x1F, (cpu->CPSR() >> 5) & 1);
-                printf("  IRQ handler dump @0x030004B0:\n");
+                LOG_CRASH("  IRQ handler dump @0x030004B0:\n");
                 for (int i = 0; i < 16; i++) {
                     uint32_t addr = 0x030004B0 + (i * 4);
                     uint32_t word = memory.readDirectIO32(addr);
-                    printf("    0x%08X: 0x%08X\n", addr, word);
+                    LOG_CRASH("    0x%08X: 0x%08X\n", addr, word);
                 }
-                  printf("  Last 100 instructions before UNKNOWN:\n");
-                  for (int i = 0; i < 100; i++) {
-                      int idx = (buf_idx + i) % 100;
-                      bool thumb = (last_cpsrs[idx] >> 5) & 1;
-                      printf("    [%2d] PC=0x%08X CPSR=%08X %s 0x%08X\n",
-                          i, last_pcs[idx], last_cpsrs[idx],
-                          thumb ? "THUMB" : "ARM  ", last_instrs[idx]);
-                  }
+                LOG_CRASH("  Last 100 instructions before UNKNOWN:\n");
+                for (int i = 0; i < 100; i++) {
+                    int idx = (buf_idx + i) % 100;
+                    bool thumb = (last_cpsrs[idx] >> 5) & 1;
+                    LOG_CRASH("    [%2d] PC=0x%08X CPSR=%08X %s 0x%08X\n",
+                        i, last_pcs[idx], last_cpsrs[idx],
+                        thumb ? "THUMB" : "ARM  ", last_instrs[idx]);
+                }
             }
         }
         last_region = region;
-        
-        // Periodic execution report (every 50k instructions)
-        // DISABLED for performance
-        // if (total_instructions - last_report_cycle >= 50000) {
-        //     printf("\n[EXEC REPORT Frame %d] After %llu instructions:\n", frame_num, total_instructions);
-        //     // Show top execution regions
-        //     for (int i = 0; i < 256; i++) {
-        //         if (pc_counts[i] > 1000) {
-        //             printf("  Region 0x%02X____: %u instructions\n", i, pc_counts[i]);
-        //         }
-        //     }
-        //     last_report_cycle = total_instructions;
-        // }
         
         // Track ROM entry specifically  
         bool pc_in_rom = (pc >= 0x08000000 && pc < 0x0E000000);
@@ -436,8 +407,6 @@ void GBA::runFrame() {
             LOG_REGION("[ROM EXIT] Returned to BIOS at PC=0x%08X\n", pc);
             in_rom = false;
         }
-        
-        last_pc = pc;
         
         // Execute the instruction (this will advance cycles based on instruction + memory timing)
         // Typical GBA instruction cost breakdown:

@@ -3,13 +3,6 @@
 #include "scheduler.h"
 #include "debug.h"
 
-// Debug counters for VBlank IRQ tracking
-uint32_t g_vblank_requested = 0;   // VBlank requestInterrupt + ieIF matched
-uint32_t g_vblank_delivered = 0;   // VBlank actually taken by CPU (handleInterrupt called)
-uint32_t g_irq_trigger_i1 = 0;    // IRQ_TRIGGER fired while I=1
-uint32_t g_vblank_called = 0;      // VBlank requestInterrupt called (unconditional)
-uint32_t g_vblank_ie_miss = 0;     // VBlank called but IE didn't match
-
 void InterruptController::requestInterrupt(uint16_t irqFlag) {
     if (!memory) {
         DEBUG_ERROR("InterruptController: memory not set");
@@ -55,14 +48,10 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
     // On real hardware, HALT wakes on any IE & IF match (IME is irrelevant
     // for wake-up). IME only gates whether the IRQ is actually *taken* by
     // the CPU, which the irqCallback already handles.
-    if (irqFlag & 1) g_vblank_called++;  // Unconditional VBlank count
 
     uint16_t ieIF = ieVal & currentIF;
     if (scheduler && ieIF) {
-        if (irqFlag & 1) g_vblank_requested++;  // Count VBlank requests
         scheduleIRQCheck();
-    } else if (irqFlag & 1) {
-        g_vblank_ie_miss++;
     }
 }
 

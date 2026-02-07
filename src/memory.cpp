@@ -16,11 +16,6 @@ extern uint32_t g_current_frame;
 extern uint64_t g_total_instruction_count;
 extern uint32_t g_cpu_pc; // For debug tracking - set by CPU before each instruction
 
-// DMA debug tracking (from dma.cpp)
-extern int g_current_dma_channel;
-extern uint32_t g_dma_source_addr;
-extern uint32_t g_dma_dest_addr;
-
 // Watchpoint configuration
 #define WATCHPOINT_ADDR 0x03007EA0
 #define WATCHPOINT_ENABLED 0
@@ -478,10 +473,6 @@ void Memory::write16(uint32_t address, uint16_t value) {
     static bool feature_logged[256] = {false};  // Track which features we've logged
     
     if (address == 0x04000000) { // REG_DISPCNT
-        // Check previous state
-        uint16_t oldValue = read16(0x04000000);
-        bool bg2WasEnabled = (oldValue >> 10) & 1;
-        
         int mode = value & 0x7;
         bool forcedBlank = (value >> 7) & 1;
         bool bg0 = (value >> 8) & 1;

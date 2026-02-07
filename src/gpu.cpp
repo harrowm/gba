@@ -2540,12 +2540,10 @@ void GPU::renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanli
     int32_t texY = params.refY + (scanline * params.pd);
     
     // Render each screen pixel
-    bool anyVisible = false;
     for (int screenX = 0; screenX < 240; screenX++) {
         // Check window visibility first
         uint8_t control = getWindowControlForPixel(screenX, scanline, winCtrl);
         bool layerVisible = (control & (1 << bgNum)) != 0;
-        if (layerVisible) anyVisible = true;
         
         if (!layerVisible) {
             // Advance texture coordinates even if not visible

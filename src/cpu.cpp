@@ -142,9 +142,6 @@ void CPU::onCPSRWrite() {
 // ============================================================================
 
 void CPU::executeOneInstruction() {
-    static uint64_t exec_count = 0;
-    exec_count++;
-    
     // Trace instruction state BEFORE execution (like mGBA's GDB trace)
     // Tracers use readDirectIO internally now, so no need to disable wait cycles
     if (tracer.isEnabled()) {
