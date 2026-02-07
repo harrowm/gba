@@ -78,3 +78,4 @@ ie_trace.txt
 analyze_bios_sound*.py
 decode_soundinfo.py
 Makefile.debug
+tests/mgba-suite/

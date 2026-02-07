@@ -267,6 +267,41 @@ void Memory::write8(uint32_t address, uint8_t value) {
         return;  // Silently ignore writes to KEYINPUT
     }
     
+    // GBA bus width restrictions for byte writes:
+    // VRAM, Palette RAM, and OAM have 16-bit buses - no 8-bit write support.
+    // VRAM BG area: byte write duplicates to aligned halfword (val | val<<8)
+    // VRAM OBJ area: byte writes are IGNORED
+    // Palette RAM: byte write duplicates to aligned halfword
+    // OAM: byte writes are IGNORED
+    
+    // VRAM (0x06000000-0x06FFFFFF)
+    if (address >= 0x06000000 && address < 0x07000000) {
+        // Determine if BG or OBJ VRAM after mirroring (128KB period)
+        uint32_t vramOffset = (address - 0x06000000) % 0x20000;
+        if (vramOffset >= 0x10000) {
+            return; // OBJ VRAM: byte writes ignored
+        }
+        // BG VRAM: duplicate byte to aligned halfword
+        uint32_t alignedOffset = offset & ~1u;
+        base[alignedOffset] = value;
+        base[alignedOffset + 1] = value;
+        return;
+    }
+    
+    // Palette RAM (0x05000000-0x05FFFFFF)
+    if (address >= 0x05000000 && address < 0x06000000) {
+        // Duplicate byte to aligned halfword
+        uint32_t alignedOffset = offset & ~1u;
+        base[alignedOffset] = value;
+        base[alignedOffset + 1] = value;
+        return;
+    }
+    
+    // OAM (0x07000000-0x07FFFFFF)
+    if (address >= 0x07000000 && address < 0x08000000) {
+        return; // OAM: byte writes ignored
+    }
+    
     base[offset] = value;
 }
 
@@ -305,7 +340,9 @@ uint16_t Memory::read16(uint32_t address) const {
         }
     }
     
-    uint32_t rot = (address & 1) * 8;
+    // GBA LDRH/STRH force-align: bit 0 of address is ignored by the bus
+    address &= ~1u;
+    
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
     if (!base) return 0xFFFF;
@@ -317,13 +354,12 @@ uint16_t Memory::read16(uint32_t address) const {
     if (address == 0x03FFFFF8 || address == 0x03007FF8) {
         static int intrwait_read_count = 0;
         if (intrwait_read_count++ < 50) {
-            uint16_t result = (val >> rot) | (val << (16 - rot));
-            LOG_IRQ("[INTRWAIT READ16 #%d] addr=0x%08X → offset=0x%X val=0x%04X rot=%d result=0x%04X\n",
-                   intrwait_read_count, address, offset, val, rot, result);
+            LOG_IRQ("[INTRWAIT READ16 #%d] addr=0x%08X → offset=0x%X val=0x%04X\n",
+                   intrwait_read_count, address, offset, val);
         }
     }
     
-    return (val >> rot) | (val << (16 - rot));
+    return val;
 }
 
 void Memory::write16(uint32_t address, uint16_t value) {
@@ -397,8 +433,10 @@ void Memory::write16(uint32_t address, uint16_t value) {
         }
     }
     
-    uint32_t rot = (address & 1) * 8;
-    uint16_t val = (value << rot) | (value >> (16 - rot));
+    // GBA LDRH/STRH force-align: bit 0 of address is ignored by the bus
+    address &= ~1u;
+    
+    uint16_t val = value;
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
@@ -687,16 +725,10 @@ uint32_t Memory::read32(uint32_t address) const {
         }
     }
     
-    // ARM7TDMI Misaligned Word Load (LDR):
-    // On ARM7TDMI, misaligned word loads:
-    // 1. Align address down to 4-byte boundary
-    // 2. Read the word from aligned address
-    // 3. Rotate the value RIGHT by (misalignment * 8) bits
-    // Example: LDR from 0x1003 (misaligned by 3):
-    //   - Reads from 0x1000
-    //   - Rotates result right by 24 bits
+    // ARM7TDMI bus: force-align to word boundary, return aligned word.
+    // NOTE: The LDR instruction applies rotation for misaligned addresses;
+    // LDM, DMA, and other bus masters just get the aligned word.
     uint32_t aligned_address = address & ~3u;  // Align to 4-byte boundary
-    uint32_t misalignment = address & 3u;       // Get misalignment (0-3)
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), aligned_address, offset);
     if (!base) {
@@ -726,11 +758,6 @@ uint32_t Memory::read32(uint32_t address) const {
                bios18_read_count, offset, base[offset], base[offset+1], base[offset+2], base[offset+3], val);
     }
     
-    // Rotate right by misalignment * 8 bits
-    if (misalignment != 0) {
-        uint32_t rotate_amount = misalignment * 8;
-        val = (val >> rotate_amount) | (val << (32 - rotate_amount));
-    }
     // Debug: Log I/O register reads during BIOS loop
     if (address >= 0x04000000 && address < 0x04000400) {
         static int ioReadCount = 0;

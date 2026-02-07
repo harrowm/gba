@@ -196,7 +196,10 @@ void ARMCPU::exec_arm_ldr_imm_pre_wb(uint32_t instruction) {
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
+    uint32_t value = parentCPU.getMemory().read32(addr);
+    uint32_t rot = (addr & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
+    parentCPU.R()[rd] = value;
     parentCPU.R()[rn] = addr;  // Writeback
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
@@ -211,6 +214,8 @@ void ARMCPU::exec_arm_ldr_imm_pre_nowb(uint32_t instruction) {
     uint32_t base = (rn == 15) ? (parentCPU.R()[rn] + 8) : parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
     uint32_t value = parentCPU.getMemory().read32(addr);
+    uint32_t rot = (addr & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
     
     // Debug: trace ALL LDR PC from BIOS IRQ handler
     if (rd == 15 && parentCPU.R()[15] < 0x4000) {
@@ -232,7 +237,10 @@ void ARMCPU::exec_arm_ldr_imm_post_wb(uint32_t instruction) {
     uint32_t imm = bits<11,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = (rn == 15) ? (parentCPU.R()[15] + 8) : parentCPU.R()[rn];
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
+    uint32_t value = parentCPU.getMemory().read32(base);
+    uint32_t rot = (base & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
+    parentCPU.R()[rd] = value;
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rn] = addr;  // Writeback
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
@@ -258,7 +266,10 @@ void ARMCPU::exec_arm_ldr_reg_pre_wb(uint32_t instruction) {
     }
     
     uint32_t addr = up ? base + offset : base - offset;
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(addr);
+    uint32_t value = parentCPU.getMemory().read32(addr);
+    uint32_t rot = (addr & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
+    parentCPU.R()[rd] = value;
     parentCPU.R()[rn] = addr;  // Writeback
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
@@ -284,6 +295,8 @@ void ARMCPU::exec_arm_ldr_reg_pre_nowb(uint32_t instruction) {
     
     uint32_t addr = up ? base + offset : base - offset;
     uint32_t value = parentCPU.getMemory().read32(addr);
+    uint32_t rot = (addr & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
     // Debug: track BIOS LDR from jump table (address 0x1C0-0x250)
     static int ldr_trace = 0;
     if (addr >= 0x1C0 && addr < 0x250 && ldr_trace < 10) {
@@ -314,7 +327,10 @@ void ARMCPU::exec_arm_ldr_reg_post_wb(uint32_t instruction) {
     }
     
     uint32_t addr = up ? base + offset : base - offset;
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(base);
+    uint32_t value = parentCPU.getMemory().read32(base);
+    uint32_t rot = (base & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
+    parentCPU.R()[rd] = value;
     parentCPU.R()[rn] = addr;  // Writeback
     if (rd != 15) parentCPU.R()[15] += 4; // Increment PC for next instruction
 }
@@ -486,7 +502,8 @@ void ARMCPU::exec_arm_ldrh_reg_pre_wb(uint32_t instruction) {
     uint32_t base = parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
-    parentCPU.R()[rd] = parentCPU.getMemory().read16(addr);
+    uint32_t val = parentCPU.getMemory().read16(addr);
+    parentCPU.R()[rd] = (addr & 1) ? (val >> 8) | (val << 24) : val;
     parentCPU.R()[rn] = addr; // Writeback
     if (rd != 15) parentCPU.R()[15] += 4;
 }
@@ -500,7 +517,8 @@ void ARMCPU::exec_arm_ldrh_reg_pre_nowb(uint32_t instruction) {
     uint32_t base = parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
-    parentCPU.R()[rd] = parentCPU.getMemory().read16(addr);
+    uint32_t val = parentCPU.getMemory().read16(addr);
+    parentCPU.R()[rd] = (addr & 1) ? (val >> 8) | (val << 24) : val;
     if (rd != 15) parentCPU.R()[15] += 4;
 }
 
@@ -512,7 +530,8 @@ void ARMCPU::exec_arm_ldrh_reg_post_wb(uint32_t instruction) {
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
-    parentCPU.R()[rd] = parentCPU.getMemory().read16(base);
+    uint32_t val = parentCPU.getMemory().read16(base);
+    parentCPU.R()[rd] = (base & 1) ? (val >> 8) | (val << 24) : val;
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rn] = addr; // Writeback
     if (rd != 15) parentCPU.R()[15] += 4;
@@ -666,10 +685,15 @@ void ARMCPU::exec_arm_ldrsh_reg_pre_wb(uint32_t instruction) {
     uint32_t base = parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
-    int16_t val = parentCPU.getMemory().read16(addr);
+    if (addr & 1) {
+        int8_t sval = (int8_t)parentCPU.getMemory().read8(addr);
+        parentCPU.R()[rd] = (int32_t)sval;
+    } else {
+        int16_t val = parentCPU.getMemory().read16(addr);
+        parentCPU.R()[rd] = (int32_t)val;
+    }
     DEBUG_LOG(std::string("  base=0x") + DEBUG_TO_HEX_STRING(base, 8) + ", offset=0x" + DEBUG_TO_HEX_STRING(offset, 8) + ", addr=0x" + DEBUG_TO_HEX_STRING(addr, 8));
-    DEBUG_LOG(std::string("  loaded (int16_t)val=") + std::to_string(val));
-    parentCPU.R()[rd] = (int32_t)val;
+    DEBUG_LOG(std::string("  rd (R[") + std::to_string(rd) + "] = 0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rd], 8));
     parentCPU.R()[rn] = addr;
     DEBUG_LOG(std::string("  rd (R[") + std::to_string(rd) + "] = 0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rd], 8));
     DEBUG_LOG(std::string("  rn (R[") + std::to_string(rn) + "] = 0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rn], 8));
@@ -687,10 +711,14 @@ void ARMCPU::exec_arm_ldrsh_reg_pre_nowb(uint32_t instruction) {
     uint32_t base = parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
     uint32_t addr = up ? base + offset : base - offset;
-    int16_t val = parentCPU.getMemory().read16(addr);
+    if (addr & 1) {
+        int8_t sval = (int8_t)parentCPU.getMemory().read8(addr);
+        parentCPU.R()[rd] = (int32_t)sval;
+    } else {
+        int16_t val = parentCPU.getMemory().read16(addr);
+        parentCPU.R()[rd] = (int32_t)val;
+    }
     DEBUG_LOG(std::string("  base=0x") + DEBUG_TO_HEX_STRING(base, 8) + ", offset=0x" + DEBUG_TO_HEX_STRING(offset, 8) + ", addr=0x" + DEBUG_TO_HEX_STRING(addr, 8));
-    DEBUG_LOG(std::string("  loaded (int16_t)val=") + std::to_string(val));
-    parentCPU.R()[rd] = (int32_t)val;
     DEBUG_LOG(std::string("  rd (R[") + std::to_string(rd) + "] = 0x" + DEBUG_TO_HEX_STRING(parentCPU.R()[rd], 8));
     if (rd != 15) parentCPU.R()[15] += 4;
 }
@@ -705,8 +733,13 @@ void ARMCPU::exec_arm_ldrsh_reg_post_wb(uint32_t instruction) {
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t offset = parentCPU.R()[rm];
-    int16_t val = parentCPU.getMemory().read16(base);
-    parentCPU.R()[rd] = (int32_t)val;
+    if (base & 1) {
+        int8_t sval = (int8_t)parentCPU.getMemory().read8(base);
+        parentCPU.R()[rd] = (int32_t)sval;
+    } else {
+        int16_t val = parentCPU.getMemory().read16(base);
+        parentCPU.R()[rd] = (int32_t)val;
+    }
     uint32_t addr = up ? base + offset : base - offset;
     parentCPU.R()[rn] = addr;
     if (rd != 15) parentCPU.R()[15] += 4;
@@ -721,8 +754,13 @@ void ARMCPU::exec_arm_ldrsh_imm_pre_wb(uint32_t instruction) {
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    int16_t val = parentCPU.getMemory().read16(addr);
-    parentCPU.R()[rd] = (int32_t)val;
+    if (addr & 1) {
+        int8_t sval = (int8_t)parentCPU.getMemory().read8(addr);
+        parentCPU.R()[rd] = (int32_t)sval;
+    } else {
+        int16_t val = parentCPU.getMemory().read16(addr);
+        parentCPU.R()[rd] = (int32_t)val;
+    }
     parentCPU.R()[rn] = addr;
     if (rd != 15) parentCPU.R()[15] += 4;
 }
@@ -736,8 +774,13 @@ void ARMCPU::exec_arm_ldrsh_imm_pre_nowb(uint32_t instruction) {
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    int16_t val = parentCPU.getMemory().read16(addr);
-    parentCPU.R()[rd] = (int32_t)val;
+    if (addr & 1) {
+        int8_t sval = (int8_t)parentCPU.getMemory().read8(addr);
+        parentCPU.R()[rd] = (int32_t)sval;
+    } else {
+        int16_t val = parentCPU.getMemory().read16(addr);
+        parentCPU.R()[rd] = (int32_t)val;
+    }
     if (rd != 15) parentCPU.R()[15] += 4;
 }
 
@@ -749,8 +792,13 @@ void ARMCPU::exec_arm_ldrsh_imm_post_wb(uint32_t instruction) {
     uint32_t imm = (bits<11,8>(instruction) << 4) | bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
-    int16_t val = parentCPU.getMemory().read16(base);
-    parentCPU.R()[rd] = (int32_t)val;
+    if (base & 1) {
+        int8_t sval = (int8_t)parentCPU.getMemory().read8(base);
+        parentCPU.R()[rd] = (int32_t)sval;
+    } else {
+        int16_t val = parentCPU.getMemory().read16(base);
+        parentCPU.R()[rd] = (int32_t)val;
+    }
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rn] = addr;
     if (rd != 15) parentCPU.R()[15] += 4;
@@ -766,7 +814,8 @@ void ARMCPU::exec_arm_ldrh_imm_pre_wb(uint32_t instruction) {
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    parentCPU.R()[rd] = parentCPU.getMemory().read16(addr);
+    uint32_t val = parentCPU.getMemory().read16(addr);
+    parentCPU.R()[rd] = (addr & 1) ? (val >> 8) | (val << 24) : val;
     parentCPU.R()[rn] = addr; // Writeback
     if (rd != 15) parentCPU.R()[15] += 4;
 }
@@ -779,7 +828,8 @@ void ARMCPU::exec_arm_ldrh_imm_pre_nowb(uint32_t instruction) {
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
     uint32_t addr = up ? base + imm : base - imm;
-    parentCPU.R()[rd] = parentCPU.getMemory().read16(addr);
+    uint32_t val = parentCPU.getMemory().read16(addr);
+    parentCPU.R()[rd] = (addr & 1) ? (val >> 8) | (val << 24) : val;
     if (rd != 15) parentCPU.R()[15] += 4;
 }
 
@@ -790,7 +840,8 @@ void ARMCPU::exec_arm_ldrh_imm_post_wb(uint32_t instruction) {
     uint32_t imm = (bits<11,8>(instruction) << 4) | bits<3,0>(instruction);
     bool up = bits<23,23>(instruction);
     uint32_t base = parentCPU.R()[rn];
-    parentCPU.R()[rd] = parentCPU.getMemory().read16(base);
+    uint32_t val = parentCPU.getMemory().read16(base);
+    parentCPU.R()[rd] = (base & 1) ? (val >> 8) | (val << 24) : val;
     uint32_t addr = up ? base + imm : base - imm;
     parentCPU.R()[rn] = addr; // Writeback
     if (rd != 15) parentCPU.R()[15] += 4;

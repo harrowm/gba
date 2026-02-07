@@ -125,6 +125,11 @@ private:
     Scheduler* scheduler;
     InterruptController* interruptController;
     
+    // DMA open bus latch: holds the last value successfully read by any DMA channel.
+    // When DMA reads from an unreadable region (BIOS, unmapped), this value is
+    // returned instead, matching real GBA hardware behavior.
+    uint32_t dmaOpenBus;
+    
     // Transfer execution
     void startTransfer(int channelId);
     void performTransfer(int channelId);

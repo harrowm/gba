@@ -44,13 +44,14 @@ void DMAChannel::setControl(uint16_t ctrl) {
 
 // DMA Controller Implementation
 DMAController::DMAController() 
-    : memory(nullptr), scheduler(nullptr), interruptController(nullptr) {
+    : memory(nullptr), scheduler(nullptr), interruptController(nullptr), dmaOpenBus(0) {
 }
 
 void DMAController::reset() {
     for (int i = 0; i < 4; i++) {
         channels[i].reset();
     }
+    dmaOpenBus = 0;
 }
 
 uint32_t DMAController::readSourceAddress(int channelId) const {
@@ -145,6 +146,17 @@ void DMAController::startTransfer(int channelId) {
     // Initialize internal registers
     channel.internalSource = channel.getSourceAddress();
     channel.internalDest = channel.getDestAddress();
+    
+    // GBA DMA hardware force-aligns addresses based on transfer size
+    // 32-bit transfers: bits 0-1 forced to 0 (word-aligned)
+    // 16-bit transfers: bit 0 forced to 0 (halfword-aligned)
+    if (channel.is32Bit()) {
+        channel.internalSource &= ~3u;
+        channel.internalDest &= ~3u;
+    } else {
+        channel.internalSource &= ~1u;
+        channel.internalDest &= ~1u;
+    }
     
     // Word count of 0 means max transfer
     if (channel.getWordCount() == 0) {
@@ -257,13 +269,31 @@ void DMAController::performTransfer(int channelId) {
         // Read from source
         uint32_t value;
         
+        // Check if source address is DMA-readable.
+        // On real GBA hardware, DMA cannot read from BIOS (region 0x00) or
+        // unmapped memory (region 0x01). Reads from these regions return the
+        // DMA open bus latch (the last value successfully transferred by DMA).
+        uint32_t srcRegion = srcAddr >> 24;
+        bool srcReadable = (srcRegion >= 0x02 && srcRegion <= 0x0E);
+        
         // Sound DMA buffer overrun safety clamp
         if (isSoundDMA && srcAddr >= soundDmaBase + soundBufferLimit) {
             value = 0;
+        } else if (!srcReadable) {
+            // Open bus: return the DMA latch value
+            if (is32bit) {
+                value = dmaOpenBus;
+            } else {
+                // For 16-bit, return the appropriate halfword based on address bit 1
+                value = (srcAddr & 2) ? ((dmaOpenBus >> 16) & 0xFFFF) : (dmaOpenBus & 0xFFFF);
+            }
         } else if (is32bit) {
             value = memory->read32(srcAddr);
+            dmaOpenBus = value;
         } else {
             value = memory->read16(srcAddr);
+            // Update open bus latch: 16-bit value occupies one halfword of the 32-bit bus
+            dmaOpenBus = value | (value << 16);
         }
         
         // Write to destination

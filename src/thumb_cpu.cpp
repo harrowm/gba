@@ -856,7 +856,10 @@ void ThumbCPU::thumb_ldr(uint16_t instruction) {
     uint32_t address = parentCPU.R()[15] + (offset << 2); // PC-relative addressing
 
     // Perform the load operation
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
+    uint32_t value = parentCPU.getMemory().read32(address);
+    uint32_t rot = (address & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
+    parentCPU.R()[rd] = value;
 
     DEBUG_INFO("Executing Thumb LDR: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
@@ -980,7 +983,9 @@ void ThumbCPU::thumb_ldrh(uint16_t instruction) {
     uint32_t address = parentCPU.R()[rn] + parentCPU.R()[rm];
 
     // Perform the load operation using memory_read_16
-    parentCPU.R()[rd] = parentCPU.getMemory().read16(address);
+    // ARM7: misaligned LDRH rotates result right by 8
+    uint32_t val = parentCPU.getMemory().read16(address);
+    parentCPU.R()[rd] = (address & 1) ? (val >> 8) | (val << 24) : val;
 
     DEBUG_INFO("Executing Thumb LDRH: R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
@@ -995,9 +1000,14 @@ void ThumbCPU::thumb_ldsh(uint16_t instruction) {
     // Calculate the address to load from
     uint32_t address = parentCPU.R()[rn] + parentCPU.R()[rm];
 
-    // Perform the load operation using memory_read_16 and sign-extend
-    int16_t value = (int16_t)parentCPU.getMemory().read16(address);
-    parentCPU.R()[rd] = (int32_t)value;
+    // Perform the load: ARM7 misaligned LDRSH degrades to LDRSB
+    if (address & 1) {
+        int8_t sval = (int8_t)parentCPU.getMemory().read8(address);
+        parentCPU.R()[rd] = (int32_t)sval;
+    } else {
+        int16_t value = (int16_t)parentCPU.getMemory().read16(address);
+        parentCPU.R()[rd] = (int32_t)value;
+    }
 
     DEBUG_INFO("Executing Thumb LDSH: R" + std::to_string(rd) + " = [R" + std::to_string(rn) + 
        "(0x" + debug_to_hex_string(parentCPU.R()[rn], 8) + ") + R" + std::to_string(rm) + 
@@ -1029,10 +1039,11 @@ void ThumbCPU::thumb_ldr_immediate_offset(uint16_t instruction) {
 
     // Perform the load operation using memory_read_32
     uint32_t value = parentCPU.getMemory().read32(address);
+    // ARM7TDMI: misaligned LDR rotates result right by (misalignment * 8) bits
+    uint32_t rot = (address & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
     
     parentCPU.R()[rd] = value;
-
-    DEBUG_INFO("Executing Thumb LDR (immediate offset): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
 }
 
 void ThumbCPU::thumb_str_immediate_offset_byte(uint16_t instruction) {
@@ -1087,9 +1098,9 @@ void ThumbCPU::thumb_ldrh_imm(uint16_t instruction) {
     uint32_t address = parentCPU.R()[rb] + (offset5 << 1); // Offset scaled by 2 for halfword alignment
 
     // Perform the load operation using memory_read_16
-    parentCPU.R()[rd] = parentCPU.getMemory().read16(address);
-
-    DEBUG_INFO("Executing Thumb LDRH (immediate offset): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    // ARM7: misaligned LDRH rotates result right by 8
+    uint32_t val = parentCPU.getMemory().read16(address);
+    parentCPU.R()[rd] = (address & 1) ? (val >> 8) | (val << 24) : val;
 }
 
 void ThumbCPU::thumb_str_sp_rel(uint16_t instruction) {
@@ -1115,7 +1126,10 @@ void ThumbCPU::thumb_ldr_sp_rel(uint16_t instruction) {
     uint32_t address = parentCPU.R()[13] + (offset << 2); // SP-relative addressing with word alignment
 
     // Perform the load operation using memory_read_32
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
+    uint32_t value = parentCPU.getMemory().read32(address);
+    uint32_t rot = (address & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
+    parentCPU.R()[rd] = value;
 
     std::ostringstream ldr_stream;
     ldr_stream << "Executing Thumb LDR (SP-relative): R" << std::dec << rd << " = [0x" << std::hex << std::uppercase << address << "]";
@@ -1161,9 +1175,10 @@ void ThumbCPU::thumb_ldr_pc_rel(uint16_t instruction) {
     uint32_t address = pc_base + (offset << 2);
 
     // Perform the load operation using memory_read_32
-    parentCPU.R()[rd] = parentCPU.getMemory().read32(address);
-
-    DEBUG_INFO("Executing Thumb LDR (PC-relative): R" + std::to_string(rd) + " = [0x" + std::to_string(address) + "]");
+    uint32_t value = parentCPU.getMemory().read32(address);
+    uint32_t rot = (address & 3u) * 8;
+    if (rot) value = (value >> rot) | (value << (32 - rot));
+    parentCPU.R()[rd] = value;
 }
 
 void ThumbCPU::thumb_add_sub_offset_to_stack_pointer(uint16_t instruction) {
