@@ -122,8 +122,17 @@ void CPU::advanceCycles(uint32_t cycles) {
 // once the previous IRQ handler returns and clears I.
 // Only triggers when I flag is currently clear (bit 7 = 0), since that's
 // when the CPU can actually accept interrupts.
+// Like mGBA's ARMWriteCPSR / GBATestIRQ: immediately check for pending
+// interrupts when the I flag might have been cleared.  On real hardware the
+// CPU re-evaluates IRQ on every instruction boundary — there is no 7-cycle
+// scheduling delay.  We call this from CPSR-restoring instructions (SUBS
+// PC,LR / LDM {PC}^ / MSR CPSR) so the pending VBlank can be taken on
+// the very next instruction boundary.
 void CPU::onCPSRWrite() {
     if (!(cpsr & 0x80)) {  // I flag clear — interrupts enabled
+        // Schedule an IRQ check. This uses the scheduler's 7-cycle latency
+        // which matches the ARM7TDMI's pipeline delay before taking an IRQ.
+        // The IME/IE/IF check happens inside the scheduled callback.
         interruptController.scheduleIRQCheck();
     }
 }

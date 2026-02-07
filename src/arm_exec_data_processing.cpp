@@ -31,6 +31,7 @@ void ARMCPU::exec_arm_eor_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -69,6 +70,7 @@ void ARMCPU::exec_arm_eor_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -103,6 +105,7 @@ void ARMCPU::exec_arm_and_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -139,6 +142,7 @@ void ARMCPU::exec_arm_and_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -172,6 +176,7 @@ void ARMCPU::exec_arm_sub_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -204,6 +209,7 @@ void ARMCPU::exec_arm_rsb_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -241,6 +247,7 @@ void ARMCPU::exec_arm_sub_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -278,6 +285,7 @@ void ARMCPU::exec_arm_rsb_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -309,6 +317,7 @@ void ARMCPU::exec_arm_add_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -344,6 +353,7 @@ void ARMCPU::exec_arm_orr_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -380,6 +390,7 @@ void ARMCPU::exec_arm_orr_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -414,6 +425,7 @@ void ARMCPU::exec_arm_bic_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -450,6 +462,7 @@ void ARMCPU::exec_arm_bic_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -481,6 +494,7 @@ void ARMCPU::exec_arm_mvn_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -514,6 +528,7 @@ void ARMCPU::exec_arm_mvn_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -550,6 +565,7 @@ void ARMCPU::exec_arm_add_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -583,6 +599,7 @@ void ARMCPU::exec_arm_adc_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -620,6 +637,7 @@ void ARMCPU::exec_arm_adc_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -652,6 +670,7 @@ void ARMCPU::exec_arm_sbc_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -688,6 +707,7 @@ void ARMCPU::exec_arm_sbc_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -720,6 +740,7 @@ void ARMCPU::exec_arm_rsc_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -756,6 +777,7 @@ void ARMCPU::exec_arm_rsc_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -917,6 +939,7 @@ void ARMCPU::exec_arm_mov_imm(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -970,6 +993,7 @@ void ARMCPU::exec_arm_mov_reg(uint32_t instruction) {
             }
             // Now restore full CPSR from SPSR
             parentCPU.CPSR() = spsr;
+            parentCPU.onCPSRWrite();
         }
     }
 }
@@ -1047,6 +1071,7 @@ void ARMCPU::exec_arm_msr_imm(uint32_t instruction) {
                 parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
             }
             DEBUG_INFO("MSR IMM: CPSR control field set to " + debug_to_hex_string(value & 0xFF, 2));
+            parentCPU.onCPSRWrite();
         }
         // Extension field (bit 1)
         if (mask & 2) {
@@ -1129,6 +1154,7 @@ void ARMCPU::exec_arm_msr_reg(uint32_t instruction) {
                 parentCPU.CPSR() = (parentCPU.CPSR() & ~0xFF) | (value & 0xFF);
             }
             DEBUG_INFO("MSR REG: CPSR control field set to " + debug_to_hex_string(value & 0xFF, 2));
+            parentCPU.onCPSRWrite();
         }
         // Extension field (bit 1)
         if (mask & 2) {

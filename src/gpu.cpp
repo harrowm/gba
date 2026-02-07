@@ -8,6 +8,7 @@
 #include <set>
 
 extern uint32_t g_current_frame;
+static uint32_t g_gpu_scanlines_this_frame = 0;  // Count scanlines processed per frame
 
 GPU::GPU(Memory& mem) 
     : memory(mem), currentScanline(0), inVBlank(false), inHBlank(false) {
@@ -35,9 +36,12 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
     scheduler->schedule(CYCLES_HDRAW, [this, scheduler]() {
         // H-Draw complete, enter H-Blank
         inHBlank = true;
-        uint16_t dispstat = memory.read16(REG_DISPSTAT);
+        // Use readDirectIO16/writeDirectIO to avoid adding spurious wait
+        // cycles to the scheduler.  The GPU is a hardware component, not a
+        // CPU bus master, so its register updates must be zero-cost.
+        uint16_t dispstat = memory.readDirectIO16(REG_DISPSTAT);
         dispstat |= DISPSTAT_HBLANK;
-        memory.write16(REG_DISPSTAT, dispstat);
+        memory.writeDirectIO(REG_DISPSTAT, dispstat);
         
         // HBlank callback triggers both IRQ and DMA.
         // During visible scanlines (0-159): trigger both DMA and IRQ
@@ -48,22 +52,29 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
         }
 
         if (currentScanline < SCANLINES_VISIBLE) {
+            // GPU rendering is a hardware operation — it reads VRAM, OAM, and
+            // palette directly without consuming CPU bus cycles.  Disable wait
+            // cycle accounting during renderScanline() so the scheduler isn't
+            // polluted with spurious cycles.
+            memory.setWaitCyclesBypass(true);
             renderScanline();
+            memory.setWaitCyclesBypass(false);
         }
         
         // Schedule H-Blank end
         scheduler->schedule(CYCLES_HBLANK, [this, scheduler]() {
             inHBlank = false;
-            uint16_t dispstat = memory.read16(REG_DISPSTAT);
+            uint16_t dispstat = memory.readDirectIO16(REG_DISPSTAT);
             dispstat &= ~DISPSTAT_HBLANK;
-            memory.write16(REG_DISPSTAT, dispstat);
+            memory.writeDirectIO(REG_DISPSTAT, dispstat);
             
             // Move to next scanline
             currentScanline++;
+            g_gpu_scanlines_this_frame++;
             if (currentScanline >= SCANLINES_TOTAL) {
                 currentScanline = 0;
             }
-            memory.write16(REG_VCOUNT, currentScanline);
+            memory.writeDirectIO(REG_VCOUNT, currentScanline);
             
             // Debug
             if (currentScanline >= 158 && currentScanline <= 162) {
@@ -74,16 +85,18 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
             // Handle V-Blank transition
             if (currentScanline == SCANLINES_VISIBLE) {
                 inVBlank = true;
-                dispstat = memory.read16(REG_DISPSTAT);
+                dispstat = memory.readDirectIO16(REG_DISPSTAT);
                 dispstat |= DISPSTAT_VBLANK;
-                memory.write16(REG_DISPSTAT, dispstat);
+                memory.writeDirectIO(REG_DISPSTAT, dispstat);
                 
                 static int vblank_count = 0;
-                if (vblank_count++ < 5) {
-                    LOG_TRACE_CAT("[GPU] V-Blank #%d: DISPSTAT=0x%04X, IRQ_EN=%d, callback=%d at cycle %llu\n", 
-                           vblank_count, dispstat, (dispstat & DISPSTAT_VBLANK_IRQ_ENABLE) ? 1 : 0, 
-                           vblankCallback ? 1 : 0, scheduler->getCurrentCycle());
+                vblank_count++;
+                if (vblank_count <= 5 || (g_current_frame <= 100 && g_current_frame % 10 == 0)) {
+                    fprintf(stderr, "[GPU] VBlank #%d at frame %u: scanlines_this_frame=%u cycle=%llu\n",
+                            vblank_count, g_current_frame, g_gpu_scanlines_this_frame,
+                            (unsigned long long)scheduler->getCurrentCycle());
                 }
+                g_gpu_scanlines_this_frame = 0;
                 
                 // Always call vblankCallback for DMA triggering
                 // The interrupt controller internally checks if VBlank IRQ is enabled
@@ -93,9 +106,9 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
                 }
             } else if (currentScanline == 0) {
                 inVBlank = false;
-                dispstat = memory.read16(REG_DISPSTAT);
+                dispstat = memory.readDirectIO16(REG_DISPSTAT);
                 dispstat &= ~DISPSTAT_VBLANK;
-                memory.write16(REG_DISPSTAT, dispstat);
+                memory.writeDirectIO(REG_DISPSTAT, dispstat);
             }
             
             // Schedule next scanline immediately (new scanline starts now)

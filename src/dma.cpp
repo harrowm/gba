@@ -13,6 +13,7 @@ uint32_t g_soundDmaSourceA = 0, g_soundDmaSourceB = 0;
 int g_soundDmaZeroWordsA = 0, g_soundDmaNonZeroWordsA = 0;
 int g_soundDmaZeroWordsB = 0, g_soundDmaNonZeroWordsB = 0;
 uint32_t g_soundDmaFirstWordA = 0, g_soundDmaFirstWordB = 0;
+int g_soundDmaClampCountA = 0, g_soundDmaClampCountB = 0;
 
 #include "memory.h"
 #include "scheduler.h"
@@ -243,15 +244,15 @@ void DMAController::performTransfer(int channelId) {
     }
     
     // For sound FIFO DMA: clamp reads to prevent buffer overrun.
-    // M4A's PCM DMA buffers are sized as pcmDmaPeriod * samplesPerVBlank.
-    // Due to missed VBlank IRQs (IRQ raised while CPU is in another handler),
-    // the DMA source can advance past the end of the PCM buffer into M4A
-    // internal structures, producing garbage audio (the "chug" sound).
-    // Clamp: if source has advanced more than 2KB past the reload address,
-    // substitute zero. Typical buffers are ~1.5KB (9 frames * 176 samples).
+    // M4A's PCM DMA buffers are sized as pcmDmaPeriod * samplesPerVBlank (typically 0x630).
+    // Due to occasionally missed VBlank IRQs, the DMA source can advance past the
+    // end of the PCM buffer into M4A internal structures, producing garbage (the "chug").
+    // Safety clamp: if source has advanced more than 0x800 past the reload address,
+    // substitute zero. This is generous enough to never clamp valid audio (buffer is 0x630)
+    // but catches severe overruns that read ROM pointers as audio data.
     uint32_t soundDmaBase = channel.getSourceAddress();  // registered (reload) source
-    static constexpr uint32_t SOUND_BUFFER_LIMIT = 0x630; // M4A typical: pcmDmaPeriod(9) * samplesPerVBlank(176)
-    
+    static constexpr uint32_t SOUND_BUFFER_LIMIT = 0x800; // Safety net: 2KB
+
     LOG_DMA("[DMA%d] STARTING TRANSFER: src=0x%08X dst=0x%08X count=%d size=%s\n",
            channelId, srcAddr, destAddr, count, is32bit ? "32bit" : "16bit");
     
@@ -265,8 +266,7 @@ void DMAController::performTransfer(int channelId) {
         // Read from source
         uint32_t value;
         
-        // Sound DMA buffer overrun check: if source went past the PCM buffer,
-        // substitute zero instead of reading M4A internal structs.
+        // Sound DMA buffer overrun safety clamp
         bool soundClamped = false;
         if (isSoundDMA && srcAddr >= soundDmaBase + SOUND_BUFFER_LIMIT) {
             value = 0;

@@ -28,6 +28,8 @@ GBA::GBA(bool testMode)
     interruptController.setScheduler(&scheduler);
     
     // Setup interrupt callback (CPU will handle interrupt when scheduled event fires)
+    extern uint32_t g_vblank_delivered;
+    extern uint32_t g_irq_trigger_i1;
     interruptController.setIRQCallback([this]() {
         // Always wake from HALT — real hardware wakes on ANY interrupt
         // (IE & IF match), regardless of IME or CPSR I-flag.
@@ -37,7 +39,10 @@ GBA::GBA(bool testMode)
         // This is called by the scheduled IRQ_TRIGGER event after IRQ_LATENCY_CYCLES
         // Check the CPU's I flag before raising IRQ (like mGBA's _triggerIRQ)
         if (!(cpu->CPSR() & 0x80)) {  // I flag is bit 7
+            g_vblank_delivered++;
             cpu->handleInterrupt();
+        } else {
+            g_irq_trigger_i1++;
         }
     });
     
@@ -75,6 +80,7 @@ GBA::GBA(bool testMode)
     apu.init(&memory, &dmaController, &scheduler);
     memory.setAPU(&apu);
     memory.setCPU(cpu);
+    memory.setInterruptController(&interruptController);
     
     // Setup timer overflow callback for FIFO audio
     timerController.setTimerOverflowCallback([this](int timerIndex) {
@@ -453,10 +459,6 @@ void GBA::runFrame() {
         
         last_pc = pc;
         
-        // OPTION 3: Cycle-driven execution with event checking
-        // Get the cycle of the next scheduled event before executing
-        uint64_t nextEventCycle = scheduler.getNextEventCycle();
-        
         // Execute the instruction (this will advance cycles based on instruction + memory timing)
         // Typical GBA instruction cost breakdown:
         //   - IME check: 1 cycle (reading 0x04000208 to check if interrupts enabled)
@@ -469,14 +471,12 @@ void GBA::runFrame() {
         
         uint64_t cycleAfterInstr = scheduler.getCurrentCycle();
         
-        // Check if we passed any events during instruction execution
-        // If the next event was scheduled between cycleBeforeInstr and cycleAfterInstr,
-        // we need to process it now to ensure correct timing
-        if (nextEventCycle <= cycleAfterInstr && nextEventCycle != UINT64_MAX) {
-            // We passed an event! Process all events up to current cycle
-            // Event callbacks (e.g. DMA) may advance the cycle counter further
-            scheduler.runUntil(cycleAfterInstr);
-        }
+        // Process all pending scheduler events up to the current cycle.
+        // This must run after EVERY instruction so that GPU scanline events,
+        // audio sample events, and IRQ triggers fire at the correct time.
+        // advanceCycles() only increments the counter without firing events,
+        // so runUntil() is the only way events get processed.
+        scheduler.runUntil(cycleAfterInstr);
         
         // Audio sampling is now handled by the scheduler (AUDIO_SAMPLE events)
         // No per-instruction apu.tick() needed.

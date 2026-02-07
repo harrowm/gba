@@ -15,6 +15,14 @@ extern uint32_t g_soundDmaSourceA, g_soundDmaSourceB;
 extern int g_soundDmaZeroWordsA, g_soundDmaNonZeroWordsA;
 extern int g_soundDmaZeroWordsB, g_soundDmaNonZeroWordsB;
 
+// VBlank IRQ tracking counters (defined in interrupt.cpp)
+extern uint32_t g_vblank_requested;
+extern uint32_t g_vblank_delivered;
+extern uint32_t g_irq_trigger_i1;
+extern uint32_t g_vblank_called;
+extern uint32_t g_vblank_ie_miss;
+extern int g_soundDmaClampCountA, g_soundDmaClampCountB;
+
 // Sound register addresses
 constexpr uint32_t REG_SOUND1CNT_L = 0x04000060;
 constexpr uint32_t REG_SOUND1CNT_H = 0x04000062;
@@ -99,11 +107,10 @@ void APU::initSDLAudio() {
     SDL_PauseAudioDevice(audioDevice, 0);
     audioEnabled = true;
 
-    // Pre-fill the queue with silence as a cushion.
-    // VSync jitter means some frames run at 58fps instead of 60, causing
-    // brief audio deficits (~926 samples/sec at 58fps). A 4096-sample
-    // cushion (~125ms) absorbs several seconds of worst-case jitter.
-    static const int PREFILL = 8192;
+    // Pre-fill the queue with silence to match PLL target level.
+    // The PLL in pushAudio() targets TARGET_QUEUE (4096) samples;
+    // starting at the same level avoids an initial rate transient.
+    static const int PREFILL = 4096;
     std::vector<int16_t> silence(PREFILL * 2, 0);  // stereo
     SDL_QueueAudio(audioDevice, silence.data(), silence.size() * sizeof(int16_t));
     printf("[APU] Pre-filled queue with %d samples of silence\n", PREFILL);
@@ -121,7 +128,7 @@ void APU::pushAudio() {
     // === DIAGNOSTIC: per-frame audio analysis ===
     static int diagFrame = 0;
     diagFrame++;
-    if (diagFrame <= 600 && (diagFrame <= 10 || diagFrame % 10 == 0)) {
+    if (diagFrame <= 3600 && (diagFrame <= 10 || diagFrame % 20 == 0)) {
         int nonZero = 0;
         int maxZeroRun = 0, curZeroRun = 0;
         int16_t minV = 0, maxV = 0;
@@ -134,12 +141,12 @@ void APU::pushAudio() {
             if (s > maxV) maxV = s;
         }
         if (curZeroRun > maxZeroRun) maxZeroRun = curZeroRun;
-        fprintf(stderr, "[DIAG] f%d p=%d nz=%d zmax=%d min=%d max=%d | T0=%d T1=%d | A(rd=%d cnt=%d cur=%d src=0x%08X z=%d nz=%d) B(rd=%d cnt=%d cur=%d src=0x%08X z=%d nz=%d) | sndH=0x%04X\n",
+        fprintf(stderr, "[DIAG] f%d p=%d nz=%d zmax=%d min=%d max=%d | T0=%d | A(rd=%d cur=%d z=%d nz=%d clamp=%d) B(rd=%d cur=%d z=%d nz=%d clamp=%d) | q=%u vb_call=%u vb_req=%u vb_miss=%u vb_del=%u i1=%u\n",
                 diagFrame, produced, nonZero, maxZeroRun, minV, maxV,
-                g_timerOverflowCount[0], g_timerOverflowCount[1],
-                g_fifoAReadCount, fifoA.size(), fifoA.currentSample, g_soundDmaSourceA, g_soundDmaZeroWordsA, g_soundDmaNonZeroWordsA,
-                g_fifoBReadCount, fifoB.size(), fifoB.currentSample, g_soundDmaSourceB, g_soundDmaZeroWordsB, g_soundDmaNonZeroWordsB,
-                soundcnt_h);
+                g_timerOverflowCount[0],
+                g_fifoAReadCount, fifoA.currentSample, g_soundDmaZeroWordsA, g_soundDmaNonZeroWordsA, g_soundDmaClampCountA,
+                g_fifoBReadCount, fifoB.currentSample, g_soundDmaZeroWordsB, g_soundDmaNonZeroWordsB, g_soundDmaClampCountB,
+                queued, g_vblank_called, g_vblank_requested, g_vblank_ie_miss, g_vblank_delivered, g_irq_trigger_i1);
 
     }
     // === M4A state check during game phase ===
@@ -198,6 +205,7 @@ void APU::pushAudio() {
     g_fifoADmaCount = g_fifoBDmaCount = 0;
     g_soundDmaZeroWordsA = g_soundDmaNonZeroWordsA = 0;
     g_soundDmaZeroWordsB = g_soundDmaNonZeroWordsB = 0;
+    g_soundDmaClampCountA = g_soundDmaClampCountB = 0;
     // === END DIAGNOSTIC ===
 
     // Push raw samples — no resampling, no interpolation.
@@ -280,17 +288,26 @@ void APU::mixChannels(int16_t& outLeft, int16_t& outRight) {
 }
 
 // Schedule the next AUDIO_SAMPLE event on the scheduler.
-// Uses Bresenham-style fractional accumulator: base interval is 349 cycles,
-// but we add 1 extra cycle when the fractional remainder accumulates enough.
-// This gives an exact average of CPU_CLOCK/SAMPLE_RATE = 349.525... cycles.
+// Uses Bresenham-style fractional accumulator with PLL-adjusted rate.
+// adjustedRate (~48000 Hz ±2%) is tuned by pushAudio() to keep the SDL
+// queue stable, compensating for VSync frame-rate mismatch.
 void APU::scheduleSampleEvent() {
     if (!scheduler) return;
 
-    int interval = SAMPLE_INTERVAL_BASE;  // 349
-    sampleFracAccum += SAMPLE_INTERVAL_FRAC_NUM;  // remainder per sample
-    if (sampleFracAccum >= SAMPLE_RATE) {
-        sampleFracAccum -= SAMPLE_RATE;
-        interval++;  // 350 this time
+    // Convert PLL-adjusted rate to fixed-point (×256) for integer Bresenham.
+    // adjustedRate ≈ 48000, so rateFixed ≈ 12288000.
+    // interval = CPU_CLOCK / adjustedRate, tracked with fractional remainder.
+    int rateFixed = (int)(adjustedRate * 256.0f);
+    if (rateFixed <= 0) rateFixed = SAMPLE_RATE * 256;  // safety
+
+    int64_t numerator = (int64_t)CPU_CLOCK << 8;  // CPU_CLOCK * 256
+    int interval = (int)(numerator / rateFixed);
+    int remainder = (int)(numerator % rateFixed);
+
+    sampleFracAccum += remainder;
+    if (sampleFracAccum >= rateFixed) {
+        sampleFracAccum -= rateFixed;
+        interval++;
     }
 
     scheduler->schedule(interval, [this]() { onSampleEvent(); },

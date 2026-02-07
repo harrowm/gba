@@ -11,6 +11,7 @@ class Scheduler;
 class TimerController;
 class DMAController;
 class APU;
+class InterruptController;
 
 class Memory {
 public:
@@ -26,6 +27,10 @@ public:
     void setDMAController(DMAController* dma) { dmaController = dma; }
     void setAPU(APU* a) { apu = a; }
     void setCPU(class CPU* c) { cpu = c; }
+    void setInterruptController(InterruptController* ic) { interruptController = ic; }
+
+    // GPU rendering guard: suppress wait cycles during hardware rendering
+    void setWaitCyclesBypass(bool bypass) { disableWaitCycles = bypass; }
 
     // Accessors (now with cycle-accurate timing)
     uint8_t read8(uint32_t address) const;
@@ -91,6 +96,9 @@ private:
     
     // CPU for HALT control
     class CPU* cpu = nullptr;
+    
+    // Interrupt controller for IRQ checks on IE/IME writes
+    InterruptController* interruptController = nullptr;
     
     // Flag to temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
     mutable bool disableWaitCycles = false;

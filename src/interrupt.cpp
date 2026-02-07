@@ -3,6 +3,13 @@
 #include "scheduler.h"
 #include "debug.h"
 
+// Debug counters for VBlank IRQ tracking
+uint32_t g_vblank_requested = 0;   // VBlank requestInterrupt + ieIF matched
+uint32_t g_vblank_delivered = 0;   // VBlank actually taken by CPU (handleInterrupt called)
+uint32_t g_irq_trigger_i1 = 0;    // IRQ_TRIGGER fired while I=1
+uint32_t g_vblank_called = 0;      // VBlank requestInterrupt called (unconditional)
+uint32_t g_vblank_ie_miss = 0;     // VBlank called but IE didn't match
+
 void InterruptController::requestInterrupt(uint16_t irqFlag) {
     if (!memory) {
         DEBUG_ERROR("InterruptController: memory not set");
@@ -48,17 +55,24 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
     // On real hardware, HALT wakes on any IE & IF match (IME is irrelevant
     // for wake-up). IME only gates whether the IRQ is actually *taken* by
     // the CPU, which the irqCallback already handles.
+    if (irqFlag & 1) g_vblank_called++;  // Unconditional VBlank count
+
     uint16_t ieIF = ieVal & currentIF;
     if (scheduler && ieIF) {
+        if (irqFlag & 1) g_vblank_requested++;  // Count VBlank requests
         scheduleIRQCheck();
+    } else if (irqFlag & 1) {
+        g_vblank_ie_miss++;
+        static int miss_log = 0;
+        if (miss_log++ < 20) {
+            fprintf(stderr, "[VBLANK MISS] IE=0x%04X IF=0x%04X IME=0x%04X ieIF=0x%04X cycle=%llu\n",
+                    ieVal, currentIF, imeVal, ieIF, scheduler ? scheduler->getCurrentCycle() : 0);
+        }
     }
 }
 
 // Schedule an IRQ_TRIGGER event if none is already pending.
 // The callback unhalts the CPU and (if CPSR I=0) takes the interrupt.
-// No self-retry: on real hardware the CPU checks pending IRQs each
-// instruction cycle once I is cleared, so a new requestInterrupt()
-// (e.g. from the next HBlank/timer) will naturally re-schedule.
 void InterruptController::scheduleIRQCheck() {
     if (!scheduler || !memory) return;
     if (scheduler->hasEventsOfType(EventType::IRQ_TRIGGER)) return;
@@ -73,7 +87,20 @@ void InterruptController::scheduleIRQCheck() {
         if ((ie2 & ifr2) && irqCallback) {
             irqCallback();
         }
-        // No self-retry — avoids tight 7-cycle scheduler loop while CPSR I=1
+        // After delivering, check if more interrupts are still pending
+        // (e.g. VBlank queued behind HBlank). Only retry once — further
+        // retries come from onCPSRWrite when the handler returns.
+        uint16_t ie3 = memory->readDirectIO16(REG_IE);
+        uint16_t ifr3 = memory->readDirectIO16(REG_IF);
+        if ((ie3 & ifr3) && !scheduler->hasEventsOfType(EventType::IRQ_TRIGGER)) {
+            scheduler->schedule(IRQ_LATENCY_CYCLES, [this]() {
+                uint16_t ie4 = memory->readDirectIO16(REG_IE);
+                uint16_t ifr4 = memory->readDirectIO16(REG_IF);
+                if ((ie4 & ifr4) && irqCallback) {
+                    irqCallback();
+                }
+            }, EventType::IRQ_TRIGGER);
+        }
     }, EventType::IRQ_TRIGGER);
 }
 

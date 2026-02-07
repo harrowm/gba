@@ -5,6 +5,7 @@
 #include "timer_controller.h"
 #include "dma.h"
 #include "apu.h"
+#include "interrupt.h"
 #include "debug.h"
 #include <cstring>
 #include <cstdint>
@@ -604,6 +605,12 @@ void Memory::write16(uint32_t address, uint16_t value) {
     
     base[offset] = val & 0xFF;
     base[(offset + 1) % wrapSize] = (val >> 8) & 0xFF;
+    
+    // Like mGBA's GBATestIRQ: after writing IE or IME, re-check for pending IRQs.
+    // Must happen AFTER the store so scheduleIRQCheck reads the new value.
+    if ((address == 0x04000200 || address == 0x04000208) && interruptController) {
+        interruptController->scheduleIRQCheck();
+    }
 }
 
 void Memory::writeDirectIO(uint32_t address, uint16_t value) {
@@ -1001,10 +1008,31 @@ void Memory::write32(uint32_t address, uint32_t value) {
     
     // IWRAM is only 32KB (0x8000 bytes), not 64KB like BLOCK_SIZE
     uint32_t wrapSize = (aligned_address >= 0x03000000 && aligned_address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
-    base[offset] = val & 0xFF;
-    base[(offset + 1) % wrapSize] = (val >> 8) & 0xFF;
-    base[(offset + 2) % wrapSize] = (val >> 16) & 0xFF;
-    base[(offset + 3) % wrapSize] = (val >> 24) & 0xFF;
+    
+    // Special handling: 32-bit write to 0x04000200 overlaps IE (low 16) and IF (high 16).
+    // IF uses write-to-clear semantics: writing a 1-bit *clears* that flag.
+    if (aligned_address == 0x04000200) {
+        // Low 16 bits → IE: normal write
+        base[offset] = val & 0xFF;
+        base[(offset + 1) % wrapSize] = (val >> 8) & 0xFF;
+        // High 16 bits → IF: write-to-clear
+        uint16_t currentIF = base[(offset + 2) % wrapSize] | (base[(offset + 3) % wrapSize] << 8);
+        uint16_t ifWriteVal = (val >> 16) & 0xFFFF;
+        uint16_t newIF = currentIF & ~ifWriteVal;
+        base[(offset + 2) % wrapSize] = newIF & 0xFF;
+        base[(offset + 3) % wrapSize] = (newIF >> 8) & 0xFF;
+    } else {
+        base[offset] = val & 0xFF;
+        base[(offset + 1) % wrapSize] = (val >> 8) & 0xFF;
+        base[(offset + 2) % wrapSize] = (val >> 16) & 0xFF;
+        base[(offset + 3) % wrapSize] = (val >> 24) & 0xFF;
+    }
+    
+    // Like mGBA's GBATestIRQ: after writing IE or IME via write32, re-check IRQs.
+    // Must happen AFTER the store so scheduleIRQCheck reads the updated values.
+    if ((aligned_address == 0x04000200 || aligned_address == 0x04000208) && interruptController) {
+        interruptController->scheduleIRQCheck();
+    }
     
     // PHASE 4: Verify write to crash addresses - DISABLED FOR SPEED
     // if ((aligned_address >= 0x03000000 && aligned_address < 0x04000000) &&

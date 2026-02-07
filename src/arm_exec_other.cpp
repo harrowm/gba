@@ -114,6 +114,7 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     if (s_bit && r15_in_list) {
         uint32_t spsr = parentCPU.SPSR();
         parentCPU.setCPSR(spsr);
+        parentCPU.onCPSRWrite();
     }
     
     if (writeback && reg_count > 0 && !(reg_list & (1 << rn))) {
