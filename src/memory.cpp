@@ -112,11 +112,12 @@ Memory::Memory(bool testMode) {
         io[0x130] = 0xFF; // KEYINPUT low byte: All buttons unpressed
         io[0x131] = 0x03; // KEYINPUT high byte: All buttons unpressed (0x03FF)
 
-        // --- Palette RAM: 1KB at 0x05000000, mirrored throughout 64KB block ---
-        // Allocate full block to prevent overflow from mirrored addresses
+        // --- Palette RAM: 1KB at 0x05000000, mirrored throughout 0x05000000-0x05FFFFFF ---
+        // Allocate full block to prevent overflow from offset calculations
         palette = (uint8_t*)std::malloc(BLOCK_SIZE);
         memset(palette, 0, BLOCK_SIZE);
-        regionTable[0x05000000 / BLOCK_SIZE] = palette;
+        for (uint32_t addr = 0x05000000; addr < 0x06000000; addr += BLOCK_SIZE)
+            regionTable[addr / BLOCK_SIZE] = palette;
 
         // --- VRAM: 96KB at 0x06000000, mirrored in 128KB ---
         vram = (uint8_t*)std::malloc(96 * 1024);
@@ -125,12 +126,12 @@ Memory::Memory(bool testMode) {
         // Map second 64KB block (0x06010000-0x0601FFFF) - only first 32KB is real VRAM
         regionTable[0x06010000 / BLOCK_SIZE] = vram + 64 * 1024;  // Points to second half of VRAM
 
-        // --- OAM: 1KB at 0x07000000, mirrored in 8KB ---
+        // --- OAM: 1KB at 0x07000000, mirrored throughout 0x07000000-0x07FFFFFF ---
         // Allocate full block to prevent overflow (get_region_base handles 1KB mirroring)
         oam = (uint8_t*)std::malloc(BLOCK_SIZE);
         memset(oam, 0, BLOCK_SIZE);
-        for (uint32_t addr = 0x07000000; addr < 0x07002000; addr += BLOCK_SIZE)
-            regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = oam;
+        for (uint32_t addr = 0x07000000; addr < 0x08000000; addr += BLOCK_SIZE)
+            regionTable[addr / BLOCK_SIZE] = oam;
 
         // --- Game Pak ROM: up to 32MB at 0x08000000 ---
         rom = (uint8_t*)std::malloc(32 * 1024 * 1024);
@@ -188,9 +189,13 @@ inline uint8_t* get_region_base(uint8_t* const* regionTable, uint32_t address, u
     }
     // VRAM mirroring is handled by the base pointer mapping in the regionTable
     // Don't remap offset here - it causes out-of-bounds access
-    // OAM mirroring: 0x07000000–0x07001FFF, 1KB mirrored in 8KB
-    if (address >= 0x07000000 && address < 0x07002000 && base) {
-        offset = (address - 0x07000000) % 1024;
+    // Palette RAM mirroring: 1KB at 0x05000000, mirrored across entire 0x05 range
+    if (address >= 0x05000000 && address < 0x06000000 && base) {
+        offset = (address - 0x05000000) & 0x3FF; // 1KB mirror
+    }
+    // OAM mirroring: 1KB at 0x07000000, mirrored across entire 0x07 range
+    if (address >= 0x07000000 && address < 0x08000000 && base) {
+        offset = (address - 0x07000000) & 0x3FF; // 1KB mirror
     }
     return base;
 }
@@ -199,7 +204,15 @@ uint8_t Memory::read8(uint32_t address) const {
     addWaitCycles(address, 8);
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
-    if (!base) return 0xFF;
+    if (!base) {
+        // ROM open bus: out-of-bounds ROM reads return halfword address reflection
+        uint32_t region = address >> 24;
+        if (region >= 0x08 && region <= 0x0D) {
+            uint16_t openbus = (address >> 1);
+            return (address & 1) ? (openbus >> 8) : (openbus & 0xFF);
+        }
+        return 0xFF;
+    }
     // Debug: Print reads from logo and entry point
     // if (address == 0x0800009C || address == 0x080000B4) {
     //     printf("[Memory::read8] Read from 0x%08X: 0x%02X\n", address, base[offset]);
@@ -351,7 +364,14 @@ uint16_t Memory::read16(uint32_t address) const {
     
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
-    if (!base) return 0xFFFF;
+    if (!base) {
+        // ROM open bus: out-of-bounds ROM reads return halfword address reflection
+        uint32_t region = address >> 24;
+        if (region >= 0x08 && region <= 0x0D) {
+            return (address >> 1) & 0xFFFF;
+        }
+        return 0xFFFF;
+    }
     // IWRAM is only 32KB (0x8000 bytes), not 64KB like BLOCK_SIZE
     uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
     uint16_t val = base[offset] | (base[(offset + 1) % wrapSize] << 8);
@@ -743,9 +763,12 @@ uint32_t Memory::read32(uint32_t address) const {
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), aligned_address, offset);
     if (!base) {
-        static int null_base_count = 0;
-        if (null_base_count++ < 5) {
-            printf("[READ32] NULL base for address 0x%08X (first occurrence #%d)\n", address, null_base_count);
+        // ROM open bus: out-of-bounds ROM reads return halfword address reflection
+        uint32_t region = aligned_address >> 24;
+        if (region >= 0x08 && region <= 0x0D) {
+            uint16_t lo = (aligned_address >> 1) & 0xFFFF;
+            uint16_t hi = ((aligned_address + 2) >> 1) & 0xFFFF;
+            return lo | ((uint32_t)hi << 16);
         }
         return 0xFFFFFFFF;
     }
