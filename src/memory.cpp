@@ -213,6 +213,12 @@ uint8_t Memory::read8(uint32_t address) const {
 
 void Memory::write8(uint32_t address, uint8_t value) {
     addWaitCycles(address, 8);
+    
+    // GBA read-only regions: writes are silently ignored
+    // BIOS ROM (0x00) and Game Pak ROM (0x08-0x0D) are not writable
+    uint32_t region = address >> 24;
+    if (region == 0x00 || (region >= 0x08 && region <= 0x0D)) return;
+    
     uint32_t offset;
     uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return;
@@ -364,6 +370,11 @@ uint16_t Memory::read16(uint32_t address) const {
 
 void Memory::write16(uint32_t address, uint16_t value) {
     addWaitCycles(address, 16);
+    
+    // GBA read-only regions: writes are silently ignored
+    // BIOS ROM (0x00) and Game Pak ROM (0x08-0x0D) are not writable
+    uint32_t region = address >> 24;
+    if (region == 0x00 || (region >= 0x08 && region <= 0x0D)) return;
     
     // Log writes to BIOS work RAM for interrupt tracking
     if (address >= 0x03007F00 && address <= 0x03007FFC) {
@@ -803,6 +814,11 @@ uint32_t Memory::read32(uint32_t address) const {
 // Note: This is standard ARM7TDMI behavior, not a GBA-specific quirk.
 void Memory::write32(uint32_t address, uint32_t value) {
     addWaitCycles(address, 32);
+    
+    // GBA read-only regions: writes are silently ignored
+    // BIOS ROM (0x00) and Game Pak ROM (0x08-0x0D) are not writable
+    uint32_t region = address >> 24;
+    if (region == 0x00 || (region >= 0x08 && region <= 0x0D)) return;
     
     // Handle DMA register writes (source and dest addresses)
     if (dmaController) {
