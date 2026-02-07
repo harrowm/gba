@@ -1,7 +1,19 @@
 #include "apu.h"
 #include "memory.h"
+#include "dma.h"
+#include "scheduler.h"
 #include <cstdio>
 #include <cstring>
+
+// Per-frame pipeline counters for diagnostics
+static int g_timerOverflowCount[4] = {0,0,0,0};
+static int g_fifoAReadCount = 0, g_fifoBReadCount = 0;
+static int g_fifoADmaCount = 0, g_fifoBDmaCount = 0;
+
+// Sound DMA tracking (defined in dma.cpp)
+extern uint32_t g_soundDmaSourceA, g_soundDmaSourceB;
+extern int g_soundDmaZeroWordsA, g_soundDmaNonZeroWordsA;
+extern int g_soundDmaZeroWordsB, g_soundDmaNonZeroWordsB;
 
 // Sound register addresses
 constexpr uint32_t REG_SOUND1CNT_L = 0x04000060;
@@ -18,25 +30,27 @@ constexpr uint32_t REG_SOUNDCNT_L  = 0x04000080;
 constexpr uint32_t REG_SOUNDCNT_H  = 0x04000082;
 constexpr uint32_t REG_SOUNDCNT_X  = 0x04000084;
 constexpr uint32_t REG_SOUNDBIAS   = 0x04000088;
-constexpr uint32_t REG_WAVE_RAM    = 0x04000090;  // 16 bytes (0x90-0x9F)
+constexpr uint32_t REG_WAVE_RAM    = 0x04000090;
 constexpr uint32_t REG_FIFO_A      = 0x040000A0;
 constexpr uint32_t REG_FIFO_B      = 0x040000A4;
 
-APU::APU() 
+APU::APU()
     : memory(nullptr)
+    , dmaController(nullptr)
+    , scheduler(nullptr)
     , audioDevice(0)
     , audioEnabled(false)
-    , sampleBufferPos(0)
     , cycleCounter(0)
-    , lastSampleCycle(0)
+    , sampleFracAccum(0)
+    , adjustedRate(SAMPLE_RATE)
     , soundcnt_l(0)
     , soundcnt_h(0)
     , soundcnt_x(0)
-    , soundbias(0x200)  // Default bias
+    , soundbias(0x200)
     , frameSequencerStep(0)
     , frameSequencerCounter(0)
 {
-    sampleBuffer.fill(0);
+    frameSamples.reserve(MAX_SAMPLES_PER_FRAME * 2);
     reset();
 }
 
@@ -46,176 +60,324 @@ APU::~APU() {
     }
 }
 
-void APU::init(Memory* mem) {
+void APU::init(Memory* mem, DMAController* dma, Scheduler* sched) {
     memory = mem;
+    dmaController = dma;
+    scheduler = sched;
     initSDLAudio();
 }
 
 void APU::initSDLAudio() {
-    // Check if SDL audio is already initialized
     if (SDL_WasInit(SDL_INIT_AUDIO) == 0) {
         if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
             fprintf(stderr, "[APU] Failed to initialize SDL audio: %s\n", SDL_GetError());
             return;
         }
     }
-    
+
     SDL_AudioSpec desired, obtained;
     SDL_memset(&desired, 0, sizeof(desired));
-    
+
     desired.freq = SAMPLE_RATE;
-    desired.format = AUDIO_S16SYS;  // Signed 16-bit native endian
-    desired.channels = 2;           // Stereo
+    desired.format = AUDIO_S16SYS;
+    desired.channels = 2;
     desired.samples = BUFFER_SIZE;
-    desired.callback = audioCallback;
-    desired.userdata = this;
-    
+    desired.callback = nullptr;  // Push mode - no callback
+    desired.userdata = nullptr;
+
     audioDevice = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
-    
+
     if (audioDevice == 0) {
         fprintf(stderr, "[APU] Failed to open audio device: %s\n", SDL_GetError());
         return;
     }
-    
-    printf("[APU] Audio initialized: %d Hz, %d channels, %d samples/buffer\n",
+
+    printf("[APU] Audio initialized (push mode): %d Hz, %d channels, %d buffer\n",
            obtained.freq, obtained.channels, obtained.samples);
-    
+
     // Start audio playback
     SDL_PauseAudioDevice(audioDevice, 0);
     audioEnabled = true;
+
+    // Pre-fill the queue with silence as a cushion.
+    // VSync jitter means some frames run at 58fps instead of 60, causing
+    // brief audio deficits (~926 samples/sec at 58fps). A 4096-sample
+    // cushion (~125ms) absorbs several seconds of worst-case jitter.
+    static const int PREFILL = 8192;
+    std::vector<int16_t> silence(PREFILL * 2, 0);  // stereo
+    SDL_QueueAudio(audioDevice, silence.data(), silence.size() * sizeof(int16_t));
+    printf("[APU] Pre-filled queue with %d samples of silence\n", PREFILL);
 }
 
-void APU::audioCallback(void* userdata, uint8_t* stream, int len) {
-    APU* apu = static_cast<APU*>(userdata);
-    int16_t* out = reinterpret_cast<int16_t*>(stream);
-    int numSamples = len / sizeof(int16_t) / 2;  // Stereo samples
+// Called after each frame to push accumulated samples to SDL
+void APU::pushAudio() {
+    if (!audioDevice) return;
     
-    apu->generateSamples(out, numSamples);
-}
+    if (frameSamples.empty()) return;
 
-void APU::generateSamples(int16_t* buffer, int numSamples) {
-    // Check if master sound is enabled
-    bool masterEnable = (soundcnt_x & 0x80) != 0;
-    
-    for (int i = 0; i < numSamples; i++) {
-        int16_t sample = 0;
-        
-        if (masterEnable) {
-            sample = mixChannels();
+    uint32_t queued = getQueuedSamples();
+    int produced = (int)frameSamples.size() / 2;
+
+    // === DIAGNOSTIC: per-frame audio analysis ===
+    static int diagFrame = 0;
+    diagFrame++;
+    if (diagFrame <= 600 && (diagFrame <= 10 || diagFrame % 10 == 0)) {
+        int nonZero = 0;
+        int maxZeroRun = 0, curZeroRun = 0;
+        int16_t minV = 0, maxV = 0;
+        int sz = (int)frameSamples.size();
+        for (int i = 0; i < sz; i += 2) {
+            int16_t s = frameSamples[i];
+            if (s != 0) { nonZero++; if (curZeroRun > maxZeroRun) maxZeroRun = curZeroRun; curZeroRun = 0; }
+            else { curZeroRun++; }
+            if (s < minV) minV = s;
+            if (s > maxV) maxV = s;
         }
-        
-        // Output stereo (same sample to both channels for now)
-        buffer[i * 2] = sample;      // Left
-        buffer[i * 2 + 1] = sample;  // Right
-    }
-}
+        if (curZeroRun > maxZeroRun) maxZeroRun = curZeroRun;
+        fprintf(stderr, "[DIAG] f%d p=%d nz=%d zmax=%d min=%d max=%d | T0=%d T1=%d | A(rd=%d cnt=%d cur=%d src=0x%08X z=%d nz=%d) B(rd=%d cnt=%d cur=%d src=0x%08X z=%d nz=%d) | sndH=0x%04X\n",
+                diagFrame, produced, nonZero, maxZeroRun, minV, maxV,
+                g_timerOverflowCount[0], g_timerOverflowCount[1],
+                g_fifoAReadCount, fifoA.size(), fifoA.currentSample, g_soundDmaSourceA, g_soundDmaZeroWordsA, g_soundDmaNonZeroWordsA,
+                g_fifoBReadCount, fifoB.size(), fifoB.currentSample, g_soundDmaSourceB, g_soundDmaZeroWordsB, g_soundDmaNonZeroWordsB,
+                soundcnt_h);
 
-int16_t APU::mixChannels() {
-    int32_t mixedSample = 0;
-    
-    // ===== Direct Sound (FIFO) channels =====
-    // These are the primary sound source for most GBA games
-    
-    // FIFO A
-    bool fifoA_enabled_L = (soundcnt_h & 0x0200) != 0;
-    bool fifoA_enabled_R = (soundcnt_h & 0x0100) != 0;
-    bool fifoA_volume = (soundcnt_h & 0x0004) != 0;  // 0 = 50%, 1 = 100%
-    
-    if (fifoA_enabled_L || fifoA_enabled_R) {
-        int32_t sampleA = fifoA.currentSample;
-        // Scale 8-bit signed to ~14-bit range
-        sampleA *= fifoA_volume ? 512 : 256;
-        mixedSample += sampleA;
     }
-    
-    // FIFO B
-    bool fifoB_enabled_L = (soundcnt_h & 0x2000) != 0;
-    bool fifoB_enabled_R = (soundcnt_h & 0x1000) != 0;
-    bool fifoB_volume = (soundcnt_h & 0x0008) != 0;  // 0 = 50%, 1 = 100%
-    
-    if (fifoB_enabled_L || fifoB_enabled_R) {
-        int32_t sampleB = fifoB.currentSample;
-        sampleB *= fifoB_volume ? 512 : 256;
-        mixedSample += sampleB;
-    }
-    
-    // ===== PSG channels (Phase 3 - placeholder) =====
-    // int16_t psgSample = generatePSGSample();
-    // mixedSample += psgSample;
-    
-    // Clamp to 16-bit range
-    if (mixedSample > 32767) mixedSample = 32767;
-    if (mixedSample < -32768) mixedSample = -32768;
-    
-    return static_cast<int16_t>(mixedSample);
-}
+    // === M4A state check during game phase ===
+    if (memory && diagFrame >= 148 && diagFrame <= 900) {
+        uint32_t siPtr = memory->read32(0x03007FF0);
+        if (siPtr >= 0x02000000 && siPtr < 0x04000000) {
+            uint32_t ident = memory->read32(siPtr);
+            uint8_t maxCh = memory->read8(siPtr + 6);
 
-void APU::tick(int cycles) {
-    cycleCounter += cycles;
-    
-    // Generate samples at the appropriate rate
-    while (cycleCounter - lastSampleCycle >= CYCLES_PER_SAMPLE) {
-        lastSampleCycle += CYCLES_PER_SAMPLE;
-        
-        // Frame sequencer runs at 512 Hz (every 32768 cycles)
-        frameSequencerCounter += CYCLES_PER_SAMPLE;
-        if (frameSequencerCounter >= 32768) {
-            frameSequencerCounter -= 32768;
-            frameSequencerStep = (frameSequencerStep + 1) % 8;
-            // TODO: Update PSG length/envelope/sweep based on step
+            // Check channel status flags
+            int activeChCount = 0;
+            for (int ch = 0; ch < maxCh && ch < 12; ch++) {
+                uint32_t chAddr = siPtr + 0x50 + (ch * 0x40);
+                uint8_t statusFlags = memory->read8(chAddr);
+                if (statusFlags != 0) activeChCount++;
+            }
+            
+            // Check MusicPlayer state - read musicPlayerHead linked list
+            // MusicPlayerInfo struct: +0x00=songHeader, +0x04=status, +0x08=trackCount,...
+            uint32_t mpHead = memory->read32(siPtr + 0x24); // musicPlayerHead
+            
+            // Only log on active channels, ident change, or periodic
+            if (activeChCount > 0 || ident != 0x68736D53 || 
+                diagFrame <= 160 || (diagFrame % 100 == 0)) {
+                uint8_t dmaCounter = memory->read8(siPtr + 4);
+                uint8_t masterVol = memory->read8(siPtr + 7);
+                
+                // Read MusicPlayer info
+                uint32_t mpStatus = 0, mpSongHeader = 0;
+                if (mpHead >= 0x02000000 && mpHead < 0x04000000) {
+                    mpSongHeader = memory->read32(mpHead);
+                    mpStatus = memory->read32(mpHead + 4);
+                }
+                
+                fprintf(stderr, "[M4A] f%d ident=0x%08X dmaCnt=%d vol=%d activeCh=%d mpHead=0x%08X mpSong=0x%08X mpStat=0x%08X\n",
+                        diagFrame, ident, dmaCounter, masterVol, activeChCount, mpHead, mpSongHeader, mpStatus);
+                if (activeChCount > 0) {
+                    for (int ch = 0; ch < maxCh && ch < 12; ch++) {
+                        uint32_t chAddr = siPtr + 0x50 + (ch * 0x40);
+                        uint8_t statusFlags = memory->read8(chAddr);
+                        if (statusFlags != 0) {
+                            uint8_t type = memory->read8(chAddr + 1);
+                            uint8_t rightVol = memory->read8(chAddr + 2);
+                            uint8_t leftVol = memory->read8(chAddr + 3);
+                            fprintf(stderr, "  ch%d st=0x%02X type=%d rv=%d lv=%d\n",
+                                    ch, statusFlags, type, rightVol, leftVol);
+                        }
+                    }
+                }
+            }
         }
     }
+    // Reset per-frame counters
+    g_timerOverflowCount[0] = g_timerOverflowCount[1] = g_timerOverflowCount[2] = g_timerOverflowCount[3] = 0;
+    g_fifoAReadCount = g_fifoBReadCount = 0;
+    g_fifoADmaCount = g_fifoBDmaCount = 0;
+    g_soundDmaZeroWordsA = g_soundDmaNonZeroWordsA = 0;
+    g_soundDmaZeroWordsB = g_soundDmaNonZeroWordsB = 0;
+    // === END DIAGNOSTIC ===
+
+    // Push raw samples — no resampling, no interpolation.
+    // Rate adjustment happens in tick() via adjustedRate, which smoothly
+    // varies sample production to keep the queue stable.
+    static constexpr uint32_t MAX_QUEUED = 16384;
+    if (queued < MAX_QUEUED) {
+        SDL_QueueAudio(audioDevice, frameSamples.data(),
+                       frameSamples.size() * sizeof(int16_t));
+    }
+
+    // PLL: adjust the production rate for the NEXT frame based on queue level.
+    // This is the same principle as mGBA's fauxClock — a feedback loop that
+    // nudges the sample rate by tiny amounts to keep the queue at target.
+    //
+    // Key design: exponential smoothing prevents per-frame pitch jumps.
+    // The rate changes by at most ~0.5% per frame, and the smoothing
+    // ensures the change is gradual (time constant ~20 frames = 333ms).
+    static constexpr int TARGET_QUEUE = 4096;  // ~85ms at 48kHz
+    float error = (float)(TARGET_QUEUE - (int)queued);
+
+    // Convert queue error to rate adjustment (Hz)
+    // ±4096 samples error → ±200 Hz adjustment (±0.4% of 48000)
+    float rateNudge = error * 0.05f;
+
+    // Clamp to ±500 Hz max (~1% pitch shift)
+    if (rateNudge > 500.0f) rateNudge = 500.0f;
+    if (rateNudge < -500.0f) rateNudge = -500.0f;
+
+    float targetRate = (float)SAMPLE_RATE + rateNudge;
+
+    // Exponential smoothing: adjustedRate converges to targetRate over ~20 frames
+    adjustedRate = adjustedRate * 0.95f + targetRate * 0.05f;
+
+    // Safety clamp: never stray more than ±2% from nominal
+    float minRate = SAMPLE_RATE * 0.98f;
+    float maxRate = SAMPLE_RATE * 1.02f;
+    if (adjustedRate < minRate) adjustedRate = minRate;
+    if (adjustedRate > maxRate) adjustedRate = maxRate;
+
+    frameSamples.clear();
+}
+
+void APU::mixChannels(int16_t& outLeft, int16_t& outRight) {
+    int32_t left = 0, right = 0;
+
+    // FIFO A — SOUNDCNT_H bits: 2=volume, 8=right, 9=left, 10=timer
+    bool fifoA_right = (soundcnt_h & 0x0100) != 0;
+    bool fifoA_left  = (soundcnt_h & 0x0200) != 0;
+    bool fifoA_vol   = (soundcnt_h & 0x0004) != 0;  // 0=50%, 1=100%
+
+    if (fifoA_left || fifoA_right) {
+        // FIFO sample is int8 (-128..127).
+        // 100% volume: ×256 maps to -32768..32512 (full 16-bit range per channel)
+        // 50% volume:  ×128 maps to -16384..16256
+        int32_t scaledA = (int32_t)fifoA.currentSample * (fifoA_vol ? 256 : 128);
+        if (fifoA_left)  left  += scaledA;
+        if (fifoA_right) right += scaledA;
+    }
+
+    // FIFO B — SOUNDCNT_H bits: 3=volume, 12=right, 13=left, 14=timer
+    bool fifoB_right = (soundcnt_h & 0x1000) != 0;
+    bool fifoB_left  = (soundcnt_h & 0x2000) != 0;
+    bool fifoB_vol   = (soundcnt_h & 0x0008) != 0;
+
+    if (fifoB_left || fifoB_right) {
+        int32_t scaledB = (int32_t)fifoB.currentSample * (fifoB_vol ? 256 : 128);
+        if (fifoB_left)  left  += scaledB;
+        if (fifoB_right) right += scaledB;
+    }
+
+    // Clamp to 16-bit signed
+    if (left  >  32767) left  =  32767;
+    if (left  < -32768) left  = -32768;
+    if (right >  32767) right =  32767;
+    if (right < -32768) right = -32768;
+
+    outLeft  = static_cast<int16_t>(left);
+    outRight = static_cast<int16_t>(right);
+}
+
+// Schedule the next AUDIO_SAMPLE event on the scheduler.
+// Uses Bresenham-style fractional accumulator: base interval is 349 cycles,
+// but we add 1 extra cycle when the fractional remainder accumulates enough.
+// This gives an exact average of CPU_CLOCK/SAMPLE_RATE = 349.525... cycles.
+void APU::scheduleSampleEvent() {
+    if (!scheduler) return;
+
+    int interval = SAMPLE_INTERVAL_BASE;  // 349
+    sampleFracAccum += SAMPLE_INTERVAL_FRAC_NUM;  // remainder per sample
+    if (sampleFracAccum >= SAMPLE_RATE) {
+        sampleFracAccum -= SAMPLE_RATE;
+        interval++;  // 350 this time
+    }
+
+    scheduler->schedule(interval, [this]() { onSampleEvent(); },
+                        EventType::AUDIO_SAMPLE, 0x18);
+}
+
+// Called by the scheduler every ~350 cycles. Mixes one stereo sample.
+void APU::onSampleEvent() {
+    static constexpr size_t MAX_FRAME_SAMPLES = 4096;
+
+    if (frameSamples.size() < MAX_FRAME_SAMPLES * 2) {
+        int16_t sampleL = 0, sampleR = 0;
+        if (soundcnt_x & 0x80) {
+            mixChannels(sampleL, sampleR);
+        }
+        frameSamples.push_back(sampleL);
+        frameSamples.push_back(sampleR);
+    }
+
+    // Reschedule for next sample
+    scheduleSampleEvent();
+}
+
+// Start the recurring sample event chain on the scheduler.
+// Called once after init, or after reset.
+void APU::startSampling() {
+    if (!scheduler) return;
+    scheduler->cancelEventsOfType(EventType::AUDIO_SAMPLE);
+    sampleFracAccum = 0;
+    scheduleSampleEvent();
 }
 
 void APU::onTimerOverflow(int timerIndex) {
-    // SOUNDCNT_H bits:
-    // Bit 10: FIFO A timer select (0 = Timer 0, 1 = Timer 1)
-    // Bit 14: FIFO B timer select (0 = Timer 0, 1 = Timer 1)
-    
+    if (timerIndex >= 0 && timerIndex < 4) g_timerOverflowCount[timerIndex]++;
+
+    // Check master sound enable (matches mGBA: gba->audio.enable check)
+    if (!(soundcnt_x & 0x80)) return;
+
     int fifoA_timer = (soundcnt_h & 0x0400) ? 1 : 0;
     int fifoB_timer = (soundcnt_h & 0x4000) ? 1 : 0;
-    
-    // When the selected timer overflows, read next sample from FIFO
+
+    // Match mGBA's GBAAudioSampleFIFO order:
+    // 1. Check DMA refill FIRST (before consuming)
+    // 2. Consume one byte from internal buffer
     if (timerIndex == fifoA_timer) {
-        fifoA.read();
-        
-        // Request DMA refill if FIFO is running low
-        if (fifoA.needsRefill()) {
-            // DMA will be triggered by checking this flag
-            // The actual DMA trigger happens in the DMA controller
+        g_fifoAReadCount++;
+        if (fifoA.needsRefill() && dmaController) {
+            g_fifoADmaCount++;
+            dmaController->triggerSoundFIFO(0);
         }
+        fifoA.consume();
     }
-    
+
     if (timerIndex == fifoB_timer) {
-        fifoB.read();
-        
-        if (fifoB.needsRefill()) {
-            // DMA refill needed
+        g_fifoBReadCount++;
+        if (fifoB.needsRefill() && dmaController) {
+            g_fifoBDmaCount++;
+            dmaController->triggerSoundFIFO(1);
         }
+        fifoB.consume();
     }
 }
 
 void APU::reset() {
     fifoA.reset();
     fifoB.reset();
-    
+
     soundcnt_l = 0;
     soundcnt_h = 0;
     soundcnt_x = 0;
     soundbias = 0x200;
-    
-    // Reset PSG channels
+
     ch1 = {};
     ch2 = {};
     ch3 = {};
     ch3.waveRam.fill(0);
     ch4 = {};
-    ch4.lfsr = 0x7FFF;  // Initial LFSR state
-    
+    ch4.lfsr = 0x7FFF;
+
     frameSequencerStep = 0;
     frameSequencerCounter = 0;
     cycleCounter = 0;
-    lastSampleCycle = 0;
+    sampleFracAccum = 0;
+    adjustedRate = SAMPLE_RATE;
+
+    frameSamples.clear();
+    frameSamples.reserve(MAX_SAMPLES_PER_FRAME * 2);
 }
 
 void APU::enable(bool enabled) {
@@ -236,23 +398,21 @@ uint16_t APU::read16(uint32_t address) {
     switch (address) {
         case REG_SOUND1CNT_L: return ch1.cnt_l;
         case REG_SOUND1CNT_H: return ch1.cnt_h;
-        case REG_SOUND1CNT_X: return ch1.cnt_x & 0x4000;  // Only bit 14 readable
-        
+        case REG_SOUND1CNT_X: return ch1.cnt_x & 0x4000;
+
         case REG_SOUND2CNT_L: return ch2.cnt_l;
         case REG_SOUND2CNT_H: return ch2.cnt_h & 0x4000;
-        
+
         case REG_SOUND3CNT_L: return ch3.cnt_l;
         case REG_SOUND3CNT_H: return ch3.cnt_h;
         case REG_SOUND3CNT_X: return ch3.cnt_x & 0x4000;
-        
+
         case REG_SOUND4CNT_L: return ch4.cnt_l;
         case REG_SOUND4CNT_H: return ch4.cnt_h & 0x4000;
-        
+
         case REG_SOUNDCNT_L: return soundcnt_l;
         case REG_SOUNDCNT_H: return soundcnt_h;
         case REG_SOUNDCNT_X: {
-            // Bit 7: Master enable
-            // Bits 0-3: Channel 1-4 playing status
             uint16_t status = soundcnt_x & 0x80;
             if (ch1.enabled) status |= 0x01;
             if (ch2.enabled) status |= 0x02;
@@ -260,10 +420,9 @@ uint16_t APU::read16(uint32_t address) {
             if (ch4.enabled) status |= 0x08;
             return status;
         }
-        
+
         case REG_SOUNDBIAS: return soundbias;
-        
-        // Wave RAM (0x04000090 - 0x0400009F)
+
         default:
             if (address >= REG_WAVE_RAM && address < REG_WAVE_RAM + 16) {
                 int offset = address - REG_WAVE_RAM;
@@ -271,18 +430,15 @@ uint16_t APU::read16(uint32_t address) {
             }
             break;
     }
-    
     return 0;
 }
 
 void APU::write8(uint32_t address, uint8_t value) {
-    // Wave RAM can be written byte-by-byte
     if (address >= REG_WAVE_RAM && address < REG_WAVE_RAM + 16) {
         ch3.waveRam[address - REG_WAVE_RAM] = value;
         return;
     }
-    
-    // Other registers: read-modify-write
+
     uint16_t val16 = read16(address & ~1);
     if (address & 1) {
         val16 = (val16 & 0x00FF) | (value << 8);
@@ -294,55 +450,38 @@ void APU::write8(uint32_t address, uint8_t value) {
 
 void APU::write16(uint32_t address, uint16_t value) {
     switch (address) {
-        case REG_SOUND1CNT_L:
-            ch1.cnt_l = value;
-            break;
-            
-        case REG_SOUND1CNT_H:
-            ch1.cnt_h = value;
-            break;
-            
+        case REG_SOUND1CNT_L: ch1.cnt_l = value; break;
+        case REG_SOUND1CNT_H: ch1.cnt_h = value; break;
         case REG_SOUND1CNT_X:
             ch1.cnt_x = value;
-            if (value & 0x8000) {  // Restart bit
+            if (value & 0x8000) {
                 ch1.enabled = true;
-                // TODO: Initialize channel 1
+                ch1.volume = (ch1.cnt_h >> 12) & 0xF;
+                ch1.frequency = ch1.cnt_x & 0x7FF;
+                ch1.dutyPos = 0;
+                ch1.lengthCounter = 64 - (ch1.cnt_h & 0x3F);
+                ch1.envelopeCounter = (ch1.cnt_h >> 8) & 0x7;
+                ch1.sweepCounter = (ch1.cnt_l >> 4) & 0x7;
             }
             break;
-            
-        case REG_SOUND2CNT_L:
-            ch2.cnt_l = value;
-            break;
-            
+
+        case REG_SOUND2CNT_L: ch2.cnt_l = value; break;
         case REG_SOUND2CNT_H:
             ch2.cnt_h = value;
-            if (value & 0x8000) {
-                ch2.enabled = true;
-            }
+            if (value & 0x8000) ch2.enabled = true;
             break;
-            
+
         case REG_SOUND3CNT_L:
             ch3.cnt_l = value;
-            if (!(value & 0x80)) {  // Bit 7 = enable
-                ch3.enabled = false;
-            }
+            if (!(value & 0x80)) ch3.enabled = false;
             break;
-            
-        case REG_SOUND3CNT_H:
-            ch3.cnt_h = value;
-            break;
-            
+        case REG_SOUND3CNT_H: ch3.cnt_h = value; break;
         case REG_SOUND3CNT_X:
             ch3.cnt_x = value;
-            if (value & 0x8000) {
-                ch3.enabled = (ch3.cnt_l & 0x80) != 0;
-            }
+            if (value & 0x8000) ch3.enabled = (ch3.cnt_l & 0x80) != 0;
             break;
-            
-        case REG_SOUND4CNT_L:
-            ch4.cnt_l = value;
-            break;
-            
+
+        case REG_SOUND4CNT_L: ch4.cnt_l = value; break;
         case REG_SOUND4CNT_H:
             ch4.cnt_h = value;
             if (value & 0x8000) {
@@ -350,41 +489,29 @@ void APU::write16(uint32_t address, uint16_t value) {
                 ch4.lfsr = 0x7FFF;
             }
             break;
-            
-        case REG_SOUNDCNT_L:
-            soundcnt_l = value;
-            break;
-            
+
+        case REG_SOUNDCNT_L: soundcnt_l = value; break;
         case REG_SOUNDCNT_H:
-            soundcnt_h = value;
-            // Bit 11: Reset FIFO A
-            if (value & 0x0800) {
-                fifoA.reset();
-            }
-            // Bit 15: Reset FIFO B
-            if (value & 0x8000) {
-                fifoB.reset();
-            }
+            if (value & 0x0800) fifoA.reset();
+            if (value & 0x8000) fifoB.reset();
+            soundcnt_h = value & ~0x8800;  // Bits 11,15 are write-only reset flags
             break;
-            
+
         case REG_SOUNDCNT_X:
-            // Only bit 7 (master enable) is writable
             soundcnt_x = (soundcnt_x & 0x7F) | (value & 0x80);
             if (!(value & 0x80)) {
-                // Master disable - turn off all channels
                 ch1.enabled = false;
                 ch2.enabled = false;
                 ch3.enabled = false;
                 ch4.enabled = false;
             }
             break;
-            
+
         case REG_SOUNDBIAS:
-            soundbias = value & 0xC3FE;  // Mask valid bits
+            soundbias = value & 0xC3FE;
             break;
-            
+
         default:
-            // Wave RAM
             if (address >= REG_WAVE_RAM && address < REG_WAVE_RAM + 16) {
                 int offset = address - REG_WAVE_RAM;
                 ch3.waveRam[offset] = value & 0xFF;
@@ -395,70 +522,21 @@ void APU::write16(uint32_t address, uint16_t value) {
 }
 
 void APU::write32(uint32_t address, uint32_t value) {
-    // FIFO writes are 32-bit
-    if (address == REG_FIFO_A) {
-        writeFIFO_A(value);
-        return;
-    }
-    if (address == REG_FIFO_B) {
-        writeFIFO_B(value);
-        return;
-    }
-    
-    // Otherwise split into two 16-bit writes
+    if (address == REG_FIFO_A) { writeFIFO_A(value); return; }
+    if (address == REG_FIFO_B) { writeFIFO_B(value); return; }
     write16(address, value & 0xFFFF);
     write16(address + 2, value >> 16);
 }
 
-void APU::writeFIFO_A(uint32_t data) {
-    fifoA.write(data);
-}
+void APU::writeFIFO_A(uint32_t data) { fifoA.write(data); }
+void APU::writeFIFO_B(uint32_t data) { fifoB.write(data); }
 
-void APU::writeFIFO_B(uint32_t data) {
-    fifoB.write(data);
-}
-
-// ===== PSG Sample Generation (Phase 3 placeholders) =====
-
-int16_t APU::generatePSGSample() {
-    int32_t sample = 0;
-    
-    // PSG master volume from SOUNDCNT_L
-    int psgVolumeL = (soundcnt_l >> 0) & 0x07;
-    int psgVolumeR = (soundcnt_l >> 4) & 0x07;
-    
-    // TODO: Implement actual PSG generation
-    // sample += generateChannel1Sample();
-    // sample += generateChannel2Sample();
-    // sample += generateChannel3Sample();
-    // sample += generateChannel4Sample();
-    
-    return static_cast<int16_t>(sample);
-}
-
-int16_t APU::generateChannel1Sample() {
-    if (!ch1.enabled) return 0;
-    // TODO: Square wave with sweep
-    return 0;
-}
-
-int16_t APU::generateChannel2Sample() {
-    if (!ch2.enabled) return 0;
-    // TODO: Square wave
-    return 0;
-}
-
-int16_t APU::generateChannel3Sample() {
-    if (!ch3.enabled) return 0;
-    // TODO: Wave channel
-    return 0;
-}
-
-int16_t APU::generateChannel4Sample() {
-    if (!ch4.enabled) return 0;
-    // TODO: Noise channel
-    return 0;
-}
+// PSG stubs
+int16_t APU::generatePSGSample() { return 0; }
+int16_t APU::generateChannel1Sample() { return 0; }
+int16_t APU::generateChannel2Sample() { return 0; }
+int16_t APU::generateChannel3Sample() { return 0; }
+int16_t APU::generateChannel4Sample() { return 0; }
 
 void APU::dumpState() const {
     printf("\n=== APU State ===\n");
@@ -467,12 +545,8 @@ void APU::dumpState() const {
     printf("SOUNDCNT_H: 0x%04X\n", soundcnt_h);
     printf("SOUNDCNT_X: 0x%04X\n", soundcnt_x);
     printf("SOUNDBIAS: 0x%04X\n", soundbias);
-    printf("\nFIFO A: %d samples, current=0x%02X\n", fifoA.count, (uint8_t)fifoA.currentSample);
-    printf("FIFO B: %d samples, current=0x%02X\n", fifoB.count, (uint8_t)fifoB.currentSample);
-    printf("PSG Ch1: %s, Ch2: %s, Ch3: %s, Ch4: %s\n",
-           ch1.enabled ? "ON" : "OFF",
-           ch2.enabled ? "ON" : "OFF",
-           ch3.enabled ? "ON" : "OFF",
-           ch4.enabled ? "ON" : "OFF");
+    printf("FIFO A: %d words, current=0x%02X\n", fifoA.size(), (uint8_t)fifoA.currentSample);
+    printf("FIFO B: %d words, current=0x%02X\n", fifoB.size(), (uint8_t)fifoB.currentSample);
+    printf("SDL queue: %u samples\n", getQueuedSamples());
     printf("=================\n\n");
 }

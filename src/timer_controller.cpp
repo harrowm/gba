@@ -52,6 +52,7 @@ void TimerController::writeControl(int timerID, uint16_t value) {
         // Timer just enabled
         timer.enabled = true;
         timer.counter = timer.reload;
+        timer.lastReloadCycle = scheduler ? scheduler->getCurrentCycle() : 0;
         
         // Schedule timer event (unless in cascade mode)
         if (!timer.isCountUpMode()) {
@@ -83,9 +84,32 @@ uint16_t TimerController::readCounter(int timerID) const {
         return timer.counter;
     }
     
-    // For enabled timers with prescaler, we need to calculate current value
-    // based on elapsed cycles since last update
-    // For now, just return the counter value (will be updated by scheduler events)
+    // Interpolate counter value based on elapsed cycles since last reload.
+    // On real hardware the counter increments every (prescaler) CPU cycles.
+    // Our scheduler only updates timer.counter on overflow events, so between
+    // overflows we must compute the current value for any mid-frame reads.
+    // M4A (Nintendo's sound driver) reads Timer0 every VBlank to determine
+    // how many samples to mix — a stale read returns 0 delta = silence.
+    if (scheduler) {
+        uint64_t currentCycle = scheduler->getCurrentCycle();
+        uint64_t elapsed = (currentCycle >= timer.lastReloadCycle)
+                         ? (currentCycle - timer.lastReloadCycle) : 0;
+        uint32_t prescaler = timer.getPrescalerValue();
+        uint64_t elapsedTicks = elapsed / prescaler;
+        
+        // Period = number of ticks from reload to overflow (0x10000)
+        uint32_t periodTicks = 0x10000 - timer.reload;
+        
+        // Modular arithmetic handles the case where the scheduler hasn't
+        // processed overflow events yet (e.g. mid-instruction reads).
+        // The counter wraps correctly within a single period.
+        uint32_t ticksInPeriod = (periodTicks > 0)
+                               ? static_cast<uint32_t>(elapsedTicks % periodTicks)
+                               : 0;
+        
+        return static_cast<uint16_t>(timer.reload + ticksInPeriod);
+    }
+    
     return timer.counter;
 }
 
@@ -139,6 +163,7 @@ void TimerController::onTimerOverflow(int timerID) {
     
     // Reload counter
     timer.counter = timer.reload;
+    timer.lastReloadCycle = scheduler ? scheduler->getCurrentCycle() : 0;
     
     // Trigger interrupt if enabled
     if (timer.isIRQEnabled() && interruptController) {

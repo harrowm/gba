@@ -66,7 +66,7 @@ $(BUILD_DIR):
 # Link executable
 $(TARGET): $(ALL_OBJECTS)
 	@echo "Linking $(TARGET)..."
-	$(CXX) $(ALL_OBJECTS) -o $(TARGET) $(SDL2_LIBS) $(CAPSTONE_LIBS)
+	$(CXX) $(LDFLAGS) $(ALL_OBJECTS) -o $(TARGET) $(SDL2_LIBS) $(CAPSTONE_LIBS)
 	@echo "Build complete: $(TARGET)"
 
 # Compile C++ sources

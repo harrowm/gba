@@ -30,12 +30,13 @@ constexpr uint32_t PRESCALER_VALUES[4] = {1, 64, 256, 1024};
 class Timer {
 public:
     Timer() : counter(0), reload(0), control(0), 
-              cyclesUntilOverflow(0), enabled(false) {}
+              cyclesUntilOverflow(0), lastReloadCycle(0), enabled(false) {}
     
     uint16_t counter;              // Current counter value
     uint16_t reload;               // Reload value (written to TM_CNT_L)
     uint16_t control;              // Control register (TM_CNT_H)
     uint32_t cyclesUntilOverflow;  // Cycles remaining until overflow
+    uint64_t lastReloadCycle;      // CPU cycle when counter was last set to reload
     bool enabled;                  // Is timer currently running
     
     // Helper methods

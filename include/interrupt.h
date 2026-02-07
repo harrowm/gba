@@ -47,6 +47,11 @@ public:
     // Request an interrupt (sets IF bit)
     void requestInterrupt(uint16_t irqFlag);
     
+    // Schedule an IRQ check event if pending interrupts exist.
+    // Self-retries every IRQ_LATENCY_CYCLES until CPSR I=0 allows handling.
+    // Called from requestInterrupt and should be called when CPSR I changes 1→0.
+    void scheduleIRQCheck();
+    
     // Check if any enabled interrupts are pending
     bool hasPendingInterrupt() const;
     

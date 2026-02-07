@@ -5,7 +5,7 @@
 #include "timing.h"
 #include "scheduler.h"
 
-CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptController(ic), scheduler(nullptr) {
+CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptController(ic), scheduler(nullptr), halted(false) {
     thumbCPU = new ThumbCPU(*this); // Pass itself as the parent reference
     armCPU = new ARMCPU(*this);     // Pass itself as the parent reference
     std::fill(std::begin(registers), std::end(registers), 0); // Reset all registers to zero using std::fill
@@ -116,6 +116,18 @@ void CPU::advanceCycles(uint32_t cycles) {
     }
 }
 
+// Like mGBA's readCPSR hook: re-check pending interrupts after CPSR is
+// restored from SPSR (e.g. SUBS PC,LR / LDMFD SP!,{...,PC}^).
+// This ensures VBlank IRQs raised while CPSR I=1 get delivered promptly
+// once the previous IRQ handler returns and clears I.
+// Only triggers when I flag is currently clear (bit 7 = 0), since that's
+// when the CPU can actually accept interrupts.
+void CPU::onCPSRWrite() {
+    if (!(cpsr & 0x80)) {  // I flag clear — interrupts enabled
+        interruptController.scheduleIRQCheck();
+    }
+}
+
 // ============================================================================
 // Single Instruction Execution
 // ============================================================================
@@ -203,6 +215,11 @@ bool CPU::checkPendingInterrupts() {
 }
 
 void CPU::handleInterrupt() {
+    // Wake up from HALT state — any interrupt wakes the CPU regardless
+    // of whether the interrupt is enabled or not. The I-flag check below
+    // will still gate actual IRQ processing.
+    halted = false;
+    
     // Early exit if I flag is set (like mGBA's ARMRaiseIRQ)
     // This prevents nested interrupts
     if (cpsr & 0x80) {

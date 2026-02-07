@@ -1,5 +1,6 @@
 // Memory class implementation for GBA emulator (region pointer table version)
 #include "memory.h"
+#include "cpu.h"
 #include "scheduler.h"
 #include "timer_controller.h"
 #include "dma.h"
@@ -83,12 +84,12 @@ Memory::Memory(bool testMode) {
         }
 
         // --- WRAM: 256KB at 0x02000000 ---
-        wram = (uint8_t*)std::malloc(256 * 1024);
+        wram = (uint8_t*)std::calloc(256 * 1024, 1);
         for (uint32_t addr = 0x02000000; addr < 0x02040000; addr += BLOCK_SIZE)
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = wram + (addr - 0x02000000);
 
         // --- IWRAM: 32KB at 0x03000000, mirrored throughout 0x03000000-0x03FFFFFF ---
-        iwram = (uint8_t*)std::malloc(32 * 1024);
+        iwram = (uint8_t*)std::calloc(32 * 1024, 1);
         // Mirror IWRAM every 64KB across the entire 16MB range
         // Each 64KB block in the 0x03000000-0x03FFFFFF range should point to IWRAM
         // but the actual IWRAM is only 32KB, so we need special handling in the read/write functions
@@ -96,9 +97,12 @@ Memory::Memory(bool testMode) {
             regionTable[addr / BLOCK_SIZE] = iwram;
         }
 
-        // --- I/O: 1KB at 0x04000000 ---
-        io = (uint8_t*)std::malloc(1 * 1024);
-        memset(io, 0, 1 * 1024);  // Zero-initialize IO memory
+        // --- I/O: Allocate full block size (64KB) to match regionTable block granularity.
+        // The GBA I/O register space is 0x04000000-0x04000301, but games may
+        // access undocumented registers (e.g. 0x04000410, 0x04000800) and the
+        // regionTable maps a full 64KB block to this pointer.
+        io = (uint8_t*)std::malloc(BLOCK_SIZE);
+        memset(io, 0, BLOCK_SIZE);  // Zero-initialize IO memory
         regionTable[0x04000000 / BLOCK_SIZE] = io;
         // Initialize critical boot-related registers for clean BIOS boot
         io[0x000] = 0x80; // DISPCNT low byte: Forced blank (bit 7) set on power-on
@@ -112,8 +116,10 @@ Memory::Memory(bool testMode) {
         io[0x130] = 0xFF; // KEYINPUT low byte: All buttons unpressed
         io[0x131] = 0x03; // KEYINPUT high byte: All buttons unpressed (0x03FF)
 
-        // --- Palette RAM: 1KB at 0x05000000 ---
-        palette = (uint8_t*)std::malloc(1 * 1024);
+        // --- Palette RAM: 1KB at 0x05000000, mirrored throughout 64KB block ---
+        // Allocate full block to prevent overflow from mirrored addresses
+        palette = (uint8_t*)std::malloc(BLOCK_SIZE);
+        memset(palette, 0, BLOCK_SIZE);
         regionTable[0x05000000 / BLOCK_SIZE] = palette;
 
         // --- VRAM: 96KB at 0x06000000, mirrored in 128KB ---
@@ -124,7 +130,9 @@ Memory::Memory(bool testMode) {
         regionTable[0x06010000 / BLOCK_SIZE] = vram + 64 * 1024;  // Points to second half of VRAM
 
         // --- OAM: 1KB at 0x07000000, mirrored in 8KB ---
-        oam = (uint8_t*)std::malloc(1 * 1024);
+        // Allocate full block to prevent overflow (get_region_base handles 1KB mirroring)
+        oam = (uint8_t*)std::malloc(BLOCK_SIZE);
+        memset(oam, 0, BLOCK_SIZE);
         for (uint32_t addr = 0x07000000; addr < 0x07002000; addr += BLOCK_SIZE)
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = oam;
 
@@ -241,6 +249,23 @@ void Memory::write8(uint32_t address, uint8_t value) {
         LOG_FEATURE("[Memory::write8] POSTFLG write: 0x%02X (was 0x%02X)\n", value, base[offset]);
     }
     
+    // HALTCNT (0x04000301): CPU power-down control
+    // Bit 7: 0 = HALT (stop CPU until interrupt), 1 = STOP (deep sleep)
+    // The BIOS writes here during SWI 0x02 (Halt), SWI 0x04 (IntrWait),
+    // SWI 0x05 (VBlankIntrWait). On real hardware this stops the CPU clock
+    // until an enabled interrupt fires.
+    if (address == 0x04000301) {
+        if (cpu) {
+            if ((value & 0x80) == 0) {
+                // HALT mode: stop CPU until interrupt
+                cpu->halt();
+            }
+            // STOP mode (bit 7 set) is not commonly used by games
+        }
+        base[offset] = value;
+        return;
+    }
+    
     // KEYINPUT (0x04000130-0x04000131) is READ-ONLY - ignore writes
     if (address == 0x04000130 || address == 0x04000131) {
         return;  // Silently ignore writes to KEYINPUT
@@ -279,7 +304,16 @@ uint16_t Memory::read16(uint32_t address) const {
             if (isControl) {
                 return timerController->readControl(timerID);
             } else {
-                return timerController->readCounter(timerID);
+                uint16_t cval = timerController->readCounter(timerID);
+                // Trace Timer0 counter reads during game phase
+                if (timerID == 0 && g_current_frame >= 140 && g_current_frame <= 160) {
+                    static int t0ReadLog = 0;
+                    if (t0ReadLog++ < 30) {
+                        fprintf(stderr, "[T0READ] f%u val=0x%04X (%u)\n",
+                                g_current_frame, cval, cval);
+                    }
+                }
+                return cval;
             }
         }
     }
@@ -308,6 +342,17 @@ uint16_t Memory::read16(uint32_t address) const {
 void Memory::write16(uint32_t address, uint16_t value) {
     addWaitCycles(address, 16);
     
+    // PCM buffer write trap (16-bit)
+    if (address >= 0x02001750 && address < 0x020023B0 && g_current_frame >= 140 && g_current_frame <= 200) {
+        static int pcmWrite16Log = 0;
+        if (pcmWrite16Log < 20) {
+            const char* ch = (address < 0x02001D80) ? "RIGHT" : "LEFT";
+            fprintf(stderr, "[PCMWR16] f%u %s addr=0x%08X val=0x%04X\n",
+                    g_current_frame, ch, address, value);
+            pcmWrite16Log++;
+        }
+    }
+    
     // Log writes to BIOS work RAM for interrupt tracking
     if (address >= 0x03007F00 && address <= 0x03007FFC) {
         LOG_IRQ("[IRQ HANDLER] Write16 to 0x%08X: value=0x%04X (BIOS work area)\n", address, value);
@@ -319,7 +364,37 @@ void Memory::write16(uint32_t address, uint16_t value) {
             int channelID = (address - 0x040000B0) / 12;
             int regOffset = (address - 0x040000B0) % 12;
             
-            if (regOffset == 8) {  // Word count (DMAxCNT_L)
+            // Debug: trace all DMA1/2 writes (throughout entire run)
+            if (channelID == 1 || channelID == 2) {
+                static int dma_debug_count = 0;
+                if (dma_debug_count++ < 100) {
+                    fprintf(stderr, "[DMA%d] write16 frame=%u reg=%d val=0x%04X\n", 
+                            channelID, g_current_frame, regOffset, value);
+                }
+            }
+            
+            // Handle 16-bit writes to source/dest addresses (low and high halves)
+            if (regOffset == 0) {  // Source address low (DMAxSAD_L)
+                uint32_t current = dmaController->readSourceAddress(channelID);
+                uint32_t newAddr = (current & 0xFFFF0000) | value;
+                dmaController->writeSourceAddress(channelID, newAddr);
+                return;
+            } else if (regOffset == 2) {  // Source address high (DMAxSAD_H)
+                uint32_t current = dmaController->readSourceAddress(channelID);
+                uint32_t newAddr = (current & 0x0000FFFF) | (static_cast<uint32_t>(value) << 16);
+                dmaController->writeSourceAddress(channelID, newAddr);
+                return;
+            } else if (regOffset == 4) {  // Dest address low (DMAxDAD_L)
+                uint32_t current = dmaController->readDestAddress(channelID);
+                uint32_t newAddr = (current & 0xFFFF0000) | value;
+                dmaController->writeDestAddress(channelID, newAddr);
+                return;
+            } else if (regOffset == 6) {  // Dest address high (DMAxDAD_H)
+                uint32_t current = dmaController->readDestAddress(channelID);
+                uint32_t newAddr = (current & 0x0000FFFF) | (static_cast<uint32_t>(value) << 16);
+                dmaController->writeDestAddress(channelID, newAddr);
+                return;
+            } else if (regOffset == 8) {  // Word count (DMAxCNT_L)
                 LOG_DMA("[DMA%d] Write Word Count: 0x%04X (%d transfers)\n", channelID, value, value ? value : 65536);
                 dmaController->writeWordCount(channelID, value);
                 return;  // Don't write to memory
@@ -732,6 +807,21 @@ uint32_t Memory::read32(uint32_t address) const {
 // Note: This is standard ARM7TDMI behavior, not a GBA-specific quirk.
 void Memory::write32(uint32_t address, uint32_t value) {
     addWaitCycles(address, 32);
+    
+    // PCM buffer write trap: detect ANY writes to the M4A PCM buffer region
+    // Right channel: 0x02001750-0x02001D7F, Left channel: 0x02001D80-0x020023AF
+    if (address >= 0x02001750 && address < 0x020023B0 && g_current_frame >= 140 && g_current_frame <= 200) {
+        static int pcmWriteLog = 0;
+        if (pcmWriteLog < 30) {
+            const char* ch = (address < 0x02001D80) ? "RIGHT" : "LEFT";
+            uint32_t offset = (address < 0x02001D80) ? address - 0x02001750 : address - 0x02001D80;
+            fprintf(stderr, "[PCMWR32] f%u %s off=0x%03X addr=0x%08X val=0x%08X (bytes: %d %d %d %d)\n",
+                    g_current_frame, ch, offset, address, value,
+                    (int)(int8_t)(value & 0xFF), (int)(int8_t)((value >> 8) & 0xFF),
+                    (int)(int8_t)((value >> 16) & 0xFF), (int)(int8_t)((value >> 24) & 0xFF));
+            pcmWriteLog++;
+        }
+    }
     
     // Handle DMA register writes (source and dest addresses)
     if (dmaController) {

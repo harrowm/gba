@@ -44,31 +44,37 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
     DEBUG_INFO("Interrupt requested: 0x" + debug_to_hex_string(irqFlag, 4));
     
     // Schedule IRQ trigger with latency (like mGBA's GBATestIRQ)
-    // Only schedule if interrupts are enabled and not already scheduled
-    if (scheduler && hasPendingInterrupt()) {
-        if (!scheduler->hasEventsOfType(EventType::IRQ_TRIGGER)) {
-            static int schedule_count = 0;
-            schedule_count++;
-            if (schedule_count <= 10) {
-                LOG_IRQ("[IRQ SCHEDULE #%d] Scheduling IRQ_TRIGGER event with %d cycle delay\n", 
-                       schedule_count, IRQ_LATENCY_CYCLES);
-            }
-            scheduler->schedule(IRQ_LATENCY_CYCLES, [this]() {
-                static int trigger_count = 0;
-                trigger_count++;
-                if (trigger_count <= 10) {
-                    LOG_IRQ("[IRQ TRIGGER #%d] Event fired, checking pending interrupts\n", trigger_count);
-                }
-                // At trigger time, check IME and I flag, then call CPU
-                if (hasPendingInterrupt() && irqCallback) {
-                    if (trigger_count <= 10) {
-                        LOG_IRQ("[IRQ TRIGGER #%d] Calling irqCallback\n", trigger_count);
-                    }
-                    irqCallback();
-                }
-            }, EventType::IRQ_TRIGGER);
-        }
+    // Schedule whenever IE & IF match, regardless of IME.
+    // On real hardware, HALT wakes on any IE & IF match (IME is irrelevant
+    // for wake-up). IME only gates whether the IRQ is actually *taken* by
+    // the CPU, which the irqCallback already handles.
+    uint16_t ieIF = ieVal & currentIF;
+    if (scheduler && ieIF) {
+        scheduleIRQCheck();
     }
+}
+
+// Schedule an IRQ_TRIGGER event if none is already pending.
+// The callback unhalts the CPU and (if CPSR I=0) takes the interrupt.
+// No self-retry: on real hardware the CPU checks pending IRQs each
+// instruction cycle once I is cleared, so a new requestInterrupt()
+// (e.g. from the next HBlank/timer) will naturally re-schedule.
+void InterruptController::scheduleIRQCheck() {
+    if (!scheduler || !memory) return;
+    if (scheduler->hasEventsOfType(EventType::IRQ_TRIGGER)) return;
+
+    uint16_t ie = memory->readDirectIO16(REG_IE);
+    uint16_t ifr = memory->readDirectIO16(REG_IF);
+    if (!(ie & ifr)) return;
+
+    scheduler->schedule(IRQ_LATENCY_CYCLES, [this]() {
+        uint16_t ie2 = memory->readDirectIO16(REG_IE);
+        uint16_t ifr2 = memory->readDirectIO16(REG_IF);
+        if ((ie2 & ifr2) && irqCallback) {
+            irqCallback();
+        }
+        // No self-retry — avoids tight 7-cycle scheduler loop while CPSR I=1
+    }, EventType::IRQ_TRIGGER);
 }
 
 bool InterruptController::isIMESet() const {

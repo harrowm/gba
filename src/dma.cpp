@@ -8,6 +8,12 @@ int g_current_dma_channel = -1;
 uint32_t g_dma_source_addr = 0;
 uint32_t g_dma_dest_addr = 0;
 
+// Sound DMA diagnostic: track source addresses and data content
+uint32_t g_soundDmaSourceA = 0, g_soundDmaSourceB = 0;
+int g_soundDmaZeroWordsA = 0, g_soundDmaNonZeroWordsA = 0;
+int g_soundDmaZeroWordsB = 0, g_soundDmaNonZeroWordsB = 0;
+uint32_t g_soundDmaFirstWordA = 0, g_soundDmaFirstWordB = 0;
+
 #include "memory.h"
 #include "scheduler.h"
 #include "interrupt.h"
@@ -89,7 +95,24 @@ void DMAController::writeSourceAddress(int channelId, uint32_t value) {
         0x0FFFFFFF   // DMA3: max 256MB
     };
     
-    channels[channelId].setSourceAddress(value & masks[channelId]);
+    uint32_t maskedValue = value & masks[channelId];
+    uint32_t oldValue = channels[channelId].getSourceAddress();
+    uint32_t oldIntSrc = channels[channelId].internalSource;
+    channels[channelId].setSourceAddress(maskedValue);
+    
+    // Log sound DMA source reprogramming
+    if ((channelId == 1 || channelId == 2) && maskedValue != oldValue && g_current_frame >= 140) {
+        static int srcLog = 0;
+        if (srcLog++ < 40) {
+            fprintf(stderr, "[DMA%d-SRC] frame=%u old=0x%08X new=0x%08X (intSrc was 0x%08X)\n",
+                    channelId, g_current_frame, oldValue, maskedValue, oldIntSrc);
+        }
+    }
+    
+    // IMPORTANT: On real GBA hardware, writing to DMAxSAD always updates the internal
+    // source register, regardless of whether DMA is enabled or what mode it's in.
+    // This is critical for sound DMA where games reconfigure the buffer address.
+    channels[channelId].internalSource = maskedValue;
 }
 
 void DMAController::writeDestAddress(int channelId, uint32_t value) {
@@ -127,9 +150,29 @@ void DMAController::writeControl(int channelId, uint16_t value) {
     channels[channelId].setControl(value);
     bool isEnabled = channels[channelId].isEnabled();
     
+    // Log sound DMA control transitions
+    if ((channelId == 1 || channelId == 2) && g_current_frame >= 140 && g_current_frame <= 200) {
+        if (wasEnabled != isEnabled) {
+            fprintf(stderr, "[DMA%d-CTRL] f%u %s→%s ctrl=0x%04X regSrc=0x%08X intSrc=0x%08X\n",
+                    channelId, g_current_frame,
+                    wasEnabled ? "EN" : "DIS", isEnabled ? "EN" : "DIS",
+                    value, channels[channelId].getSourceAddress(),
+                    channels[channelId].internalSource);
+        }
+    }
+    
     // If DMA just got enabled, start the transfer
     if (!wasEnabled && isEnabled) {
         startTransfer(channelId);
+        // Log the reload for sound DMA
+        if ((channelId == 1 || channelId == 2) && g_current_frame >= 140 && g_current_frame <= 200) {
+            fprintf(stderr, "[DMA%d-RELOAD] f%u intSrc=0x%08X intDst=0x%08X intCnt=%u mode=%d\n",
+                    channelId, g_current_frame,
+                    channels[channelId].internalSource,
+                    channels[channelId].internalDest,
+                    channels[channelId].internalCount,
+                    (int)channels[channelId].getTimingMode());
+        }
     }
     
     // If DMA got disabled, stop any active transfer
@@ -189,6 +232,26 @@ void DMAController::performTransfer(int channelId) {
     uint16_t count = channel.internalCount;
     bool is32bit = channel.is32Bit();
     
+    // Debug sound DMA data - only log non-zero transfers
+    bool isSoundDMA = (channelId == 1 || channelId == 2) && 
+                      (destAddr == 0x040000A0 || destAddr == 0x040000A4);
+    
+    // Track sound DMA source addresses and data content
+    if (isSoundDMA) {
+        if (destAddr == 0x040000A0) { g_soundDmaSourceA = srcAddr; g_soundDmaFirstWordA = 0; }
+        else { g_soundDmaSourceB = srcAddr; g_soundDmaFirstWordB = 0; }
+    }
+    
+    // For sound FIFO DMA: clamp reads to prevent buffer overrun.
+    // M4A's PCM DMA buffers are sized as pcmDmaPeriod * samplesPerVBlank.
+    // Due to missed VBlank IRQs (IRQ raised while CPU is in another handler),
+    // the DMA source can advance past the end of the PCM buffer into M4A
+    // internal structures, producing garbage audio (the "chug" sound).
+    // Clamp: if source has advanced more than 2KB past the reload address,
+    // substitute zero. Typical buffers are ~1.5KB (9 frames * 176 samples).
+    uint32_t soundDmaBase = channel.getSourceAddress();  // registered (reload) source
+    static constexpr uint32_t SOUND_BUFFER_LIMIT = 0x630; // M4A typical: pcmDmaPeriod(9) * samplesPerVBlank(176)
+    
     LOG_DMA("[DMA%d] STARTING TRANSFER: src=0x%08X dst=0x%08X count=%d size=%s\n",
            channelId, srcAddr, destAddr, count, is32bit ? "32bit" : "16bit");
     
@@ -201,7 +264,14 @@ void DMAController::performTransfer(int channelId) {
     for (uint16_t i = 0; i < count; i++) {
         // Read from source
         uint32_t value;
-        if (is32bit) {
+        
+        // Sound DMA buffer overrun check: if source went past the PCM buffer,
+        // substitute zero instead of reading M4A internal structs.
+        bool soundClamped = false;
+        if (isSoundDMA && srcAddr >= soundDmaBase + SOUND_BUFFER_LIMIT) {
+            value = 0;
+            soundClamped = true;
+        } else if (is32bit) {
             value = memory->read32(srcAddr);
         } else {
             value = memory->read16(srcAddr);
@@ -216,6 +286,48 @@ void DMAController::performTransfer(int channelId) {
             memory->write32(destAddr, value);
         } else {
             memory->write16(destAddr, static_cast<uint16_t>(value));
+        }
+        
+        // Track sound DMA data content
+        if (isSoundDMA) {
+            if (destAddr == 0x040000A0) {
+                if (i == 0) g_soundDmaFirstWordA = value;
+                if (value == 0) g_soundDmaZeroWordsA++;
+                else {
+                    g_soundDmaNonZeroWordsA++;
+                    // Log non-zero sound DMA words ONLY after BIOS boot (frame 135+)
+                    if (g_current_frame > 135) {
+                        static int nzLogCount = 0;
+                        if (nzLogCount++ < 50) {
+                            fprintf(stderr, "[SNDMA] FIFO_A non-zero! src=0x%08X word[%d]=0x%08X (bytes: %d %d %d %d) frame=%u\n",
+                                    srcAddr, i, value,
+                                    (int)(int8_t)(value & 0xFF),
+                                    (int)(int8_t)((value >> 8) & 0xFF),
+                                    (int)(int8_t)((value >> 16) & 0xFF),
+                                    (int)(int8_t)((value >> 24) & 0xFF),
+                                    g_current_frame);
+                        }
+                    }
+                }
+            } else {
+                if (i == 0) g_soundDmaFirstWordB = value;
+                if (value == 0) g_soundDmaZeroWordsB++;
+                else {
+                    g_soundDmaNonZeroWordsB++;
+                    if (g_current_frame > 135) {
+                        static int nzLogCountB = 0;
+                        if (nzLogCountB++ < 50) {
+                            fprintf(stderr, "[SNDMA] FIFO_B non-zero! src=0x%08X word[%d]=0x%08X (bytes: %d %d %d %d) frame=%u\n",
+                                    srcAddr, i, value,
+                                    (int)(int8_t)(value & 0xFF),
+                                    (int)(int8_t)((value >> 8) & 0xFF),
+                                    (int)(int8_t)((value >> 16) & 0xFF),
+                                    (int)(int8_t)((value >> 24) & 0xFF),
+                                    g_current_frame);
+                        }
+                    }
+                }
+            }
         }
         
         // Advance scheduler: 2 cycles per transfer (internal + 1 access)
@@ -296,6 +408,13 @@ void DMAController::updateAddresses(int channelId, uint32_t& srcAddr, uint32_t& 
             break;
     }
     
+    // For Sound FIFO destinations (0x040000A0 and 0x040000A4), always treat as FIXED
+    // The GBA hardware always writes to the same FIFO register address
+    if (destAddr == 0x040000A0 || destAddr == 0x040000A4) {
+        // Don't update destination for FIFO
+        return;
+    }
+    
     // Update destination address
     switch (channel.getDestControl()) {
         case DMAAddressControl::INCREMENT:
@@ -351,6 +470,38 @@ void DMAController::triggerHBlank() {
     }
     #endif
     startTriggeredTransfers(DMATimingMode::HBLANK);
+}
+
+static int g_sound_dma_debug_count = 0;
+
+void DMAController::triggerSoundFIFO(int fifoIndex) {
+    // Sound DMA uses channels 1 and 2 with SPECIAL timing mode
+    // fifoIndex: 0 = FIFO A (address 0x040000A0), 1 = FIFO B (address 0x040000A4)
+    
+    const uint32_t fifoAddresses[2] = { 0x040000A0, 0x040000A4 };
+    uint32_t targetFifoAddr = fifoAddresses[fifoIndex];
+    
+    // Check DMA channels 1 and 2 (they can target sound FIFOs)
+    for (int i = 1; i <= 2; i++) {
+        DMAChannel& channel = channels[i];
+        
+        // Check if this channel is enabled, in SPECIAL timing mode, and targets the correct FIFO
+        if (channel.isEnabled() && 
+            !channel.active && 
+            channel.getTimingMode() == DMATimingMode::SPECIAL &&
+            channel.getDestAddress() == targetFifoAddr) {
+            
+            // Sound DMA triggered - no debug output
+            
+            // For sound DMA, always transfer 4 words (16 bytes = 16 samples)
+            // This matches the GBA hardware behavior for FIFO DMA
+            channel.internalCount = 4;
+            channel.active = true;
+            
+            performTransfer(i);
+            break;  // Only one channel should service each FIFO
+        }
+    }
 }
 
 void DMAController::startTriggeredTransfers(DMATimingMode mode) {

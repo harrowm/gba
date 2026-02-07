@@ -110,6 +110,9 @@ public:
     void triggerVBlank();
     void triggerHBlank();
     
+    // Sound FIFO DMA trigger (called when FIFO needs refill)
+    void triggerSoundFIFO(int fifoIndex);  // 0 = FIFO A, 1 = FIFO B
+    
     // Check if any DMA is active
     bool isAnyChannelActive() const;
     

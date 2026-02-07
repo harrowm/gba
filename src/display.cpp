@@ -37,7 +37,9 @@ Display::Display(int scale)
         return;
     }
     
-    // Create renderer with VSync for smooth 60 FPS
+    // Create renderer WITH VSync for proper 60fps pacing
+    // Audio uses SDL_QueueAudio (push model) so VSync blocking is fine -
+    // SDL plays from its internal queue independently of the main thread
     renderer = SDL_CreateRenderer(
         window,
         -1,

@@ -81,6 +81,9 @@ private:
     InstructionTracer tracer;
     InstructionMemoryTracer memoryTracer;
 
+    // CPU halt state (set by writing to HALTCNT, cleared on interrupt)
+    bool halted;
+
     // Helper: get current mode
     Mode getMode() const { return static_cast<Mode>(cpsr & 0x1F); }
 
@@ -143,6 +146,11 @@ public:
     void handleInterrupt();
     bool checkPendingInterrupts();
     
+    // HALT state management
+    void halt() { halted = true; }
+    void unhalt() { halted = false; }
+    bool isHalted() const { return halted; }
+    
     // Reset and initialization
     void reset();
     
@@ -154,6 +162,10 @@ public:
     std::array<uint32_t, 16>& R() { return registers; }
     uint32_t& CPSR() { return cpsr; }
     
+    // Called after any CPSR write that may clear the I flag (bit 7).
+    // Like mGBA's readCPSR hook, this re-checks pending interrupts
+    // so that IRQs raised while I=1 get delivered promptly after I→0.
+    void onCPSRWrite();
     // Instruction tracing for debugging
     void enableTracing(const char* filename, uint32_t max_instructions = 1000) {
         tracer.open(filename, max_instructions);

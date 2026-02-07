@@ -25,6 +25,7 @@ public:
     void setTimerController(TimerController* tc) { timerController = tc; }
     void setDMAController(DMAController* dma) { dmaController = dma; }
     void setAPU(APU* a) { apu = a; }
+    void setCPU(class CPU* c) { cpu = c; }
 
     // Accessors (now with cycle-accurate timing)
     uint8_t read8(uint32_t address) const;
@@ -87,6 +88,9 @@ private:
     
     // APU for sound register handling
     APU* apu = nullptr;
+    
+    // CPU for HALT control
+    class CPU* cpu = nullptr;
     
     // Flag to temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
     mutable bool disableWaitCycles = false;

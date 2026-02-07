@@ -230,23 +230,23 @@ int main(int argc, char* argv[]) {
         printf("\nStarting main loop...\n");
         printf("Press ESC or close window to quit\n\n");
         
-        int frameCount = 0;
-        auto lastFrameTime = std::chrono::high_resolution_clock::now();
+        // Start scheduler-driven audio sampling (~48kHz recurring event)
+        gba.getAPU().startSampling();
         
-        // Main loop
+        int frameCount = 0;
+        auto startTime = std::chrono::high_resolution_clock::now();
+        auto lastFpsTime = startTime;
+        int lastFpsFrame = 0;
+        
         while (!display.shouldQuit()) {
-            // Run one frame of emulation (280,896 cycles)
-            // This will trigger scanline rendering and V-Blank
-            auto frameStart = std::chrono::high_resolution_clock::now();
-            gba.runFrame();
-            auto frameEnd = std::chrono::high_resolution_clock::now();
-            auto frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart).count();
             
-            // Log slow frames (> 33ms = less than 30 FPS)
-            if (frameDuration > 33) {
-                fprintf(stderr, "[SLOW FRAME] Frame %d took %ldms (%.1f FPS)\n", 
-                        frameCount, frameDuration, 1000.0 / frameDuration);
-            }
+            // Run one frame of emulation (280,896 cycles)
+            // tick() accumulates audio samples into per-frame buffer
+            gba.runFrame();
+            
+            // Push this frame's audio samples to SDL
+            // SDL plays from its internal queue at 32768 Hz independently
+            gba.getAPU().pushAudio();
             
             // Exit if memory tracing is complete
             if (enableMemoryTrace && cpu.isMemoryTracingComplete()) {
@@ -266,17 +266,32 @@ int main(int argc, char* argv[]) {
             int videoMode = dispcnt & 0x7;
             uint16_t* palette = reinterpret_cast<uint16_t*>(mem.getPaletteRAM());
             
-            // Render the frame to display
+            // Render frame (VSync provides 60fps pacing)
             display.renderFrame(framebuffer, palette, videoMode);
             
             // Handle SDL events (keyboard, window close)
             display.handleEvents();
             
             frameCount++;
+            
+            // Print FPS every second
+            auto now = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFpsTime).count();
+            if (elapsed >= 1000) {
+                int framesThisSecond = frameCount - lastFpsFrame;
+                fprintf(stderr, "[FPS] %d fps | audio queue: %u samples (frame %d)\n", 
+                        framesThisSecond, gba.getAPU().getQueuedSamples(), frameCount);
+                lastFpsFrame = frameCount;
+                lastFpsTime = now;
+            }
         }
         
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+        
         printf("\nEmulator shutdown cleanly\n");
-        printf("Total frames rendered: %d\n", frameCount);
+        printf("Total frames rendered: %d in %lld ms (%.1f fps avg)\n", 
+               frameCount, totalMs, frameCount * 1000.0 / totalMs);
         
         // Close SP tracing
         close_sp_trace();

@@ -9,6 +9,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <algorithm>
 
 GBA::GBA(bool testMode) 
     : memory(testMode), scheduler(), interruptController(), 
@@ -28,6 +29,11 @@ GBA::GBA(bool testMode)
     
     // Setup interrupt callback (CPU will handle interrupt when scheduled event fires)
     interruptController.setIRQCallback([this]() {
+        // Always wake from HALT — real hardware wakes on ANY interrupt
+        // (IE & IF match), regardless of IME or CPSR I-flag.
+        // The I-flag only gates whether the IRQ is actually taken.
+        cpu->unhalt();
+        
         // This is called by the scheduled IRQ_TRIGGER event after IRQ_LATENCY_CYCLES
         // Check the CPU's I flag before raising IRQ (like mGBA's _triggerIRQ)
         if (!(cpu->CPSR() & 0x80)) {  // I flag is bit 7
@@ -66,8 +72,9 @@ GBA::GBA(bool testMode)
     memory.setDMAController(&dmaController);
     
     // Initialize APU (Audio Processing Unit)
-    apu.init(&memory);
+    apu.init(&memory, &dmaController, &scheduler);
     memory.setAPU(&apu);
+    memory.setCPU(cpu);
     
     // Setup timer overflow callback for FIFO audio
     timerController.setTimerOverflowCallback([this](int timerIndex) {
@@ -245,6 +252,17 @@ void GBA::runFrame() {
     // Following mGBA's architecture: process events between instructions
     // This ensures events only fire at safe points after system initialization
     while (scheduler.getCurrentCycle() < targetCycle) {
+        // HALT: skip to next scheduled event (timer, audio sample, scanline, etc.)
+        // The scheduler naturally fires AUDIO_SAMPLE events during HALT,
+        // so no deferred APU tick is needed.
+        if (cpu->isHalted()) {
+            uint64_t nextEvt = scheduler.getNextEventCycle();
+            uint64_t skipTo = (nextEvt != UINT64_MAX && nextEvt <= targetCycle)
+                            ? nextEvt : targetCycle;
+            scheduler.runUntil(skipTo);
+            continue;
+        }
+        
         uint32_t pc = cpu->R()[15];
         uint64_t cycleBeforeInstr = scheduler.getCurrentCycle();
         
@@ -439,10 +457,6 @@ void GBA::runFrame() {
         // Get the cycle of the next scheduled event before executing
         uint64_t nextEventCycle = scheduler.getNextEventCycle();
         
-        // DISABLED: IntrWait fast-forward causes BIOS to hang
-        // The manual IRQ triggering interferes with normal interrupt handling
-        // TODO: Investigate proper HALT emulation that doesn't break interrupt flow
-        
         // Execute the instruction (this will advance cycles based on instruction + memory timing)
         // Typical GBA instruction cost breakdown:
         //   - IME check: 1 cycle (reading 0x04000208 to check if interrupts enabled)
@@ -460,17 +474,12 @@ void GBA::runFrame() {
         // we need to process it now to ensure correct timing
         if (nextEventCycle <= cycleAfterInstr && nextEventCycle != UINT64_MAX) {
             // We passed an event! Process all events up to current cycle
+            // Event callbacks (e.g. DMA) may advance the cycle counter further
             scheduler.runUntil(cycleAfterInstr);
         }
         
-        uint64_t cyclesAdvanced = cycleAfterInstr - cycleBeforeInstr;
-        
-        // Log first 10 instructions (DISABLED FOR PERFORMANCE)
-        // if (!timing_logged && instructionCount <= 10) {
-        //     printf("[TIMING] Instr %d: PC=0x%08X, cycles before=%llu, cycles after=%llu, advanced=%llu\n",
-        //            instructionCount, pc, cycleBeforeInstr, cycleAfterInstr, cyclesAdvanced);
-        // }
-        
+        // Audio sampling is now handled by the scheduler (AUDIO_SAMPLE events)
+        // No per-instruction apu.tick() needed.
     }
     
     uint64_t loopEndCycle = scheduler.getCurrentCycle();

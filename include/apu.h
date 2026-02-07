@@ -3,195 +3,193 @@
 
 #include <cstdint>
 #include <array>
-#include <atomic>
+#include <vector>
 #include <SDL2/SDL.h>
 
-// Forward declarations
 class Memory;
+class DMAController;
+class Scheduler;
 
-// GBA APU (Audio Processing Unit)
-// Handles all sound generation: 4 PSG channels + 2 Direct Sound (FIFO) channels
+// GBA APU - Scheduler-driven audio with SDL_QueueAudio
+//
+// A recurring AUDIO_SAMPLE event fires every ~350 CPU cycles (48kHz).
+// The scheduler handles this naturally during both normal execution and HALT.
+// pushAudio() sends accumulated samples to SDL after each frame.
 class APU {
 public:
-    // Audio constants
-    static constexpr int SAMPLE_RATE = 32768;        // Output sample rate
-    static constexpr int BUFFER_SIZE = 2048;         // Samples per buffer
-    static constexpr int CPU_CLOCK = 16777216;       // GBA CPU clock rate
-    static constexpr int CYCLES_PER_SAMPLE = CPU_CLOCK / SAMPLE_RATE;  // ~512 cycles
-    
-    // FIFO buffer size (32 bytes = 32 samples of 8-bit audio)
-    static constexpr int FIFO_SIZE = 32;
-    
+    static constexpr int SAMPLE_RATE = 48000;     // Native macOS CoreAudio rate
+    static constexpr int BUFFER_SIZE = 1024;
+    static constexpr int CPU_CLOCK = 16777216;
+    // CPU_CLOCK / SAMPLE_RATE = 349.525... (not integer)
+    // Scheduler event uses Bresenham-style alternating interval (349/350)
+    static constexpr int FIFO_WORD_SIZE = 8;  // 8 uint32_t words, matching mGBA
+    static constexpr int MAX_SAMPLES_PER_FRAME = 900;  // ~804 at 48kHz/60fps
+    static constexpr int FRAME_SEQ_PERIOD = 32768;     // CPU_CLOCK / 512 Hz
+
+    // Scheduler sample interval: alternate 349 and 350 to average 349.525
+    static constexpr int SAMPLE_INTERVAL_BASE = CPU_CLOCK / SAMPLE_RATE; // 349
+    static constexpr int SAMPLE_INTERVAL_FRAC_NUM = CPU_CLOCK % SAMPLE_RATE; // remainder
+
 private:
     Memory* memory;
-    
-    // SDL Audio
+    DMAController* dmaController;
+    Scheduler* scheduler;
+
     SDL_AudioDeviceID audioDevice;
     bool audioEnabled;
-    
-    // Sample buffer for SDL callback
-    std::array<int16_t, BUFFER_SIZE * 2> sampleBuffer;  // Stereo
-    std::atomic<int> sampleBufferPos;
-    
-    // Cycle tracking
+
+    // Per-frame sample accumulation (stereo interleaved: L R L R ...)
+    std::vector<int16_t> frameSamples;
+
     uint64_t cycleCounter;
-    uint64_t lastSampleCycle;
-    
-    // ===== Sound Control Registers =====
-    // SOUNDCNT_L (0x04000080) - PSG Control
-    uint16_t soundcnt_l;  // PSG volume and enable
-    
-    // SOUNDCNT_H (0x04000082) - Direct Sound Control
-    uint16_t soundcnt_h;  // DMA sound control
-    
-    // SOUNDCNT_X (0x04000084) - Master Control
-    uint16_t soundcnt_x;  // Master enable and status
-    
-    // SOUNDBIAS (0x04000088) - PWM Control
+    int sampleFracAccum;           // Bresenham fractional accumulator for sample interval
+    float adjustedRate;            // Smoothed sample rate for queue-level PLL (near SAMPLE_RATE)
+
+    uint16_t soundcnt_l;
+    uint16_t soundcnt_h;
+    uint16_t soundcnt_x;
     uint16_t soundbias;
-    
-    // ===== Direct Sound FIFOs =====
+
+    // FIFO matching mGBA's GBAAudioFIFO exactly:
+    // - 8-entry circular buffer of uint32_t words
+    // - internalSample holds current word, consumed byte-by-byte (>>8)
+    // - internalRemaining counts bytes left in current word (4→0)
+    // - DMA refill when fewer than 4 words in FIFO (before consuming)
     struct FIFO {
-        std::array<int8_t, FIFO_SIZE> buffer;
-        int readPos;
-        int writePos;
-        int count;
-        int8_t currentSample;  // Latched sample for playback
-        
+        std::array<uint32_t, FIFO_WORD_SIZE> fifo;
+        int fifoWrite;
+        int fifoRead;
+        uint32_t internalSample;
+        int internalRemaining;
+        int8_t currentSample;  // last output byte (for mixer)
+
         void reset() {
-            buffer.fill(0);
-            readPos = 0;
-            writePos = 0;
-            count = 0;
+            fifo.fill(0);
+            fifoWrite = fifoRead = 0;
+            internalSample = 0;
+            internalRemaining = 0;
             currentSample = 0;
         }
-        
+
+        // DMA writes one uint32_t word to the FIFO
         void write(uint32_t data) {
-            // Write 4 bytes (32-bit write to FIFO)
-            for (int i = 0; i < 4 && count < FIFO_SIZE; i++) {
-                buffer[writePos] = static_cast<int8_t>((data >> (i * 8)) & 0xFF);
-                writePos = (writePos + 1) % FIFO_SIZE;
-                count++;
-            }
+            fifo[fifoWrite] = data;
+            fifoWrite = (fifoWrite + 1) % FIFO_WORD_SIZE;
         }
-        
-        int8_t read() {
-            if (count > 0) {
-                currentSample = buffer[readPos];
-                readPos = (readPos + 1) % FIFO_SIZE;
-                count--;
-            }
-            return currentSample;
+
+        // Get current FIFO size in words
+        int size() const {
+            if (fifoWrite >= fifoRead)
+                return fifoWrite - fifoRead;
+            else
+                return FIFO_WORD_SIZE - fifoRead + fifoWrite;
         }
-        
+
+        // Check if DMA refill is needed (matches mGBA: FIFO_SIZE - fifoSize > 4)
         bool needsRefill() const {
-            return count <= FIFO_SIZE / 2;  // Refill when half empty
+            return (FIFO_WORD_SIZE - size()) > 4;
+        }
+
+        // Consume one byte from internal buffer. Called on timer overflow.
+        // If internal buffer is empty, dequeue next word from FIFO.
+        void consume() {
+            int fifoSize = size();
+            if (!internalRemaining && fifoSize) {
+                internalSample = fifo[fifoRead];
+                internalRemaining = 4;
+                fifoRead = (fifoRead + 1) % FIFO_WORD_SIZE;
+            }
+            // Output the low byte of internalSample
+            currentSample = static_cast<int8_t>(internalSample & 0xFF);
+            // Shift to next byte
+            if (internalRemaining) {
+                internalSample >>= 8;
+                --internalRemaining;
+            }
         }
     };
-    
+
     FIFO fifoA;
     FIFO fifoB;
-    
-    // ===== PSG Channels (placeholder for Phase 3) =====
-    // Channel 1: Square with sweep
+
     struct Channel1 {
-        uint16_t cnt_l;  // Sweep (0x04000060)
-        uint16_t cnt_h;  // Duty/Envelope (0x04000062)
-        uint16_t cnt_x;  // Frequency (0x04000064)
-        bool enabled;
-        int volume;
-        int frequency;
-        int dutyPos;
-        int lengthCounter;
-        int envelopeCounter;
-        int sweepCounter;
+        uint16_t cnt_l = 0, cnt_h = 0, cnt_x = 0;
+        bool enabled = false;
+        int volume = 0, frequency = 0, dutyPos = 0;
+        int lengthCounter = 0, envelopeCounter = 0, sweepCounter = 0;
     } ch1;
-    
-    // Channel 2: Square
+
     struct Channel2 {
-        uint16_t cnt_l;  // Duty/Envelope (0x04000068)
-        uint16_t cnt_h;  // Frequency (0x0400006C)
-        bool enabled;
-        int volume;
-        int frequency;
-        int dutyPos;
-        int lengthCounter;
-        int envelopeCounter;
+        uint16_t cnt_l = 0, cnt_h = 0;
+        bool enabled = false;
+        int volume = 0, frequency = 0, dutyPos = 0;
+        int lengthCounter = 0, envelopeCounter = 0;
     } ch2;
-    
-    // Channel 3: Wave
+
     struct Channel3 {
-        uint16_t cnt_l;  // Control (0x04000070)
-        uint16_t cnt_h;  // Length/Volume (0x04000072)
-        uint16_t cnt_x;  // Frequency (0x04000074)
-        std::array<uint8_t, 16> waveRam;  // 32 x 4-bit samples
-        bool enabled;
-        int position;
-        int frequency;
-        int lengthCounter;
+        uint16_t cnt_l = 0, cnt_h = 0, cnt_x = 0;
+        std::array<uint8_t, 16> waveRam = {};
+        bool enabled = false;
+        int position = 0, frequency = 0, lengthCounter = 0;
     } ch3;
-    
-    // Channel 4: Noise
+
     struct Channel4 {
-        uint16_t cnt_l;  // Envelope (0x04000078)
-        uint16_t cnt_h;  // Frequency (0x0400007C)
-        bool enabled;
-        int volume;
-        uint16_t lfsr;  // Linear feedback shift register
-        int lengthCounter;
-        int envelopeCounter;
+        uint16_t cnt_l = 0, cnt_h = 0;
+        bool enabled = false;
+        int volume = 0;
+        uint16_t lfsr = 0x7FFF;
+        int lengthCounter = 0, envelopeCounter = 0;
     } ch4;
-    
-    // Frame sequencer for PSG timing (512 Hz)
+
     int frameSequencerStep;
     int frameSequencerCounter;
-    
-    // Internal methods
+
     void initSDLAudio();
-    void generateSamples(int16_t* buffer, int numSamples);
-    int16_t mixChannels();
-    
-    // PSG sample generation (Phase 3)
+    void mixChannels(int16_t& outLeft, int16_t& outRight);
+    void scheduleSampleEvent();   // Schedule next AUDIO_SAMPLE on scheduler
+    void onSampleEvent();         // Called by scheduler every ~350 cycles
     int16_t generatePSGSample();
     int16_t generateChannel1Sample();
     int16_t generateChannel2Sample();
     int16_t generateChannel3Sample();
     int16_t generateChannel4Sample();
-    
-    // SDL audio callback (static wrapper)
-    static void audioCallback(void* userdata, uint8_t* stream, int len);
-    
+
 public:
     APU();
     ~APU();
-    
-    // Initialize with memory reference
-    void init(Memory* mem);
-    
-    // Called every CPU cycle to track timing
-    void tick(int cycles);
-    
-    // Called when timer overflows (for FIFO playback)
+
+    void init(Memory* mem, DMAController* dma, Scheduler* sched);
+    void startSampling();           // Begin recurring sample events on scheduler
+    void pushAudio();
     void onTimerOverflow(int timerIndex);
-    
-    // Register read/write
+
     uint8_t read8(uint32_t address);
     uint16_t read16(uint32_t address);
     void write8(uint32_t address, uint8_t value);
     void write16(uint32_t address, uint16_t value);
     void write32(uint32_t address, uint32_t value);
-    
-    // FIFO writes (called from memory/DMA)
+
     void writeFIFO_A(uint32_t data);
     void writeFIFO_B(uint32_t data);
-    
-    // Control
+
+    bool fifoA_needsRefill() const { return fifoA.needsRefill(); }
+    bool fifoB_needsRefill() const { return fifoB.needsRefill(); }
+    int getFifoA_timer() const { return (soundcnt_h & 0x0400) ? 1 : 0; }
+    int getFifoB_timer() const { return (soundcnt_h & 0x4000) ? 1 : 0; }
+
+    uint32_t getQueuedBytes() const {
+        return audioDevice ? SDL_GetQueuedAudioSize(audioDevice) : 0;
+    }
+    uint32_t getQueuedSamples() const {
+        return getQueuedBytes() / (2 * sizeof(int16_t));
+    }
+    uint32_t getBufferLevel() const { return getQueuedSamples(); }
+
     void reset();
     void enable(bool enabled);
     bool isEnabled() const { return audioEnabled && (soundcnt_x & 0x80); }
-    
-    // Debug
     void dumpState() const;
+    uint64_t getCycleCounter() const { return cycleCounter; }
 };
 
-#endif // APU_H
+#endif
