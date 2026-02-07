@@ -125,80 +125,6 @@ void APU::pushAudio() {
     uint32_t queued = getQueuedSamples();
     int produced = (int)frameSamples.size() / 2;
 
-    // === DIAGNOSTIC: per-frame audio analysis ===
-    static int diagFrame = 0;
-    diagFrame++;
-    if (diagFrame <= 3600 && (diagFrame <= 10 || diagFrame % 20 == 0)) {
-        int nonZero = 0;
-        int maxZeroRun = 0, curZeroRun = 0;
-        int16_t minV = 0, maxV = 0;
-        int sz = (int)frameSamples.size();
-        for (int i = 0; i < sz; i += 2) {
-            int16_t s = frameSamples[i];
-            if (s != 0) { nonZero++; if (curZeroRun > maxZeroRun) maxZeroRun = curZeroRun; curZeroRun = 0; }
-            else { curZeroRun++; }
-            if (s < minV) minV = s;
-            if (s > maxV) maxV = s;
-        }
-        if (curZeroRun > maxZeroRun) maxZeroRun = curZeroRun;
-        fprintf(stderr, "[DIAG] f%d p=%d nz=%d zmax=%d min=%d max=%d | T0=%d | A(rd=%d cur=%d z=%d nz=%d clamp=%d) B(rd=%d cur=%d z=%d nz=%d clamp=%d) | q=%u vb_call=%u vb_req=%u vb_miss=%u vb_del=%u i1=%u\n",
-                diagFrame, produced, nonZero, maxZeroRun, minV, maxV,
-                g_timerOverflowCount[0],
-                g_fifoAReadCount, fifoA.currentSample, g_soundDmaZeroWordsA, g_soundDmaNonZeroWordsA, g_soundDmaClampCountA,
-                g_fifoBReadCount, fifoB.currentSample, g_soundDmaZeroWordsB, g_soundDmaNonZeroWordsB, g_soundDmaClampCountB,
-                queued, g_vblank_called, g_vblank_requested, g_vblank_ie_miss, g_vblank_delivered, g_irq_trigger_i1);
-
-    }
-    // === M4A state check during game phase ===
-    if (memory && diagFrame >= 148 && diagFrame <= 900) {
-        uint32_t siPtr = memory->read32(0x03007FF0);
-        if (siPtr >= 0x02000000 && siPtr < 0x04000000) {
-            uint32_t ident = memory->read32(siPtr);
-            uint8_t maxCh = memory->read8(siPtr + 6);
-
-            // Check channel status flags
-            int activeChCount = 0;
-            for (int ch = 0; ch < maxCh && ch < 12; ch++) {
-                uint32_t chAddr = siPtr + 0x50 + (ch * 0x40);
-                uint8_t statusFlags = memory->read8(chAddr);
-                if (statusFlags != 0) activeChCount++;
-            }
-            
-            // Check MusicPlayer state - read musicPlayerHead linked list
-            // MusicPlayerInfo struct: +0x00=songHeader, +0x04=status, +0x08=trackCount,...
-            uint32_t mpHead = memory->read32(siPtr + 0x24); // musicPlayerHead
-            
-            // Only log on active channels, ident change, or periodic
-            if (activeChCount > 0 || ident != 0x68736D53 || 
-                diagFrame <= 160 || (diagFrame % 100 == 0)) {
-                uint8_t dmaCounter = memory->read8(siPtr + 4);
-                uint8_t masterVol = memory->read8(siPtr + 7);
-                
-                // Read MusicPlayer info
-                uint32_t mpStatus = 0, mpSongHeader = 0;
-                if (mpHead >= 0x02000000 && mpHead < 0x04000000) {
-                    mpSongHeader = memory->read32(mpHead);
-                    mpStatus = memory->read32(mpHead + 4);
-                }
-                
-                fprintf(stderr, "[M4A] f%d ident=0x%08X dmaCnt=%d vol=%d activeCh=%d mpHead=0x%08X mpSong=0x%08X mpStat=0x%08X\n",
-                        diagFrame, ident, dmaCounter, masterVol, activeChCount, mpHead, mpSongHeader, mpStatus);
-                if (activeChCount > 0) {
-                    for (int ch = 0; ch < maxCh && ch < 12; ch++) {
-                        uint32_t chAddr = siPtr + 0x50 + (ch * 0x40);
-                        uint8_t statusFlags = memory->read8(chAddr);
-                        if (statusFlags != 0) {
-                            uint8_t type = memory->read8(chAddr + 1);
-                            uint8_t rightVol = memory->read8(chAddr + 2);
-                            uint8_t leftVol = memory->read8(chAddr + 3);
-                            fprintf(stderr, "  ch%d st=0x%02X type=%d rv=%d lv=%d\n",
-                                    ch, statusFlags, type, rightVol, leftVol);
-                        }
-                    }
-                }
-            }
-        }
-    }
     // Reset per-frame counters
     g_timerOverflowCount[0] = g_timerOverflowCount[1] = g_timerOverflowCount[2] = g_timerOverflowCount[3] = 0;
     g_fifoAReadCount = g_fifoBReadCount = 0;
@@ -206,7 +132,6 @@ void APU::pushAudio() {
     g_soundDmaZeroWordsA = g_soundDmaNonZeroWordsA = 0;
     g_soundDmaZeroWordsB = g_soundDmaNonZeroWordsB = 0;
     g_soundDmaClampCountA = g_soundDmaClampCountB = 0;
-    // === END DIAGNOSTIC ===
 
     // Push raw samples — no resampling, no interpolation.
     // Rate adjustment happens in tick() via adjustedRate, which smoothly

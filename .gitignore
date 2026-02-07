@@ -62,4 +62,19 @@ dkms.conf
 traces/*.log
 traces/*.log.gz
 traces/*_trace.txt
-!traces/README.mdtest_output.txt
+!traces/README.md
+test_output.txt
+
+# Diagnostic/debug output files
+diag_*.txt
+audio_*.txt
+timer_debug.txt
+timer_fix.txt
+stale_test.txt
+ie_trace.txt
+*.bak
+
+# Temporary analysis scripts
+analyze_bios_sound*.py
+decode_soundinfo.py
+Makefile.debug

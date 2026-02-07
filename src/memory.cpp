@@ -305,16 +305,7 @@ uint16_t Memory::read16(uint32_t address) const {
             if (isControl) {
                 return timerController->readControl(timerID);
             } else {
-                uint16_t cval = timerController->readCounter(timerID);
-                // Trace Timer0 counter reads during game phase
-                if (timerID == 0 && g_current_frame >= 140 && g_current_frame <= 160) {
-                    static int t0ReadLog = 0;
-                    if (t0ReadLog++ < 30) {
-                        fprintf(stderr, "[T0READ] f%u val=0x%04X (%u)\n",
-                                g_current_frame, cval, cval);
-                    }
-                }
-                return cval;
+                return timerController->readCounter(timerID);
             }
         }
     }
@@ -343,17 +334,6 @@ uint16_t Memory::read16(uint32_t address) const {
 void Memory::write16(uint32_t address, uint16_t value) {
     addWaitCycles(address, 16);
     
-    // PCM buffer write trap (16-bit)
-    if (address >= 0x02001750 && address < 0x020023B0 && g_current_frame >= 140 && g_current_frame <= 200) {
-        static int pcmWrite16Log = 0;
-        if (pcmWrite16Log < 20) {
-            const char* ch = (address < 0x02001D80) ? "RIGHT" : "LEFT";
-            fprintf(stderr, "[PCMWR16] f%u %s addr=0x%08X val=0x%04X\n",
-                    g_current_frame, ch, address, value);
-            pcmWrite16Log++;
-        }
-    }
-    
     // Log writes to BIOS work RAM for interrupt tracking
     if (address >= 0x03007F00 && address <= 0x03007FFC) {
         LOG_IRQ("[IRQ HANDLER] Write16 to 0x%08X: value=0x%04X (BIOS work area)\n", address, value);
@@ -364,15 +344,6 @@ void Memory::write16(uint32_t address, uint16_t value) {
         if (address >= 0x040000B0 && address <= 0x040000DE) {
             int channelID = (address - 0x040000B0) / 12;
             int regOffset = (address - 0x040000B0) % 12;
-            
-            // Debug: trace all DMA1/2 writes (throughout entire run)
-            if (channelID == 1 || channelID == 2) {
-                static int dma_debug_count = 0;
-                if (dma_debug_count++ < 100) {
-                    fprintf(stderr, "[DMA%d] write16 frame=%u reg=%d val=0x%04X\n", 
-                            channelID, g_current_frame, regOffset, value);
-                }
-            }
             
             // Handle 16-bit writes to source/dest addresses (low and high halves)
             if (regOffset == 0) {  // Source address low (DMAxSAD_L)
@@ -814,21 +785,6 @@ uint32_t Memory::read32(uint32_t address) const {
 // Note: This is standard ARM7TDMI behavior, not a GBA-specific quirk.
 void Memory::write32(uint32_t address, uint32_t value) {
     addWaitCycles(address, 32);
-    
-    // PCM buffer write trap: detect ANY writes to the M4A PCM buffer region
-    // Right channel: 0x02001750-0x02001D7F, Left channel: 0x02001D80-0x020023AF
-    if (address >= 0x02001750 && address < 0x020023B0 && g_current_frame >= 140 && g_current_frame <= 200) {
-        static int pcmWriteLog = 0;
-        if (pcmWriteLog < 30) {
-            const char* ch = (address < 0x02001D80) ? "RIGHT" : "LEFT";
-            uint32_t offset = (address < 0x02001D80) ? address - 0x02001750 : address - 0x02001D80;
-            fprintf(stderr, "[PCMWR32] f%u %s off=0x%03X addr=0x%08X val=0x%08X (bytes: %d %d %d %d)\n",
-                    g_current_frame, ch, offset, address, value,
-                    (int)(int8_t)(value & 0xFF), (int)(int8_t)((value >> 8) & 0xFF),
-                    (int)(int8_t)((value >> 16) & 0xFF), (int)(int8_t)((value >> 24) & 0xFF));
-            pcmWriteLog++;
-        }
-    }
     
     // Handle DMA register writes (source and dest addresses)
     if (dmaController) {

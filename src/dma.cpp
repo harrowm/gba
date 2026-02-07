@@ -101,15 +101,6 @@ void DMAController::writeSourceAddress(int channelId, uint32_t value) {
     uint32_t oldIntSrc = channels[channelId].internalSource;
     channels[channelId].setSourceAddress(maskedValue);
     
-    // Log sound DMA source reprogramming
-    if ((channelId == 1 || channelId == 2) && maskedValue != oldValue && g_current_frame >= 140) {
-        static int srcLog = 0;
-        if (srcLog++ < 40) {
-            fprintf(stderr, "[DMA%d-SRC] frame=%u old=0x%08X new=0x%08X (intSrc was 0x%08X)\n",
-                    channelId, g_current_frame, oldValue, maskedValue, oldIntSrc);
-        }
-    }
-    
     // IMPORTANT: On real GBA hardware, writing to DMAxSAD always updates the internal
     // source register, regardless of whether DMA is enabled or what mode it's in.
     // This is critical for sound DMA where games reconfigure the buffer address.
@@ -151,29 +142,9 @@ void DMAController::writeControl(int channelId, uint16_t value) {
     channels[channelId].setControl(value);
     bool isEnabled = channels[channelId].isEnabled();
     
-    // Log sound DMA control transitions
-    if ((channelId == 1 || channelId == 2) && g_current_frame >= 140 && g_current_frame <= 200) {
-        if (wasEnabled != isEnabled) {
-            fprintf(stderr, "[DMA%d-CTRL] f%u %s→%s ctrl=0x%04X regSrc=0x%08X intSrc=0x%08X\n",
-                    channelId, g_current_frame,
-                    wasEnabled ? "EN" : "DIS", isEnabled ? "EN" : "DIS",
-                    value, channels[channelId].getSourceAddress(),
-                    channels[channelId].internalSource);
-        }
-    }
-    
     // If DMA just got enabled, start the transfer
     if (!wasEnabled && isEnabled) {
         startTransfer(channelId);
-        // Log the reload for sound DMA
-        if ((channelId == 1 || channelId == 2) && g_current_frame >= 140 && g_current_frame <= 200) {
-            fprintf(stderr, "[DMA%d-RELOAD] f%u intSrc=0x%08X intDst=0x%08X intCnt=%u mode=%d\n",
-                    channelId, g_current_frame,
-                    channels[channelId].internalSource,
-                    channels[channelId].internalDest,
-                    channels[channelId].internalCount,
-                    (int)channels[channelId].getTimingMode());
-        }
     }
     
     // If DMA got disabled, stop any active transfer
@@ -245,13 +216,58 @@ void DMAController::performTransfer(int channelId) {
     
     // For sound FIFO DMA: clamp reads to prevent buffer overrun.
     // M4A's PCM DMA buffers are sized as pcmDmaPeriod * samplesPerVBlank (typically 0x630).
-    // Due to occasionally missed VBlank IRQs, the DMA source can advance past the
-    // end of the PCM buffer into M4A internal structures, producing garbage (the "chug").
-    // Safety clamp: if source has advanced more than 0x800 past the reload address,
-    // substitute zero. This is generous enough to never clamp valid audio (buffer is 0x630)
-    // but catches severe overruns that read ROM pointers as audio data.
+    // Due to timer overflows occurring between VBlank start and the M4A VBlank handler
+    // running, 1-2 extra DMA reads can advance past the end of the PCM buffer into
+    // M4A internal structures (channel data, ROM pointers), producing loud clicks.
+    //
+    // We dynamically detect the buffer size from the M4A SoundInfo struct at 0x03007FF0:
+    //   +0x0B: pcmDmaPeriod (typically 7-9)
+    //   +0x10: pcmSamplesPerVBlank (typically 176)
+    //   bufferSize = pcmDmaPeriod * pcmSamplesPerVBlank
+    //
+    // If we can't read the struct, fall back to a conservative 0x800 limit.
     uint32_t soundDmaBase = channel.getSourceAddress();  // registered (reload) source
-    static constexpr uint32_t SOUND_BUFFER_LIMIT = 0x800; // Safety net: 2KB
+    uint32_t soundBufferLimit = 0x800;  // conservative fallback
+
+    // Try to detect M4A buffer size dynamically
+    if (isSoundDMA && memory) {
+        static uint32_t cachedBufferLimit = 0;
+        static uint32_t cachedCheckFrame = 0;
+        
+        // Re-check every ~60 frames (1 second) in case M4A reinitializes
+        if (cachedBufferLimit == 0 || (g_current_frame - cachedCheckFrame) > 60) {
+            cachedCheckFrame = g_current_frame;
+            // Use setWaitCyclesBypass to avoid adding scheduler cycles during detection.
+            // These are purely diagnostic reads that should not affect emulation timing.
+            memory->setWaitCyclesBypass(true);
+            uint32_t siPtr = memory->read32(0x03007FF0);
+            if (siPtr >= 0x02000000 && siPtr < 0x04000000) {
+                uint32_t ident = memory->read32(siPtr);
+                // M4A ident is "Smsh" (0x68736D53) or sometimes off by 1 in the counter byte
+                if ((ident & 0xFFFFFF00) == 0x68736D00) {
+                    uint8_t pcmDmaPeriod = memory->read8(siPtr + 0x0B);
+                    int32_t pcmSamplesPerVBlank = memory->read32(siPtr + 0x10);
+                    
+                    if (pcmDmaPeriod >= 3 && pcmDmaPeriod <= 12 &&
+                        pcmSamplesPerVBlank >= 96 && pcmSamplesPerVBlank <= 400) {
+                        uint32_t newLimit = (uint32_t)(pcmDmaPeriod * pcmSamplesPerVBlank);
+                        // Align up to 16 bytes (DMA transfer granularity)
+                        newLimit = (newLimit + 15) & ~15u;
+                        if (newLimit != cachedBufferLimit) {
+                            fprintf(stderr, "[DMA-CLAMP] Detected M4A buffer: period=%d spv=%d limit=0x%X (was 0x%X) frame=%u\n",
+                                    pcmDmaPeriod, pcmSamplesPerVBlank, newLimit,
+                                    cachedBufferLimit, g_current_frame);
+                        }
+                        cachedBufferLimit = newLimit;
+                    }
+                }
+            }
+            memory->setWaitCyclesBypass(false);
+        }
+        if (cachedBufferLimit != 0) {
+            soundBufferLimit = cachedBufferLimit;
+        }
+    }
 
     LOG_DMA("[DMA%d] STARTING TRANSFER: src=0x%08X dst=0x%08X count=%d size=%s\n",
            channelId, srcAddr, destAddr, count, is32bit ? "32bit" : "16bit");
@@ -268,7 +284,7 @@ void DMAController::performTransfer(int channelId) {
         
         // Sound DMA buffer overrun safety clamp
         bool soundClamped = false;
-        if (isSoundDMA && srcAddr >= soundDmaBase + SOUND_BUFFER_LIMIT) {
+        if (isSoundDMA && srcAddr >= soundDmaBase + soundBufferLimit) {
             value = 0;
             soundClamped = true;
         } else if (is32bit) {
@@ -290,43 +306,18 @@ void DMAController::performTransfer(int channelId) {
         
         // Track sound DMA data content
         if (isSoundDMA) {
+            if (soundClamped) {
+                if (destAddr == 0x040000A0) g_soundDmaClampCountA++;
+                else g_soundDmaClampCountB++;
+            }
             if (destAddr == 0x040000A0) {
                 if (i == 0) g_soundDmaFirstWordA = value;
                 if (value == 0) g_soundDmaZeroWordsA++;
-                else {
-                    g_soundDmaNonZeroWordsA++;
-                    // Log non-zero sound DMA words ONLY after BIOS boot (frame 135+)
-                    if (g_current_frame > 135) {
-                        static int nzLogCount = 0;
-                        if (nzLogCount++ < 50) {
-                            fprintf(stderr, "[SNDMA] FIFO_A non-zero! src=0x%08X word[%d]=0x%08X (bytes: %d %d %d %d) frame=%u\n",
-                                    srcAddr, i, value,
-                                    (int)(int8_t)(value & 0xFF),
-                                    (int)(int8_t)((value >> 8) & 0xFF),
-                                    (int)(int8_t)((value >> 16) & 0xFF),
-                                    (int)(int8_t)((value >> 24) & 0xFF),
-                                    g_current_frame);
-                        }
-                    }
-                }
+                else g_soundDmaNonZeroWordsA++;
             } else {
                 if (i == 0) g_soundDmaFirstWordB = value;
                 if (value == 0) g_soundDmaZeroWordsB++;
-                else {
-                    g_soundDmaNonZeroWordsB++;
-                    if (g_current_frame > 135) {
-                        static int nzLogCountB = 0;
-                        if (nzLogCountB++ < 50) {
-                            fprintf(stderr, "[SNDMA] FIFO_B non-zero! src=0x%08X word[%d]=0x%08X (bytes: %d %d %d %d) frame=%u\n",
-                                    srcAddr, i, value,
-                                    (int)(int8_t)(value & 0xFF),
-                                    (int)(int8_t)((value >> 8) & 0xFF),
-                                    (int)(int8_t)((value >> 16) & 0xFF),
-                                    (int)(int8_t)((value >> 24) & 0xFF),
-                                    g_current_frame);
-                        }
-                    }
-                }
+                else g_soundDmaNonZeroWordsB++;
             }
         }
         

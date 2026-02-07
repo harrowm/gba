@@ -1270,20 +1270,6 @@ void ThumbCPU::thumb_pop_registers(uint16_t instruction) {
         if (register_list & (1 << i)) {
             uint32_t sp = parentCPU.R()[13];
             uint32_t val = parentCPU.getMemory().read32(sp);
-            
-            // PHASE 4: Detect corrupt values being popped (0xA0xxxxxx range - FATAL crash values)
-            if ((val & 0xFF000000) == 0xA0000000) {
-                fprintf(stderr, "[FATAL POP] PC=0x%08X: Popping R%d from SP=0x%08X, val=0x%08X\n",
-                        parentCPU.R()[15] - 2, i, sp, val);
-                // Also dump what's at nearby stack locations
-                fprintf(stderr, "  Stack dump: [SP-8]=0x%08X [SP-4]=0x%08X [SP]=0x%08X [SP+4]=0x%08X [SP+8]=0x%08X\n",
-                        parentCPU.getMemory().read32(sp - 8),
-                        parentCPU.getMemory().read32(sp - 4),
-                        val,
-                        parentCPU.getMemory().read32(sp + 4),
-                        parentCPU.getMemory().read32(sp + 8));
-            }
-            
             parentCPU.R()[i] = val;
             DEBUG_INFO("Popping R" + std::to_string(i) + " from stack: R" + std::to_string(i) + " = [0x" + std::to_string(parentCPU.R()[13]) + "]");
             parentCPU.R()[13] += 4; // Increment SP by 4

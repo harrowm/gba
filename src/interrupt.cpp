@@ -63,11 +63,6 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
         scheduleIRQCheck();
     } else if (irqFlag & 1) {
         g_vblank_ie_miss++;
-        static int miss_log = 0;
-        if (miss_log++ < 20) {
-            fprintf(stderr, "[VBLANK MISS] IE=0x%04X IF=0x%04X IME=0x%04X ieIF=0x%04X cycle=%llu\n",
-                    ieVal, currentIF, imeVal, ieIF, scheduler ? scheduler->getCurrentCycle() : 0);
-        }
     }
 }
 

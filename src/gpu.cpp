@@ -89,19 +89,11 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
                 dispstat |= DISPSTAT_VBLANK;
                 memory.writeDirectIO(REG_DISPSTAT, dispstat);
                 
-                static int vblank_count = 0;
-                vblank_count++;
-                if (vblank_count <= 5 || (g_current_frame <= 100 && g_current_frame % 10 == 0)) {
-                    fprintf(stderr, "[GPU] VBlank #%d at frame %u: scanlines_this_frame=%u cycle=%llu\n",
-                            vblank_count, g_current_frame, g_gpu_scanlines_this_frame,
-                            (unsigned long long)scheduler->getCurrentCycle());
-                }
                 g_gpu_scanlines_this_frame = 0;
                 
                 // Always call vblankCallback for DMA triggering
                 // The interrupt controller internally checks if VBlank IRQ is enabled
                 if (vblankCallback) {
-                    LOG_TRACE_CAT("[GPU] Calling vblankCallback() #%d\n", vblank_count);
                     vblankCallback();
                 }
             } else if (currentScanline == 0) {
