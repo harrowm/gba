@@ -145,9 +145,12 @@ Memory::Memory(bool testMode) {
         for (uint32_t addr = 0x08000000; addr < 0x0A000000; addr += BLOCK_SIZE)
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = rom + (addr - 0x08000000);
 
-        // --- Game Pak SRAM: 64KB at 0x0E000000 ---
+        // --- Game Pak SRAM: 64KB at 0x0E000000, mirrored throughout 0x0E-0x0F ---
+        // SRAM has an 8-bit bus; read16/read32 handle byte replication
         sram = (uint8_t*)std::malloc(64 * 1024);
-        regionTable[0x0E000000 / BLOCK_SIZE] = sram;
+        memset(sram, 0, 64 * 1024);
+        for (uint32_t addr = 0x0E000000; addr < 0x10000000; addr += BLOCK_SIZE)
+            regionTable[addr / BLOCK_SIZE] = sram;
 
         // Test RAM not used in normal mode
         test_ram = nullptr;
@@ -369,6 +372,17 @@ uint16_t Memory::read16(uint32_t address) const {
                 return timerController->readCounter(timerID);
             }
         }
+    }
+    
+    // SRAM (0x0E-0x0F) has 8-bit bus: reads return single byte duplicated.
+    // Check BEFORE force-alignment so CPU LDRH from unaligned SRAM address
+    // reads the byte at the exact address (DMA provides pre-aligned addresses).
+    if ((address >> 24) >= 0x0E) {
+        uint32_t sramOffset;
+        uint8_t* sramBase = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, sramOffset);
+        if (!sramBase) return 0xFFFF;
+        uint8_t byte = sramBase[sramOffset];
+        return byte | ((uint16_t)byte << 8);
     }
     
     // GBA LDRH/STRH force-align: bit 0 of address is ignored by the bus
@@ -766,6 +780,17 @@ uint32_t Memory::read32(uint32_t address) const {
                 return dmaController->readDestAddress(channelID);
             }
         }
+    }
+    
+    // SRAM (0x0E-0x0F) has 8-bit bus: reads return single byte replicated to 32 bits.
+    // Check BEFORE force-alignment so CPU LDR from unaligned SRAM address
+    // reads the byte at the exact address (DMA provides pre-aligned addresses).
+    if ((address >> 24) >= 0x0E) {
+        uint32_t sramOffset;
+        uint8_t* sramBase = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, sramOffset);
+        if (!sramBase) return 0xFFFFFFFF;
+        uint8_t byte = sramBase[sramOffset];
+        return byte * 0x01010101u;
     }
     
     // ARM7TDMI bus: force-align to word boundary, return aligned word.

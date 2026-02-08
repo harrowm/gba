@@ -202,6 +202,16 @@ void DMAController::performTransfer(int channelId) {
     uint16_t count = channel.internalCount;
     bool is32bit = channel.is32Bit();
     
+    // GBA DMA hardware aligns addresses to the transfer unit size.
+    // Bit 0 forced to 0 for 16-bit transfers; bits 0-1 forced to 0 for 32-bit.
+    if (is32bit) {
+        srcAddr &= ~3u;
+        destAddr &= ~3u;
+    } else {
+        srcAddr &= ~1u;
+        destAddr &= ~1u;
+    }
+    
     // Debug sound DMA data - only log non-zero transfers
     bool isSoundDMA = (channelId == 1 || channelId == 2) && 
                       (destAddr == 0x040000A0 || destAddr == 0x040000A4);
@@ -269,21 +279,21 @@ void DMAController::performTransfer(int channelId) {
         // Read from source
         uint32_t value;
         
-        // Check if source address is DMA-readable.
-        // On real GBA hardware, DMA cannot read from BIOS (region 0x00) or
-        // unmapped memory (region 0x01). Reads from these regions return the
-        // DMA open bus latch (the last value successfully transferred by DMA).
-        // Additionally, DMA0 can only source from internal memory (0x00-0x07);
-        // Game Pak ROM/SRAM (0x08-0x0E) is only accessible to DMA1-3.
-        uint32_t srcRegion = srcAddr >> 24;
-        bool srcReadable;
+        // DMA source address masking per GBATEK:
+        //   DMA0: 27-bit source (internal memory only, 0x00000000-0x07FFFFFF)
+        //   DMA1-3: 28-bit source (any memory, 0x00000000-0x0FFFFFFF)
+        // Addresses beyond the mask wrap into lower memory.
+        uint32_t effectiveSrc = srcAddr;
         if (channelId == 0) {
-            // DMA0: source must be internal memory (0x02-0x07)
-            srcReadable = (srcRegion >= 0x02 && srcRegion <= 0x07);
+            effectiveSrc = srcAddr & 0x07FFFFFF;  // 27-bit mask
         } else {
-            // DMA1-3: source can be any valid memory (0x02-0x0E)
-            srcReadable = (srcRegion >= 0x02 && srcRegion <= 0x0E);
+            effectiveSrc = srcAddr & 0x0FFFFFFF;  // 28-bit mask
         }
+        
+        // Check if effective source address is DMA-readable.
+        // Regions 0x00 (BIOS) and 0x01 (unmapped) return the DMA open bus latch.
+        uint32_t srcRegion = effectiveSrc >> 24;
+        bool srcReadable = (srcRegion >= 0x02 && srcRegion <= 0x0F);
         
         // Sound DMA buffer overrun safety clamp
         if (isSoundDMA && srcAddr >= soundDmaBase + soundBufferLimit) {
@@ -294,13 +304,13 @@ void DMAController::performTransfer(int channelId) {
                 value = dmaOpenBus;
             } else {
                 // For 16-bit, return the appropriate halfword based on address bit 1
-                value = (srcAddr & 2) ? ((dmaOpenBus >> 16) & 0xFFFF) : (dmaOpenBus & 0xFFFF);
+                value = (effectiveSrc & 2) ? ((dmaOpenBus >> 16) & 0xFFFF) : (dmaOpenBus & 0xFFFF);
             }
         } else if (is32bit) {
-            value = memory->read32(srcAddr);
+            value = memory->read32(effectiveSrc);
             dmaOpenBus = value;
         } else {
-            value = memory->read16(srcAddr);
+            value = memory->read16(effectiveSrc);
             // Update open bus latch: 16-bit value occupies one halfword of the 32-bit bus
             dmaOpenBus = value | (value << 16);
         }
