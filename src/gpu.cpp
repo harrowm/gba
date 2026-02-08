@@ -392,7 +392,7 @@ uint16_t GPU::readBGPaletteRaw(int paletteNum, int colorIndex) {
         }
     } else {
         // 8bpp mode access (colorIndex 0-255, paletteNum should be 0)
-        if (colorIndex < 0 || colorIndex >= 256) {
+        if (colorIndex >= 256) {
             return 0;
         }
         offset = colorIndex * 2;
@@ -414,7 +414,7 @@ uint16_t GPU::readOBJPaletteRaw(int paletteNum, int colorIndex) {
     uint32_t offset;
     if (colorIndex >= 16) {
         // 8bpp mode: direct 256-color palette
-        if (colorIndex < 0 || colorIndex >= 256) {
+        if (colorIndex >= 256) {
             return 0;
         }
         offset = 0x200 + (colorIndex * 2);
