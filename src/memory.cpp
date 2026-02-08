@@ -119,12 +119,18 @@ Memory::Memory(bool testMode) {
         for (uint32_t addr = 0x05000000; addr < 0x06000000; addr += BLOCK_SIZE)
             regionTable[addr / BLOCK_SIZE] = palette;
 
-        // --- VRAM: 96KB at 0x06000000, mirrored in 128KB ---
+        // --- VRAM: 96KB at 0x06000000, mirrored in 128KB period throughout 0x06000000-0x06FFFFFF ---
+        // 128KB period: first 64KB = BG VRAM, second 64KB = OBJ VRAM (32KB real + 32KB mirror)
+        // get_region_base handles the 32KB fold-back within each OBJ block
         vram = (uint8_t*)std::malloc(96 * 1024);
-        // Map first 64KB block (0x06000000-0x0600FFFF)
-        regionTable[0x06000000 / BLOCK_SIZE] = vram;
-        // Map second 64KB block (0x06010000-0x0601FFFF) - only first 32KB is real VRAM
-        regionTable[0x06010000 / BLOCK_SIZE] = vram + 64 * 1024;  // Points to second half of VRAM
+        memset(vram, 0, 96 * 1024);
+        for (uint32_t addr = 0x06000000; addr < 0x07000000; addr += BLOCK_SIZE) {
+            uint32_t periodOffset = (addr - 0x06000000) % 0x20000; // 128KB period
+            if (periodOffset < 0x10000)
+                regionTable[addr / BLOCK_SIZE] = vram;              // BG VRAM block
+            else
+                regionTable[addr / BLOCK_SIZE] = vram + 0x10000;    // OBJ VRAM block
+        }
 
         // --- OAM: 1KB at 0x07000000, mirrored throughout 0x07000000-0x07FFFFFF ---
         // Allocate full block to prevent overflow (get_region_base handles 1KB mirroring)
@@ -187,8 +193,14 @@ inline uint8_t* get_region_base(uint8_t* const* regionTable, uint32_t address, u
             LOG_CRASH("[IWRAM OOB] addr=0x%08X offset=0x%X (max 0x7FFF)\n", address, offset);
         }
     }
-    // VRAM mirroring is handled by the base pointer mapping in the regionTable
-    // Don't remap offset here - it causes out-of-bounds access
+    // VRAM OBJ 32KB mirroring: within each OBJ block (second 64KB of 128KB period),
+    // offsets 0x8000-0xFFFF fold back to 0x0000-0x7FFF (32KB real OBJ VRAM)
+    if (address >= 0x06000000 && address < 0x07000000 && base) {
+        uint32_t vramPeriodOffset = (address - 0x06000000) % 0x20000;
+        if (vramPeriodOffset >= 0x10000) {
+            offset = offset & 0x7FFF; // Fold to 32KB OBJ area
+        }
+    }
     // Palette RAM mirroring: 1KB at 0x05000000, mirrored across entire 0x05 range
     if (address >= 0x05000000 && address < 0x06000000 && base) {
         offset = (address - 0x05000000) & 0x3FF; // 1KB mirror
