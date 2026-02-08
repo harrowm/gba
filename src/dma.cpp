@@ -77,15 +77,21 @@ uint16_t DMAController::readControl(int channelId) const {
 void DMAController::writeSourceAddress(int channelId, uint32_t value) {
     if (channelId < 0 || channelId >= 4) return;
     
-    // Mask based on channel (different channels have different address ranges)
-    const uint32_t masks[4] = {
-        0x07FFFFFF,  // DMA0: max 128MB
-        0x0FFFFFFF,  // DMA1: max 256MB
-        0x0FFFFFFF,  // DMA2: max 256MB
-        0x0FFFFFFF   // DMA3: max 256MB
-    };
+    // All channels use a 28-bit mask (halfword-aligned), matching mGBA's 0x0FFFFFFE.
+    // The bus width limitation for DMA0 is enforced at transfer time, not at address
+    // write time.  Storing the full (masked) address lets the transfer loop detect
+    // when DMA0 tries to read SRAM (0x0E) — which its narrower internal bus cannot
+    // reach — and correctly return 0 instead of wrapping into VRAM.
+    //
+    // DMA0 cannot source from Game Pak ROM (0x08-0x0D): if the address falls in that
+    // range the stored source is forced to 0, matching mGBA's _isValidDMASAD().
+    uint32_t maskedValue = value & 0x0FFFFFFE;
     
-    uint32_t maskedValue = value & masks[channelId];
+    if (channelId == 0 && maskedValue >= 0x08000000 && maskedValue < 0x0E000000) {
+        // DMA0 source bus cannot reach ROM region — force to 0
+        maskedValue = 0;
+    }
+    
     channels[channelId].setSourceAddress(maskedValue);
     
     // IMPORTANT: On real GBA hardware, writing to DMAxSAD always updates the internal
@@ -279,27 +285,34 @@ void DMAController::performTransfer(int channelId) {
         // Read from source
         uint32_t value;
         
-        // DMA source address masking per GBATEK:
-        //   DMA0: 27-bit source (internal memory only, 0x00000000-0x07FFFFFF)
-        //   DMA1-3: 28-bit source (any memory, 0x00000000-0x0FFFFFFF)
-        // Addresses beyond the mask wrap into lower memory.
-        uint32_t effectiveSrc = srcAddr;
-        if (channelId == 0) {
-            effectiveSrc = srcAddr & 0x07FFFFFF;  // 27-bit mask
-        } else {
-            effectiveSrc = srcAddr & 0x0FFFFFFF;  // 28-bit mask
-        }
+        // Source address is already stored with a 28-bit mask (0x0FFFFFFE) for all
+        // channels.  No additional per-channel masking is needed here — the bus
+        // width limitation for DMA0 is handled by blocking inaccessible regions.
+        uint32_t effectiveSrc = srcAddr & 0x0FFFFFFE;
         
         // Check if effective source address is DMA-readable.
         // Regions 0x00 (BIOS) and 0x01 (unmapped) return the DMA open bus latch.
         uint32_t srcRegion = effectiveSrc >> 24;
         bool srcReadable = (srcRegion >= 0x02 && srcRegion <= 0x0F);
         
+        // DMA0 cannot read from SRAM (0x0E-0x0F): its internal bus is too narrow
+        // to reach the cart SRAM.  On real hardware the read returns 0.
+        // This matches mGBA's "performingDMA == 1" check in GBALoad8.
+        bool dma0SramBlock = (channelId == 0 && srcRegion >= 0x0E);
+        
         // Sound DMA buffer overrun safety clamp
         if (isSoundDMA && srcAddr >= soundDmaBase + soundBufferLimit) {
             value = 0;
+        } else if (dma0SramBlock) {
+            // DMA0 SRAM: the read physically returns 0 (bus can't reach SRAM).
+            // The DMA transfer register is updated to 0, matching mGBA behavior
+            // where GBALoad8 returns 0 and LOAD_SRAM replicates it to 32 bits.
+            value = 0;
+            dmaOpenBus = 0;
         } else if (!srcReadable) {
-            // Open bus: return the DMA latch value
+            // Open bus / inaccessible region: return the DMA latch value.
+            // For DMA0 SRAM reads the latch is not updated, so the previous
+            // latch value (often 0 after DMA state clearing) is written.
             if (is32bit) {
                 value = dmaOpenBus;
             } else {

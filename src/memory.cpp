@@ -490,6 +490,19 @@ void Memory::write16(uint32_t address, uint16_t value) {
         }
     }
     
+    // SRAM has 8-bit bus: STRH writes only the LSB to the exact byte address
+    // (no force-alignment, no second byte). This matches real GBA hardware where
+    // only STRB truly works for SRAM, but STRH/STR write via the 8-bit bus.
+    uint32_t sramRegion = address >> 24;
+    if (sramRegion >= 0x0E) {
+        uint32_t sramOffset;
+        uint8_t* sramBase = get_region_base(this->regionTable, address, sramOffset);
+        if (sramBase) {
+            sramBase[sramOffset] = value & 0xFF;
+        }
+        return;
+    }
+    
     // GBA LDRH/STRH force-align: bit 0 of address is ignored by the bus
     address &= ~1u;
     
@@ -921,6 +934,17 @@ void Memory::write32(uint32_t address, uint32_t value) {
             apu->write32(address, value);
             // Also write to memory for debug reads
         }
+    }
+    
+    // SRAM has 8-bit bus: STR writes only the LSB to the exact byte address
+    // (no force-alignment, no multi-byte write). Same as STRH — only one byte goes through.
+    if (region >= 0x0E) {
+        uint32_t sramOffset;
+        uint8_t* sramBase = get_region_base(this->regionTable, address, sramOffset);
+        if (sramBase) {
+            sramBase[sramOffset] = value & 0xFF;
+        }
+        return;
     }
     
     // ARM7TDMI Word Store (STR):
