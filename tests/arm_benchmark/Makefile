@@ -23,9 +23,7 @@ CPP_SRCS = arm_benchmark.cpp \
 	../../src/gpu.cpp
 
 C_SRCS = ../../src/arm_timing.c \
-	../../src/thumb_timing.c \
-	../../src/timer.c \
-	../../src/timing.c
+	../../src/thumb_timing.c
 
 
 BUILD_DIR = build

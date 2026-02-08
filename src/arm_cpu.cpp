@@ -4,7 +4,6 @@
 #include <capstone/capstone.h>
 #include "arm_cpu.h"
 #include "debug.h"
-#include "timing.h"
 #include "arm_timing.h"
 #include "scheduler.h"
 
@@ -105,55 +104,6 @@ void ARMCPU::execute(uint32_t cycles) {
         
         DEBUG_INFO("PC now: 0x" + debug_to_hex_string(parentCPU.R()[15], 8));
         cycles -= 1; // Placeholder for cycle deduction
-    }
-}
-
-// New timing-aware execution method
-void ARMCPU::executeWithTiming(uint32_t cycles, TimingState* timing) {
-    // Use macro-based debug system
-    
-    while (cycles > 0) {
-        exception_taken = false;
-        // Check if we're still in ARM mode - if not, break out early
-        if (parentCPU.getFlag(CPU::FLAG_T)) {
-            DEBUG_INFO("Mode switched to Thumb during timing execution, breaking out of ARM execution");
-            break;
-        }
-        
-        // Calculate cycles until next timing event
-        uint32_t cycles_until_event = timing_cycles_until_next_event(timing);
-        
-        // Fetch next instruction to determine its cycle cost
-        uint32_t pc = parentCPU.R()[15];
-        
-        // Fetch without charging wait cycles (pipelined)
-        uint32_t instruction = parentCPU.getMemory().readDirectIO32(pc);
-        
-        uint32_t instruction_cycles = calculateInstructionCycles(instruction);
-        
-        // Use debug macros for detailed instruction logging
-        DEBUG_INFO("Next ARM instruction: 0x" + debug_to_hex_string(instruction, 8) 
-                  + " at PC: 0x" + debug_to_hex_string(pc, 8)
-                  + " will take " + std::to_string(instruction_cycles) + " cycles");
-        DEBUG_INFO("Cycles until next event: " + std::to_string(cycles_until_event)); 
-        
-        // Check if instruction will complete before next timing event
-        if (instruction_cycles <= cycles_until_event) {
-            // Execute instruction normally with cache
-            executeInstruction(pc, instruction);
-        
-            // Update timing
-            timing_advance(timing, instruction_cycles);
-            cycles -= instruction_cycles;
-            
-        } else {
-            // Process timing event first, then continue
-            DEBUG_INFO("Processing timing event before executing instruction");
-            timing_advance(timing, cycles_until_event);
-            timing_process_timer_events(timing);
-            timing_process_video_events(timing);
-            cycles -= cycles_until_event;
-        }
     }
 }
 
@@ -490,11 +440,33 @@ void ARMCPU::executeOneInstruction() {
     // }
     
     // Execute the instruction
+    // Bracket with begin/endInstructionCycles so data access wait cycles
+    // accumulate in pendingDataCycles rather than advancing the scheduler
+    // mid-instruction. This matches mGBA's local currentCycles model:
+    // timer enable/read during execution see instruction-boundary cycle values.
+    mem.beginInstructionCycles();
     executeInstruction(pc, instruction);
+    uint32_t dataCycles = mem.endInstructionCycles();
     
-    // Advance scheduler by instruction execution cycles
-    // Note: Memory access cycles are already handled by memory.cpp addWaitCycles()
-    // This adds the CPU execution cycles on top of memory wait states
-    parentCPU.advanceCycles(instruction_cycles);
-}
-
+    // Advance scheduler by instruction execution cycles + fetch waits
+    // + accumulated data access cycles from read/write operations.
+    //
+    // After data transfers (LDR/STR/LDM/STM/SWP) and multiplies, the next
+    // instruction fetch is non-sequential because the data bus was used,
+    // disrupting the prefetch pipeline. For all other instructions, the
+    // fetch is sequential. This matches mGBA's POST_BODY macros:
+    //   ARM_LOAD_POST_BODY:  += activeNonseqCycles32 - activeSeqCycles32
+    //   ARM_STORE_POST_BODY: += activeNonseqCycles32 - activeSeqCycles32
+    uint32_t bits27_26 = (instruction >> 26) & 0x3;
+    uint32_t bits27_25 = (instruction >> 25) & 0x7;
+    bool isDataTransfer = (bits27_26 == 0x01)                     // LDR/STR/LDRB/STRB
+                       || (bits27_25 == 0x4)                       // LDM/STM
+                       || ((bits27_25 <= 0x1) &&                   // Halfword/signed xfer
+                           (instruction & 0x00000090) == 0x00000090 &&
+                           (instruction & 0x00000060) != 0x00000000)
+                       || ((instruction & 0x0FB00FF0) == 0x01000090)  // SWP
+                       || ((instruction & 0x0FC000F0) == 0x00000090); // MUL
+    uint32_t fetchCycles = isDataTransfer
+        ? mem.getNonseqWaitCycles32(pc)
+        : mem.getSeqWaitCycles32(pc);
+    parentCPU.advanceCycles(instruction_cycles + fetchCycles + dataCycles);}

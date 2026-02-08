@@ -2,7 +2,6 @@
 #include "debug.h" // Use macro-based debug system
 #include "thumb_cpu.h" // Include complete definition
 #include "arm_cpu.h"   // Include complete definition
-#include "timing.h"
 #include "scheduler.h"
 
 CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptController(ic), scheduler(nullptr), halted(false) {
@@ -35,10 +34,6 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     spsr_abt = 0x1F;  // System mode
     spsr_irq = 0x1F;  // System mode
     spsr_und = 0x1F;  // System mode
-
-    // Initialize timing system
-    timing_init(&timing);
-    DEBUG_LOG("Timing system initialized");
 }
 
 CPU::CPUState CPU::getCPUState() const {
@@ -61,20 +56,6 @@ void CPU::execute(uint32_t cycles) {
     } else {
         DEBUG_LOG("Executing ARM instructions");
         armCPU->execute(cycles); // Use pointer
-    }
-}
-
-// New timing-aware execution method
-void CPU::executeWithTiming(uint32_t cycles) {
-    // Use macro-based debug system
-    DEBUG_INFO("Executing CPU with timing for " + std::to_string(cycles) + " cycles");
-    
-    if (getFlag(FLAG_T)) {
-        DEBUG_LOG("Executing Thumb instructions with timing");
-        thumbCPU->executeWithTiming(cycles, &timing);
-    } else {
-        DEBUG_LOG("Executing ARM instructions with timing");
-        armCPU->executeWithTiming(cycles, &timing);
     }
 }
 

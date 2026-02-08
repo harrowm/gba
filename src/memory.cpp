@@ -499,6 +499,16 @@ void Memory::write16(uint32_t address, uint16_t value) {
         }
     }
     
+    // Handle WAITCNT register write (0x04000204)
+    if (address == 0x04000204) {
+        uint16_t masked = value & 0x5FFF; // Only bits 0-12, 14 are writable (bit 15 and 13 are unused)
+        updateWaitstates(masked);
+        // Store masked value to memory and return
+        io[0x204] = masked & 0xFF;
+        io[0x205] = (masked >> 8) & 0xFF;
+        return;
+    }
+    
     // SRAM has 8-bit bus: STRH writes only the LSB to the exact byte address
     // (no force-alignment, no second byte). This matches real GBA hardware where
     // only STRB truly works for SRAM, but STRH/STR write via the 8-bit bus.
@@ -801,6 +811,41 @@ uint16_t Memory::ioRead16(uint16_t offset) const {
     case 0x0A0: case 0x0A2: case 0x0A4: case 0x0A6:
         return openBus();
 
+    // ----- DMA: source/dest are write-only → open bus, control is readable -----
+    case 0x0B0: case 0x0B2: case 0x0B4: case 0x0B6:         // DMA0 SAD/DAD
+    case 0x0B8:                                              // DMA0 word count (write-only)
+    case 0x0BC: case 0x0BE: case 0x0C0: case 0x0C2:         // DMA1 SAD/DAD
+    case 0x0C4:                                              // DMA1 word count
+    case 0x0C8: case 0x0CA: case 0x0CC: case 0x0CE:         // DMA2 SAD/DAD
+    case 0x0D0:                                              // DMA2 word count
+    case 0x0D4: case 0x0D6: case 0x0D8: case 0x0DA:         // DMA3 SAD/DAD
+    case 0x0DC:                                              // DMA3 word count
+        return openBus();
+    case 0x0BA: return ioVal(offset);                        // DMA0 CNT_H (readable)
+    case 0x0C6: return ioVal(offset);                        // DMA1 CNT_H
+    case 0x0D2: return ioVal(offset);                        // DMA2 CNT_H
+    case 0x0DE: return ioVal(offset);                        // DMA3 CNT_H
+
+    // ----- Timer registers -----
+    // Timer counter reads must be computed on-the-fly from scheduler cycles.
+    // The io[] array holds the reload value, not the running counter.
+    case 0x100:  // TM0CNT_L (counter)
+        if (timerController) return timerController->readCounter(0);
+        return ioVal(offset);
+    case 0x102: return ioVal(offset);                        // TM0CNT_H (control)
+    case 0x104:  // TM1CNT_L
+        if (timerController) return timerController->readCounter(1);
+        return ioVal(offset);
+    case 0x106: return ioVal(offset);                        // TM1CNT_H
+    case 0x108:  // TM2CNT_L
+        if (timerController) return timerController->readCounter(2);
+        return ioVal(offset);
+    case 0x10A: return ioVal(offset);                        // TM2CNT_H
+    case 0x10C:  // TM3CNT_L
+        if (timerController) return timerController->readCounter(3);
+        return ioVal(offset);
+    case 0x10E: return ioVal(offset);                        // TM3CNT_H
+
     // ----- Keypad -----
     case 0x130: return ioVal(offset);                        // KEYINPUT
     case 0x132: return ioVal(offset);                        // KEYCNT
@@ -1051,47 +1096,22 @@ void Memory::write32(uint32_t address, uint32_t value) {
     uint32_t region = address >> 24;
     if (region == 0x00 || (region >= 0x08 && region <= 0x0D)) return;
     
-    // Handle DMA register writes (source and dest addresses)
-    if (dmaController) {
-        if (address >= 0x040000B0 && address <= 0x040000DE) {
-            int channelID = (address - 0x040000B0) / 12;
-            int regOffset = (address - 0x040000B0) % 12;
-            
-            if (regOffset == 0) {  // Source address (DMAxSAD)
-                LOG_DMA("[DMA%d] Write Source Address: 0x%08X\n", channelID, value);
-                dmaController->writeSourceAddress(channelID, value);
-                return;  // Don't write to memory
-            } else if (regOffset == 4) {  // Dest address (DMAxDAD)
-                LOG_DMA("[DMA%d] Write Dest Address: 0x%08X\n", channelID, value);
-                dmaController->writeDestAddress(channelID, value);
-                return;  // Don't write to memory
-            } else if (regOffset == 8) {  // Word count + Control (DMAxCNT as 32-bit write)
-                uint16_t word_count = value & 0xFFFF;
-                uint16_t control = (value >> 16) & 0xFFFF;
-                LOG_DMA("[DMA%d] Write32 CNT: WordCount=0x%04X Control=0x%04X (Enable=%d, Mode=%d, 32bit=%d)\n", 
-                       channelID, word_count, control, 
-                       (control >> 15) & 1, (control >> 12) & 3, (control >> 10) & 1);
-                dmaController->writeWordCount(channelID, word_count);
-                dmaController->writeControl(channelID, control);
-                return;  // Don't write to memory
-            }
+    // I/O region (0x04000000 - 0x040003FF): decompose into two 16-bit writes
+    // so that all special side-effect handlers fire (timers, DMA, WAITCNT, 
+    // interrupts, sound, etc.). Exception: FIFO writes need 32-bit semantics.
+    if (region == 0x04 && (address & 0x00FF0000) == 0) {
+        // FIFO writes must stay 32-bit (push 4 bytes at once)
+        if (apu) {
+            if (address == 0x040000A0) { apu->writeFIFO_A(value); return; }
+            if (address == 0x040000A4) { apu->writeFIFO_B(value); return; }
         }
-    }
-    
-    // Handle sound FIFO writes (0x040000A0 = FIFO_A, 0x040000A4 = FIFO_B)
-    if (apu) {
-        if (address == 0x040000A0) {
-            apu->writeFIFO_A(value);
-            return;  // FIFO is write-only, don't store in memory
-        } else if (address == 0x040000A4) {
-            apu->writeFIFO_B(value);
-            return;
-        }
-        // Handle other sound register 32-bit writes
-        if (address >= 0x04000060 && address <= 0x040000A6) {
-            apu->write32(address, value);
-            // Also write to memory for debug reads
-        }
+        // Decompose: write low halfword first, then high halfword
+        uint32_t aligned = address & ~3u;
+        disableWaitCycles = true;  // Already charged 32-bit wait above
+        write16(aligned, value & 0xFFFF);
+        write16(aligned + 2, (value >> 16) & 0xFFFF);
+        disableWaitCycles = false;
+        return;
     }
     
     // SRAM has 8-bit bus: STR writes only the LSB to the exact byte address
@@ -1311,16 +1331,17 @@ uint32_t Memory::calculateWaitStates(uint32_t address, uint32_t accessWidth) con
         case 0x0A: // Game Pak ROM Wait State 1
         case 0x0B:
         case 0x0C: // Game Pak ROM Wait State 2
-        case 0x0D:
-            // Default: 5 cycles for first access (non-sequential)
-            // TODO: Make configurable via WAITCNT register
-            // 16-bit bus: 5 cycles for 8/16-bit, 8 cycles for 32-bit (5+3 sequential)
-            return (accessWidth == 32) ? 8 : 5;
+        case 0x0D: {
+            // Use the wait state tables (configured by WAITCNT register)
+            uint8_t region = (addr >> 24) & 0xFF;
+            return (accessWidth == 32) ? waitstatesNonseq32[region] : waitstatesNonseq16[region];
+        }
             
         case 0x0E: // Game Pak SRAM
-            // 8-bit bus: 5 cycles for any access
-            // TODO: Make configurable via WAITCNT register
-            return 5;
+        case 0x0F: {
+            // Use the wait state tables (configured by WAITCNT register)
+            return (accessWidth == 32) ? waitstatesNonseq32[0x0E] : waitstatesNonseq16[0x0E];
+        }
             
         default:
             // Unmapped memory - no wait states (open bus)
@@ -1334,20 +1355,24 @@ void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
         return;
     }
     
-    if (scheduler) {
-        // ARM7TDMI memory access timing:
-        // Data accesses (LDR/STR) cost 1I + 1N cycles where:
-        // - 1I = internal cycle (counted in arm_timing.c base cycles)
-        // - 1N = nonsequential memory access cycle (counted here)
-        //
-        // The instruction prefetch happens in parallel and doesn't add cycles.
-        // We charge the full nonsequential wait state for data accesses.
-        //
-        // Examples:
-        // - BIOS/I/O: nonseq=1 → +1 cycle (total 2 with base internal)
-        // - IWRAM: nonseq=1 → +1 cycle (total 2)
-        // - ROM 32-bit: nonseq=5 → +5 cycles (total 6)
-        uint32_t waitCycles = getNonseqWaitStates(address, accessWidth);
+    // ARM7TDMI memory access timing:
+    // Data accesses (LDR/STR) cost 1 base cycle + extra wait states.
+    // The wait state tables store EXTRA waits beyond the base 1 cycle
+    // (matching mGBA's model), so we add 1 here.
+    //
+    // Examples (total charged here):
+    // - BIOS/I/O/IWRAM: 1+0=1 cycle
+    // - EWRAM 16-bit: 1+2=3 cycles
+    // - ROM 32-bit (default): 1+7=8 cycles
+    uint32_t waitCycles = 1 + getNonseqWaitStates(address, accessWidth);
+    
+    if (accumulatingCycles) {
+        // During CPU instruction execution: accumulate for end-of-instruction commit.
+        // This prevents timer/other I/O side effects from seeing mid-instruction
+        // cycle values (matches mGBA's local currentCycles model).
+        pendingDataCycles += waitCycles;
+    } else if (scheduler) {
+        // Outside instruction execution (DMA, etc.): advance scheduler immediately
         scheduler->advanceCycles(waitCycles);
     }
 }
@@ -1473,84 +1498,97 @@ bool Memory::loadBIOS(const char* filepath) {
     return true;
 }
 
-// Initialize wait state tables based on GBA memory regions
-// This matches mGBA's wait state model for cycle-accurate timing
+// Initialize wait state tables based on GBA memory regions.
+// Values are EXTRA wait states beyond the base 1-cycle access,
+// matching mGBA's GBA_BASE_WAITSTATES model exactly.
+// The base 1 cycle is added by addWaitCycles() for data accesses
+// and by the CPU instruction timing for fetches.
 void Memory::initWaitStateTables() {
-    // Based on ARM7TDMI specifications and GBA hardware:
-    // - BIOS (0x00): 1 cycle for any access (0 wait states)
-    // - EWRAM (0x02): 3 cycles for 8/16-bit, 6 cycles for 32-bit (2/5 wait states)
-    // - IWRAM (0x03): 1 cycle for any access (0 wait states, fastest)
-    // - I/O (0x04): 1 cycle for any access
-    // - Palette (0x05): 1 cycle for 16-bit, 2 cycles for 32-bit
-    // - VRAM (0x06): 1 cycle for 16-bit, 2 cycles for 32-bit
-    // - OAM (0x07): 1 cycle for any access
-    // - ROM (0x08-0x0D): Configurable via WAITCNT, default 4+1 cycles
-    // - SRAM (0x0E): 5 cycles (4 wait states)
-    
-    // Initialize all to 1 cycle by default
+    // Initialize all to 0 extra waits by default
     for (int i = 0; i < 256; i++) {
-        waitstatesNonseq32[i] = 1;
-        waitstatesNonseq16[i] = 1;
-        waitstatesSeq32[i] = 1;
-        waitstatesSeq16[i] = 1;
+        waitstatesNonseq32[i] = 0;
+        waitstatesNonseq16[i] = 0;
+        waitstatesSeq32[i] = 0;
+        waitstatesSeq16[i] = 0;
     }
     
-    // BIOS (0x00): 1 cycle, same for seq and nonseq
-    waitstatesNonseq32[0x00] = 1;
-    waitstatesNonseq16[0x00] = 1;
-    waitstatesSeq32[0x00] = 1;
-    waitstatesSeq16[0x00] = 1;
+    // mGBA GBA_BASE_WAITSTATES values (extra waits, not total):
+    //   BIOS(0)=0  EWRAM(2)=2/5  IWRAM(3)=0  I/O(4)=0
+    //   Palette(5)=0/1  VRAM(6)=0/1  OAM(7)=0
     
-    // EWRAM (0x02): 16-bit bus, slower
-    waitstatesNonseq32[0x02] = 6;  // 32-bit: two 16-bit accesses
-    waitstatesNonseq16[0x02] = 3;  // 16-bit: base cost
-    waitstatesSeq32[0x02] = 6;     // Sequential same as nonseq for EWRAM
-    waitstatesSeq16[0x02] = 3;
+    // BIOS (0x00): 0 extra wait states
+    // (already 0 from initialization)
     
-    // IWRAM (0x03): 32-bit bus, fastest (1 cycle)
-    waitstatesNonseq32[0x03] = 1;
-    waitstatesNonseq16[0x03] = 1;
-    waitstatesSeq32[0x03] = 1;
-    waitstatesSeq16[0x03] = 1;
+    // EWRAM (0x02): 16-bit bus — 2 extra waits for 16-bit, 5 for 32-bit
+    waitstatesNonseq32[0x02] = 5;
+    waitstatesNonseq16[0x02] = 2;
+    waitstatesSeq32[0x02] = 5;     // Sequential same as nonseq for EWRAM
+    waitstatesSeq16[0x02] = 2;
     
-    // I/O (0x04): 1 cycle
-    waitstatesNonseq32[0x04] = 1;
-    waitstatesNonseq16[0x04] = 1;
-    waitstatesSeq32[0x04] = 1;
-    waitstatesSeq16[0x04] = 1;
+    // IWRAM (0x03): 32-bit bus, 0 extra wait states (already 0)
+    // I/O (0x04): 0 extra wait states (already 0)
     
-    // Palette (0x05): 16-bit bus
-    waitstatesNonseq32[0x05] = 2;  // 32-bit: two 16-bit accesses
-    waitstatesNonseq16[0x05] = 1;
-    waitstatesSeq32[0x05] = 2;
-    waitstatesSeq16[0x05] = 1;
+    // Palette (0x05): 16-bit bus — 0 extra for 16-bit, 1 extra for 32-bit
+    waitstatesNonseq32[0x05] = 1;
+    waitstatesSeq32[0x05] = 1;
     
-    // VRAM (0x06): 16-bit bus
-    waitstatesNonseq32[0x06] = 2;
-    waitstatesNonseq16[0x06] = 1;
-    waitstatesSeq32[0x06] = 2;
-    waitstatesSeq16[0x06] = 1;
+    // VRAM (0x06): 16-bit bus — 0 extra for 16-bit, 1 extra for 32-bit
+    waitstatesNonseq32[0x06] = 1;
+    waitstatesSeq32[0x06] = 1;
     
-    // OAM (0x07): 32-bit bus, fast
-    waitstatesNonseq32[0x07] = 1;
-    waitstatesNonseq16[0x07] = 1;
-    waitstatesSeq32[0x07] = 1;
-    waitstatesSeq16[0x07] = 1;
+    // OAM (0x07): 32-bit bus, 0 extra wait states (already 0)
     
-    // ROM (0x08-0x0D): Default to 4+1 cycles (will be configurable via WAITCNT later)
-    // For now, use conservative defaults matching real hardware power-on state
-    for (int region = 0x08; region <= 0x0D; region++) {
-        waitstatesNonseq32[region] = 5;  // 4 wait + 1 cycle
-        waitstatesNonseq16[region] = 5;
-        waitstatesSeq32[region] = 3;     // Sequential accesses are faster
-        waitstatesSeq16[region] = 3;
-    }
+    // ROM and SRAM: initialized via updateWaitstates() below
+    // with power-on default WAITCNT = 0x0000
+    updateWaitstates(0x0000);
+}
+
+// Update wait state tables when WAITCNT register (0x04000204) is written.
+// Matches mGBA's GBAAdjustWaitstates() exactly.
+void Memory::updateWaitstates(uint16_t waitcnt) {
+    // GBA ROM waitstate lookup tables (from GBATEK / mGBA)
+    // Non-sequential: WAITCNT bits map to actual wait cycles
+    static const uint8_t romWaitstates[] = { 4, 3, 2, 8 };      // N access
+    // Sequential: different per wait state region
+    static const uint8_t romWaitstatesSeq[] = { 2, 1, 4, 1, 8, 1 }; // S access
     
-    // SRAM (0x0E): Very slow, 5 cycles
-    waitstatesNonseq32[0x0E] = 5;
-    waitstatesNonseq16[0x0E] = 5;
-    waitstatesSeq32[0x0E] = 5;
-    waitstatesSeq16[0x0E] = 5;
+    // Parse WAITCNT fields
+    int sram   =  waitcnt & 0x0003;
+    int ws0    = (waitcnt & 0x000C) >> 2;
+    int ws0seq = (waitcnt & 0x0010) >> 4;
+    int ws1    = (waitcnt & 0x0060) >> 5;
+    int ws1seq = (waitcnt & 0x0080) >> 7;
+    int ws2    = (waitcnt & 0x0300) >> 8;
+    int ws2seq = (waitcnt & 0x0400) >> 10;
+    prefetchEnabled = (waitcnt & 0x4000) != 0;
+    
+    // SRAM (region 0x0E, mirror 0x0F)
+    waitstatesNonseq16[0x0E] = waitstatesNonseq16[0x0F] = romWaitstates[sram];
+    waitstatesSeq16[0x0E]    = waitstatesSeq16[0x0F]    = romWaitstates[sram];
+    waitstatesNonseq32[0x0E] = waitstatesNonseq32[0x0F] = 2 * romWaitstates[sram] + 1;
+    waitstatesSeq32[0x0E]    = waitstatesSeq32[0x0F]    = 2 * romWaitstates[sram] + 1;
+    
+    // ROM Wait State 0 (regions 0x08, 0x09) - 16-bit non-sequential
+    waitstatesNonseq16[0x08] = waitstatesNonseq16[0x09] = romWaitstates[ws0];
+    // ROM Wait State 1 (regions 0x0A, 0x0B)
+    waitstatesNonseq16[0x0A] = waitstatesNonseq16[0x0B] = romWaitstates[ws1];
+    // ROM Wait State 2 (regions 0x0C, 0x0D)
+    waitstatesNonseq16[0x0C] = waitstatesNonseq16[0x0D] = romWaitstates[ws2];
+    
+    // ROM sequential 16-bit
+    waitstatesSeq16[0x08] = waitstatesSeq16[0x09] = romWaitstatesSeq[ws0seq];
+    waitstatesSeq16[0x0A] = waitstatesSeq16[0x0B] = romWaitstatesSeq[ws1seq + 2];
+    waitstatesSeq16[0x0C] = waitstatesSeq16[0x0D] = romWaitstatesSeq[ws2seq + 4];
+    
+    // ROM 32-bit = N16 + 1 + S16 (non-sequential: one N + one S halfword access)
+    waitstatesNonseq32[0x08] = waitstatesNonseq32[0x09] = waitstatesNonseq16[0x08] + 1 + waitstatesSeq16[0x08];
+    waitstatesNonseq32[0x0A] = waitstatesNonseq32[0x0B] = waitstatesNonseq16[0x0A] + 1 + waitstatesSeq16[0x0A];
+    waitstatesNonseq32[0x0C] = waitstatesNonseq32[0x0D] = waitstatesNonseq16[0x0C] + 1 + waitstatesSeq16[0x0C];
+    
+    // ROM 32-bit sequential = 2 * S16 + 1
+    waitstatesSeq32[0x08] = waitstatesSeq32[0x09] = 2 * waitstatesSeq16[0x08] + 1;
+    waitstatesSeq32[0x0A] = waitstatesSeq32[0x0B] = 2 * waitstatesSeq16[0x0A] + 1;
+    waitstatesSeq32[0x0C] = waitstatesSeq32[0x0D] = 2 * waitstatesSeq16[0x0C] + 1;
 }
 
 uint32_t Memory::getNonseqWaitStates(uint32_t address, uint32_t accessWidth) const {

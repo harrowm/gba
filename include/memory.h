@@ -32,6 +32,14 @@ public:
     // GPU rendering guard: suppress wait cycles during hardware rendering
     void setWaitCyclesBypass(bool bypass) { disableWaitCycles = bypass; }
 
+    // Instruction-level cycle accumulation (mGBA model):
+    // During CPU instruction execution, data access wait cycles are accumulated
+    // in pendingDataCycles instead of advancing the scheduler immediately.
+    // The CPU drains them at the end of each instruction so that I/O side effects
+    // (timer enable/read) see instruction-boundary cycle values, not mid-instruction ones.
+    void beginInstructionCycles() const { accumulatingCycles = true; pendingDataCycles = 0; }
+    uint32_t endInstructionCycles() const { accumulatingCycles = false; uint32_t c = pendingDataCycles; pendingDataCycles = 0; return c; }
+
     // Accessors (now with cycle-accurate timing)
     uint8_t read8(uint32_t address) const;
     void write8(uint32_t address, uint8_t value);
@@ -114,11 +122,25 @@ public:
     // Set by the CPU at the start of each instruction; used by read8/16/32
     // to decide whether BIOS protection should return biosPrefetch.
     bool cpuInBios = false;
+    
+    // Whether the Game Pak prefetch buffer is enabled (WAITCNT bit 14)
+    bool prefetchEnabled = false;
+    
+    // Get sequential/non-sequential wait states for a region (for CPU fetch cycle computation)
+    uint8_t getSeqWaitCycles16(uint32_t address) const { return waitstatesSeq16[(address >> 24) & 0xFF]; }
+    uint8_t getSeqWaitCycles32(uint32_t address) const { return waitstatesSeq32[(address >> 24) & 0xFF]; }
+    uint8_t getNonseqWaitCycles16(uint32_t address) const { return waitstatesNonseq16[(address >> 24) & 0xFF]; }
+    uint8_t getNonseqWaitCycles32(uint32_t address) const { return waitstatesNonseq32[(address >> 24) & 0xFF]; }
 
 private:
     
     // Flag to temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
     mutable bool disableWaitCycles = false;
+    
+    // Cycle accumulation: when true, addWaitCycles adds to pendingDataCycles
+    // instead of advancing the scheduler (used during CPU instruction execution)
+    mutable bool accumulatingCycles = false;
+    mutable uint32_t pendingDataCycles = 0;
     
     // Wait state tables (matching mGBA's model)
     // These track non-sequential and sequential access times for each memory region
@@ -141,6 +163,9 @@ private:
     
     // Initialize wait state tables
     void initWaitStateTables();
+    
+    // Update wait state tables when WAITCNT register is written
+    void updateWaitstates(uint16_t waitcnt);
     
     // Get non-sequential wait states for an address
     uint32_t getNonseqWaitStates(uint32_t address, uint32_t accessWidth) const;

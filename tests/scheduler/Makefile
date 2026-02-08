@@ -18,16 +18,14 @@ SOURCES1 = test_scheduler.cpp \
            $(SRC_DIR)/scheduler.cpp
 
 SOURCES2 = test_timing_integration.cpp \
-           $(SRC_DIR)/scheduler.cpp \
-           $(SRC_DIR)/timing.c
+           $(SRC_DIR)/scheduler.cpp
 
 # Object files
 OBJECTS1 = $(BUILD_DIR)/test_scheduler.o \
            $(BUILD_DIR)/scheduler.o
 
 OBJECTS2 = $(BUILD_DIR)/test_timing_integration.o \
-           $(BUILD_DIR)/scheduler.o \
-           $(BUILD_DIR)/timing.o
+           $(BUILD_DIR)/scheduler.o
 
 OBJECTS3 = $(BUILD_DIR)/test_integration_basic.o \
            $(BUILD_DIR)/scheduler.o
@@ -63,11 +61,6 @@ $(BUILD_DIR)/test_integration_basic.o: test_integration_basic.cpp
 
 # Compile scheduler
 $(BUILD_DIR)/scheduler.o: $(SRC_DIR)/scheduler.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# Compile timing (C file)
-$(BUILD_DIR)/timing.o: $(SRC_DIR)/timing.c
-	$(CC) $(CFLAGS) -c $< -o $@
 
 # Run tests
 test: $(TARGETS)

@@ -1,18 +1,15 @@
 // test_timing_integration.cpp - Integration tests for scheduler with timing system
 #include <gtest/gtest.h>
 #include "scheduler.h"
-#include "timing.h"
 #include <vector>
 
 class TimingIntegrationTest : public ::testing::Test {
 protected:
     Scheduler scheduler;
-    TimingState timing;
     std::vector<std::string> events;
     
     void SetUp() override {
         scheduler.reset();
-        timing_init(&timing);
         events.clear();
     }
 };

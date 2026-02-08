@@ -44,9 +44,7 @@ CPP_SOURCES = \
 
 C_SOURCES = \
 	$(SRC_DIR)/arm_timing.c \
-	$(SRC_DIR)/thumb_timing.c \
-	$(SRC_DIR)/timing.c \
-	$(SRC_DIR)/timer.c
+	$(SRC_DIR)/thumb_timing.c
 
 # Object files
 CPP_OBJECTS = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))

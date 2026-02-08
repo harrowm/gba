@@ -1,5 +1,4 @@
 #include "arm_timing.h"
-#include "timing.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -66,7 +65,7 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
     
     // ARM instruction decoding based on bits 27-25 and secondary decoding
     if (format == 0x0 || format == 0x1) {
-        // 00x: Data processing and misc instructions
+        // 00x: Data processing, misc instructions, and halfword/signed transfers
         if ((instruction & 0x0FB00FF0) == 0x01000090) {
             // Single Data Swap (SWP)
             extra_cycles = 1; // +1 cycle for swap operation
@@ -75,6 +74,17 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
             extra_cycles = ARM_CYCLES_MULTIPLY_BASE;
             uint32_t rm = ARM_GET_RM(instruction);
             extra_cycles += arm_get_multiply_cycles(registers[rm]);
+        } else if ((instruction & 0x0E000090) == 0x00000090 &&
+                   (instruction & 0x00000060) != 0x00000000) {
+            // Halfword / signed byte transfers (LDRH/STRH/LDRSB/LDRSH):
+            // Matches bits 27-25=000, bit 7=1, bit 4=1, and bits 6:5 != 00
+            // (bits 6:5=00 with bit7=1,bit4=1 is multiply, already handled above)
+            // ARM7TDMI timing:
+            //   Load (LDRH/LDRSB/LDRSH): 1S+1N+1I → extra_cycles = 1 (internal)
+            //   Store (STRH): 2N → extra_cycles = 0 (no internal cycle)
+            // Memory wait cycles (the 1N data access) added by memory.cpp addWaitCycles
+            bool is_load = (instruction >> 20) & 1;  // L bit
+            extra_cycles = is_load ? 1 : 0;
         } else if ((instruction & 0x0E000000) == 0x00000000) {
             // Data processing - 1 cycle base
             extra_cycles = 0;
@@ -101,10 +111,13 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
             extra_cycles = 0; // Unknown, treat as 1 cycle base
         }
     } else if (format == 0x2 || format == 0x3) {
-        // 01x: Single data transfer (LDR/STR)
-        // 1 cycle internal + 1 cycle for address calculation = 2 cycles base
-        // Memory wait cycles will be added by memory.cpp
-        extra_cycles = 1;
+        // 01x: Single data transfer (LDR/STR/LDRB/STRB)
+        // ARM7TDMI timing:
+        //   LDR/LDRB: 1S+1N+1I → extra_cycles = 1 (internal cycle for load result)
+        //   STR/STRB: 2N → extra_cycles = 0 (no internal cycle)
+        // Memory wait cycles (data access) added by memory.cpp addWaitCycles
+        bool is_load = (instruction >> 20) & 1;  // L bit
+        extra_cycles = is_load ? 1 : 0;
     } else if (format == 0x4) {
         // 100: Block data transfer (LDM/STM)
         // Count registers and charge per register

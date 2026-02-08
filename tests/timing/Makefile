@@ -27,10 +27,7 @@ TIMING_SRCS = test_timing.cpp \
 	../../src/arm_further_decode.cpp
 
 C_SRCS = ../../src/arm_timing.c \
-	../../src/thumb_timing.c \
-	../../src/timer.c \
-	../../src/timing.c \
-	../../src/interrupt.c
+	../../src/thumb_timing.c
 
 BUILD_DIR = build
 

@@ -33,8 +33,6 @@ RUN_ALL_SRCS = test_basic.cpp \
   ../../src/scheduler.cpp \
   ../../src/arm_timing.c \
   ../../src/thumb_timing.c \
-  ../../src/timer.c \
-  ../../src/timing.c \
   ../../src/interrupt.cpp \
   ../../src/timer_controller.cpp \
   ../../src/dma.cpp \

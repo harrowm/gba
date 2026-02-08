@@ -46,9 +46,7 @@ CPP_SRCS = test_thumb01.cpp \
 
 
 C_SRCS = ../../src/arm_timing.c \
-	../../src/thumb_timing.c \
-	../../src/timer.c \
-	../../src/timing.c
+	../../src/thumb_timing.c
 
 BUILD_DIR = build
 CPP_OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(CPP_SRCS:.cpp=.o)))

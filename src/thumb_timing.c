@@ -1,5 +1,4 @@
 #include "thumb_timing.h"
-#include "timing.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -57,34 +56,53 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
         }
         
     } else if ((instruction & THUMB_FORMAT_MASK_PC_REL) == THUMB_FORMAT_VAL_PC_REL) {
-        // Format 6: PC-relative load
-        // Like ARM LDR: 1 internal + 1 address calculation
+        // Format 6: PC-relative load (always a load)
+        // LDR: 1S+1N+1I → base 1 + 1 internal; data access from addWaitCycles
         cycles = THUMB_CYCLES_PC_REL_LOAD + 1;
-        // Memory access cycles will be added by memory.cpp during execution
         
     } else if ((instruction & THUMB_FORMAT_MASK_LOAD_STORE_REG) == THUMB_FORMAT_VAL_LOAD_STORE_REG) {
-        // Format 7/8: Load/store with register offset  
-        // Base internal cycle only - memory wait cycles added during execution
-        cycles = THUMB_CYCLES_REG_OFFSET;
-        // Memory access cycles will be added by memory.cpp during execution
+        // Format 7/8: Load/store with register offset
+        // ARM7TDMI timing:
+        //   Load (LDR/LDRB/LDRH/LDRSB/LDRSH): 1S+1N+1I → base + 1 internal
+        //   Store (STR/STRB/STRH): 2N → base only
+        // Memory access from addWaitCycles. Bit 11 = L for format 7.
+        // For format 8 (bit 9=1): ops are STRH(00)/LDSB(01)/LDRH(10)/LDSH(11)
+        //   where bits 11:10 determine the operation. STRH has bit11=0.
+        {
+            bool is_load;
+            if (instruction & (1 << 9)) {
+                // Format 8: bit 11 = H flag (0=STRH, 1=load variant)
+                is_load = (instruction >> 11) & 1;
+            } else {
+                // Format 7: bit 11 = L (1=load, 0=store)
+                is_load = (instruction >> 11) & 1;
+            }
+            cycles = THUMB_CYCLES_REG_OFFSET + (is_load ? 1 : 0);
+        }
         
     } else if ((instruction & THUMB_FORMAT_MASK_LOAD_STORE_IMM) == THUMB_FORMAT_VAL_LOAD_STORE_IMM) {
         // Format 9: Load/store with immediate offset
-        // Base internal cycle only - memory wait cycles added during execution
-        cycles = THUMB_CYCLES_IMM_OFFSET;
-        // Memory access cycles will be added by memory.cpp during execution
+        // Load: +1 internal cycle; Store: no extra
+        {
+            bool is_load = (instruction >> 11) & 1;  // L bit
+            cycles = THUMB_CYCLES_IMM_OFFSET + (is_load ? 1 : 0);
+        }
         
     } else if ((instruction & THUMB_FORMAT_MASK_LOAD_STORE_HALF) == THUMB_FORMAT_VAL_LOAD_STORE_HALF) {
         // Format 10: Load/store halfword
-        // Like ARM LDR/STR: 1 internal + 1 address calculation
-        cycles = THUMB_CYCLES_IMM_OFFSET + 1;
-        // Memory access cycles will be added by memory.cpp during execution
+        // Load: +1 internal cycle; Store: no extra
+        {
+            bool is_load = (instruction >> 11) & 1;  // L bit
+            cycles = THUMB_CYCLES_IMM_OFFSET + (is_load ? 1 : 0);
+        }
         
     } else if ((instruction & THUMB_FORMAT_MASK_SP_REL) == THUMB_FORMAT_VAL_SP_REL) {
         // Format 11: SP-relative load/store
-        // Like ARM LDR/STR: 1 internal + 1 address calculation  
-        cycles = THUMB_CYCLES_SP_REL + 1;
-        // Memory access cycles will be added by memory.cpp during execution
+        // Load: +1 internal cycle; Store: no extra
+        {
+            bool is_load = (instruction >> 11) & 1;  // L bit
+            cycles = THUMB_CYCLES_SP_REL + (is_load ? 1 : 0);
+        }
         
     } else if ((instruction & THUMB_FORMAT_MASK_LOAD_ADDR) == THUMB_FORMAT_VAL_LOAD_ADDR) {
         // Format 12: Load address

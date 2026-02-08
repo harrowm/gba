@@ -92,6 +92,19 @@ uint16_t TimerController::readCounter(int timerID) const {
     // how many samples to mix — a stale read returns 0 delta = silence.
     if (scheduler) {
         uint64_t currentCycle = scheduler->getCurrentCycle();
+        
+        // Subtract 2 cycles to account for the load instruction reading
+        // the timer (1N+1I = 2 cycles). This matches mGBA's approach:
+        //   GBATimerUpdateRegister(gba, timer, 2)
+        // where the 2 is subtracted from currentTime before computing
+        // the timer value. The reading instruction's own cost should not
+        // be visible in the timer value.
+        if (currentCycle >= timer.lastReloadCycle + 2) {
+            currentCycle -= 2;
+        } else {
+            currentCycle = timer.lastReloadCycle;
+        }
+        
         uint64_t elapsed = (currentCycle >= timer.lastReloadCycle)
                          ? (currentCycle - timer.lastReloadCycle) : 0;
         uint32_t prescaler = timer.getPrescalerValue();

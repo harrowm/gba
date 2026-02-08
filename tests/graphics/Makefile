@@ -25,7 +25,6 @@ CPP_SRCS = \
 	$(SRC_DIR)/debug.cpp \
 	$(SRC_DIR)/arm_timing.c \
 	$(SRC_DIR)/thumb_timing.c \
-	$(SRC_DIR)/timing.c \
 	$(SRC_DIR)/arm_exec_data_processing.cpp \
 	$(SRC_DIR)/arm_exec_multiply.cpp \
 	$(SRC_DIR)/arm_exec_single_data_transfers.cpp \

@@ -6,7 +6,6 @@
 #include "interrupt.h"
 #include "debug.h"
 #include "thumb_cpu.h"
-#include "timing.h"
 #include "utility_macros.h"
 #include "instruction_tracer.h"
 #include "instruction_memory_tracer.h"
@@ -51,7 +50,6 @@ private:
     InterruptController& interruptController;
     std::array<uint32_t, 16> registers; // Shared registers (User/System)
     uint32_t cpsr; // Current Program Status Register
-    TimingState timing; // Timing state for cycle-driven execution
     Scheduler* scheduler; // Scheduler for cycle-accurate timing
 
     // Banked registers for privileged modes
@@ -143,8 +141,6 @@ public:
     ~CPU();
 
     void execute(uint32_t cycles);
-    void executeWithTiming(uint32_t cycles); // New timing-aware execution
-    
     // Single instruction execution (for main loop)
     void executeOneInstruction();
     
@@ -344,8 +340,6 @@ public:
     }
     
     Memory& getMemory() { return memory; }
-    TimingState& getTiming() { return timing; } // Access to timing state
-    
     InterruptController& getInterruptController() { return interruptController; }
     
     // Access to CPU delegates

@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <capstone/capstone.h>
 #include "cpu.h"
-#include "timing.h"
 #include "arm_timing.h"
 #include "utility_macros.h"
 
@@ -373,7 +372,6 @@ public:
     ~ARMCPU();
 
     void execute(uint32_t cycles);
-    void executeWithTiming(uint32_t cycles, TimingState* timing);
     void executeOneInstruction(); // Execute one instruction with scheduler integration
     uint32_t calculateInstructionCycles(uint32_t instruction);    
 };
