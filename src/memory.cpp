@@ -217,6 +217,24 @@ inline uint8_t* get_region_base(uint8_t* const* regionTable, uint32_t address, u
 
 uint8_t Memory::read8(uint32_t address) const {
     addWaitCycles(address, 8);
+
+    // --- BIOS region protection (0x00000000 - 0x00FFFFFF) ---
+    // Real GBA: BIOS (16 KB) is only readable when the CPU is executing from
+    // within the BIOS.  Outside BIOS, reads from 0-0x3FFF return the BIOS
+    // prefetch latch; reads from 0x4000+ return CPU open bus.
+    if (bios && (address >> 24) == 0x00) {
+        if (address >= 0x4000) {
+            // Past BIOS bounds: open bus
+            uint32_t ob = cpu ? cpu->openBusPrefetch : 0;
+            return (ob >> ((address & 3) * 8)) & 0xFF;
+        }
+        if (!cpuInBios) {
+            // BIOS protection: return latched prefetch
+            return (biosPrefetch >> ((address & 3) * 8)) & 0xFF;
+        }
+        // CPU inside BIOS — fall through to normal read
+    }
+
     uint32_t offset;
     uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
     if (!base) {
@@ -226,7 +244,9 @@ uint8_t Memory::read8(uint32_t address) const {
             uint16_t openbus = (address >> 1);
             return (address & 1) ? (openbus >> 8) : (openbus & 0xFF);
         }
-        return 0xFF;
+        // General open bus: return byte from CPU prefetch pipeline
+        uint32_t ob = cpu ? cpu->openBusPrefetch : 0;
+        return (ob >> ((address & 3) * 8)) & 0xFF;
     }
     // Debug: Print reads from logo and entry point
     // if (address == 0x0800009C || address == 0x080000B4) {
@@ -385,6 +405,18 @@ uint16_t Memory::read16(uint32_t address) const {
         return byte | ((uint16_t)byte << 8);
     }
     
+    // --- BIOS region protection (0x00000000 - 0x00FFFFFF) ---
+    if (bios && (address >> 24) == 0x00) {
+        if (address >= 0x4000) {
+            uint32_t ob = cpu ? cpu->openBusPrefetch : 0;
+            return (ob >> (((address & ~1u) & 2) * 8)) & 0xFFFF;
+        }
+        if (!cpuInBios) {
+            uint32_t aligned = address & ~1u;
+            return (biosPrefetch >> ((aligned & 2) * 8)) & 0xFFFF;
+        }
+    }
+
     // GBA LDRH/STRH force-align: bit 0 of address is ignored by the bus
     address &= ~1u;
     
@@ -396,7 +428,9 @@ uint16_t Memory::read16(uint32_t address) const {
         if (region >= 0x08 && region <= 0x0D) {
             return (address >> 1) & 0xFFFF;
         }
-        return 0xFFFF;
+        // General open bus: return halfword from CPU prefetch pipeline
+        uint32_t ob = cpu ? cpu->openBusPrefetch : 0;
+        return (ob >> ((address & 2) * 8)) & 0xFFFF;
     }
     // IWRAM is only 32KB (0x8000 bytes), not 64KB like BLOCK_SIZE
     uint32_t wrapSize = (address >= 0x03000000 && address < 0x04000000) ? 0x8000 : Memory::BLOCK_SIZE;
@@ -806,6 +840,19 @@ uint32_t Memory::read32(uint32_t address) const {
         return byte * 0x01010101u;
     }
     
+    // --- BIOS region protection (0x00000000 - 0x00FFFFFF) ---
+    if (bios && (address >> 24) == 0x00) {
+        if (address >= 0x4000) {
+            // Past BIOS bounds: open bus
+            return cpu ? cpu->openBusPrefetch : 0;
+        }
+        if (!cpuInBios) {
+            // BIOS protection: return latched prefetch
+            return biosPrefetch;
+        }
+        // CPU inside BIOS — fall through to normal read
+    }
+
     // ARM7TDMI bus: force-align to word boundary, return aligned word.
     // NOTE: The LDR instruction applies rotation for misaligned addresses;
     // LDM, DMA, and other bus masters just get the aligned word.
@@ -820,7 +867,8 @@ uint32_t Memory::read32(uint32_t address) const {
             uint16_t hi = ((aligned_address + 2) >> 1) & 0xFFFF;
             return lo | ((uint32_t)hi << 16);
         }
-        return 0xFFFFFFFF;
+        // General open bus: return CPU prefetch pipeline value
+        return cpu ? cpu->openBusPrefetch : 0;
     }
     // Debug: Check for unexpected offset values for IWRAM
     if (aligned_address >= 0x03000000 && aligned_address < 0x04000000 && offset >= 0x8000) {

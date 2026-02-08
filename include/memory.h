@@ -103,6 +103,19 @@ private:
     
     // Interrupt controller for IRQ checks on IE/IME writes
     InterruptController* interruptController = nullptr;
+
+public:
+    // BIOS read protection: last prefetch value when CPU was in BIOS region.
+    // When CPU reads BIOS from outside the BIOS region, this latch is returned
+    // instead of the actual BIOS data (ARM7TDMI BIOS protection mechanism).
+    uint32_t biosPrefetch = 0;
+
+    // Tracks whether the CPU is currently executing from the BIOS region.
+    // Set by the CPU at the start of each instruction; used by read8/16/32
+    // to decide whether BIOS protection should return biosPrefetch.
+    bool cpuInBios = false;
+
+private:
     
     // Flag to temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
     mutable bool disableWaitCycles = false;

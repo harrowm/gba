@@ -89,6 +89,12 @@ private:
 
     // Accessors for R13 (SP) and R14 (LR) with banking
 public:
+    // Open bus prefetch: the value currently on the data bus from the CPU's
+    // instruction pipeline.  On ARM7TDMI the 3-stage pipeline means the bus
+    // holds the instruction at PC (i.e. current_instruction_address + 8 in
+    // ARM mode, +4 in Thumb mode).  Updated at the start of each instruction
+    // by ARMCPU / ThumbCPU and used by Memory for open bus reads.
+    uint32_t openBusPrefetch = 0;
     uint32_t& SP() {
         switch (getMode()) {
             case FIQ: return banked_r13_fiq;

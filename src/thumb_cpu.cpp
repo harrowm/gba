@@ -1631,16 +1631,32 @@ void ThumbCPU::executeOneInstruction() {
                parentCPU.R()[12], parentCPU.R()[13], parentCPU.R()[14], parentCPU.R()[15]);
     }
     
+    // --- Open bus / BIOS prefetch tracking (Thumb mode) ---
+    // Thumb instructions are 16-bit.  On ARM7TDMI the bus is 32-bit, so the
+    // open-bus value depends on the memory region width.  For most 16-bit bus
+    // regions the halfword is replicated: prefetch | (prefetch << 16).
+    // For 32-bit bus regions (IWRAM) both pipeline halves are visible, but the
+    // simple replication model covers the vast majority of cases.
+    Memory& mem = parentCPU.getMemory();
+    uint16_t thumbPrefetchHalf = mem.readDirectIO16(pc + 4);
+    parentCPU.openBusPrefetch = thumbPrefetchHalf | ((uint32_t)thumbPrefetchHalf << 16);
+
+    bool inBios = (pc < 0x4000);
+    if (inBios) {
+        mem.biosPrefetch = parentCPU.openBusPrefetch;
+    }
+    mem.cpuInBios = inBios;
+
     // Fetch instruction without charging wait cycles
     // ARM7TDMI has 3-stage pipeline: Fetch happens in parallel with previous instruction's execution
     // Only the execute stage costs cycles
-    uint16_t instruction = parentCPU.getMemory().readDirectIO16(pc);
+    uint16_t instruction = mem.readDirectIO16(pc);
     
     // BIOS tracing for THUMB instructions (matching ARM trace logic)
     extern uint32_t g_trace_max_instructions;
     static uint64_t thumb_trace_count = 0;
     
-    bool pc_in_bios = (pc < 0x4000);
+    bool pc_in_bios = inBios;
     bool should_trace = (g_trace_bios && pc_in_bios) || (g_trace_all && thumb_trace_count < g_trace_max_instructions);
     
     if (should_trace) {

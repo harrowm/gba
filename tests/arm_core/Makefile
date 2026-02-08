@@ -71,9 +71,6 @@ run_all: $(RUN_ALL_OBJS) include/inst_table.inc
 include:
 	mkdir -p ../../include
 
-../../include/inst_table.inc: ../../src/inst_table.py include
-	python3 ../../src/inst_table.py > ../../include/inst_table.inc
-
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 

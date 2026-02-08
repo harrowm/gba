@@ -432,8 +432,23 @@ void ARMCPU::executeOneInstruction() {
     
     uint32_t pc = parentCPU.R()[15];
     
+    // --- Open bus / BIOS prefetch tracking (ARM mode) ---
+    // ARM7TDMI 3-stage pipeline: when instruction at A executes, the fetch
+    // stage is reading A+8.  prefetch[1] in mGBA terms = instruction at A+8.
+    // This is what appears on the data bus for open-bus reads.
+    Memory& mem = parentCPU.getMemory();
+    parentCPU.openBusPrefetch = mem.readDirectIO32(pc + 8);
+
+    // Track whether the CPU is executing from the BIOS region.
+    // When the CPU leaves BIOS, save the current prefetch as the BIOS latch.
+    bool inBios = (pc < 0x4000);
+    if (inBios) {
+        mem.biosPrefetch = parentCPU.openBusPrefetch;
+    }
+    mem.cpuInBios = inBios;
+
     // Fetch instruction without charging wait cycles (pipelined - happens during previous instruction's execution)
-    uint32_t instruction = parentCPU.getMemory().readDirectIO32(pc);
+    uint32_t instruction = mem.readDirectIO32(pc);
 
     // Targeted trace around Sonic branch to UNKNOWN region
     if (pc >= 0x08097240 && pc <= 0x08097260) {
