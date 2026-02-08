@@ -164,9 +164,9 @@ void GPU::renderScanline() {
     uint16_t mode = dispcnt & DISPCNT_MODE_MASK;
     
     // Debug: Log DISPCNT value once per frame (on scanline 0)
-    static int dispcntLogCounter = 0;
-    static int lastMode2WithBG3Frame = 0;
     if (currentScanline == 0) {
+        static int dispcntLogCounter = 0;
+        static int lastMode2WithBG3Frame = 0;
         // Check if this is Mode 2 with BG3 enabled
         bool isMode2WithBG3 = (mode == 2) && (dispcnt & (1 << 11));
         

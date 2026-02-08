@@ -143,7 +143,6 @@ void CPU::executeOneInstruction() {
 // ============================================================================
 
 bool CPU::checkPendingInterrupts() {
-    static int check_count = 0;
     // Check if interrupts are enabled (IME bit and I flag in CPSR)
     bool ime = interruptController.isIMESet();
     bool irqDisabled = (cpsr & 0x80) != 0; // I flag in CPSR bit 7
@@ -159,6 +158,7 @@ bool CPU::checkPendingInterrupts() {
     // Check if any interrupts are pending
     bool has_pending = interruptController.hasPendingInterrupt();
     if (has_pending) {
+        static int check_count = 0;
         check_count++;
         // Print every 1000th IRQ to avoid spam, but show details
         if (check_count % 1000 == 0) {

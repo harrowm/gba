@@ -417,10 +417,9 @@ void GBA::runFrame() {
         // No per-instruction apu.tick() needed.
     }
     
-    uint64_t loopEndCycle = scheduler.getCurrentCycle();
-    uint64_t totalCyclesInLoop = loopEndCycle - loopStartCycle;
-    
     if (!timing_logged) {
+        uint64_t loopEndCycle = scheduler.getCurrentCycle();
+        uint64_t totalCyclesInLoop = loopEndCycle - loopStartCycle;
         LOG_TRACE_CAT("[TIMING] Frame complete: instructions=%d, loop_start=%llu, loop_end=%llu, cycles_in_loop=%llu, target=%llu\n",
                instructionCount, loopStartCycle, loopEndCycle, totalCyclesInLoop, (uint64_t)CYCLES_PER_FRAME);
         timing_logged = true;

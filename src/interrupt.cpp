@@ -22,7 +22,6 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
     memory->writeDirectIO(REG_IF, currentIF);
     
     // Log interrupt raising (like mGBA)
-    static const char* irq_names[] = {"VBLANK", "HBLANK", "VCOUNTER", "TIMER0", "TIMER1", "TIMER2", "TIMER3", "SIO", "DMA0", "DMA1", "DMA2", "DMA3", "KEYPAD", "GAMEPAK"};
     int irq_bit = -1;
     for (int i = 0; i < 14; i++) {
         if (irqFlag & (1 << i)) {
@@ -30,9 +29,10 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
             break;
         }
     }
-    uint64_t currentCycle = scheduler ? scheduler->getCurrentCycle() : 0;
     // Disable HBlank spam, only log VBlank
     if (irq_bit == 0) {  // VBlank only
+        static const char* irq_names[] = {"VBLANK", "HBLANK", "VCOUNTER", "TIMER0", "TIMER1", "TIMER2", "TIMER3", "SIO", "DMA0", "DMA1", "DMA2", "DMA3", "KEYPAD", "GAMEPAK"};
+        uint64_t currentCycle = scheduler ? scheduler->getCurrentCycle() : 0;
         LOG_IRQ("[GBA IRQ] %s raised at cycle %llu, IF=0x%04X, IE=0x%04X, IME=0x%04X\n",
                 irq_bit >= 0 ? irq_names[irq_bit] : "UNKNOWN",
                 currentCycle,
