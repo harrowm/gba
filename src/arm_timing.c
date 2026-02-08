@@ -5,6 +5,7 @@
 // Forward declarations for static helper functions
 static bool arm_check_condition(ARMCondition condition, uint32_t cpsr);
 static uint32_t arm_get_multiply_cycles(uint32_t operand);
+static uint32_t arm_get_multiply_cycles_unsigned(uint32_t operand);
 static uint32_t arm_count_registers(uint16_t register_list);
 
 // Lookup table for common instruction patterns (indexed by bits 27-20)
@@ -75,10 +76,25 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, con
             // Single Data Swap (SWP)
             extra_cycles = 1; // +1 cycle for swap operation
         } else if ((instruction & 0x0FC000F0) == 0x00000090) {
-            // Multiply instructions - this requires register value lookup
-            extra_cycles = ARM_CYCLES_MULTIPLY_BASE;
-            uint32_t rm = ARM_GET_RM(instruction);
-            extra_cycles += arm_get_multiply_cycles(registers[rm]);
+            // Multiply instructions — early termination based on Rs (bits 11:8)
+            // ARM7TDMI: MUL = 1S + mI, MLA = 1S + (m+1)I
+            // where m = 1..4 depending on leading zeros/ones of Rs
+            bool is_accumulate = (instruction >> 21) & 1;  // A bit: MLA vs MUL
+            extra_cycles = is_accumulate ? 1 : 0;
+            uint32_t rs = ARM_GET_RS(instruction);
+            extra_cycles += arm_get_multiply_cycles(registers[rs]);
+        } else if ((instruction & 0x0F8000F0) == 0x00800090) {
+            // Long multiply: UMULL/UMLAL/SMULL/SMLAL
+            // ARM7TDMI: UMULL/SMULL = 1S + (m+1)I, UMLAL/SMLAL = 1S + (m+2)I
+            // where m = 1..4 depending on leading zeros/ones of Rs
+            bool is_accumulate = (instruction >> 21) & 1;  // A bit
+            bool is_signed = (instruction >> 22) & 1;      // U bit: 0=unsigned, 1=signed
+            extra_cycles = is_accumulate ? 2 : 1;  // +1 for long result, +1 more for accumulate
+            uint32_t rs = ARM_GET_RS(instruction);
+            // Unsigned (UMULL/UMLAL): early termination checks all-0s only
+            // Signed (SMULL/SMLAL): early termination checks all-0s or all-1s
+            extra_cycles += is_signed ? arm_get_multiply_cycles(registers[rs])
+                                      : arm_get_multiply_cycles_unsigned(registers[rs]);
         } else if ((instruction & 0x0E000090) == 0x00000090 &&
                    (instruction & 0x00000060) != 0x00000000) {
             // Halfword / signed byte transfers (LDRH/STRH/LDRSB/LDRSH):
@@ -90,6 +106,10 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, con
             // Memory wait cycles (the 1N data access) added by memory.cpp addWaitCycles
             bool is_load = (instruction >> 20) & 1;  // L bit
             extra_cycles = is_load ? 1 : 0;
+        } else if ((instruction & 0x0FFFFFF0) == 0x012FFF10) {
+            // BX (Branch and Exchange): same pipeline refill as regular branch
+            // ARM7TDMI: 2S + 1N — same as B/BL
+            extra_cycles = 2; // Pipeline refill (same as branch)
         } else if ((instruction & 0x0E000000) == 0x00000000) {
             // Data processing - 1 cycle base
             extra_cycles = 0;
@@ -125,11 +145,13 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, con
         extra_cycles = is_load ? 1 : 0;
     } else if (format == 0x4) {
         // 100: Block data transfer (LDM/STM)
-        // Count registers and charge per register
-        // Memory wait cycles will be added by memory.cpp for each access
-        uint16_t register_list = instruction & 0xFFFF;
-        uint32_t num_registers = arm_count_registers(register_list);
-        extra_cycles = num_registers * ARM_CYCLES_TRANSFER_REG;
+        // ARM7TDMI timing:
+        //   LDM: nS + 1N + 1I → extra_cycles = 1 (internal cycle for writeback)
+        //   STM: (n-1)S + 2N → extra_cycles = 0 (no internal cycle)
+        // Per-register memory access cycles are already charged by
+        // addWaitCycles() in the LDM/STM implementation code.
+        bool is_load = (instruction >> 20) & 1;  // L bit
+        extra_cycles = is_load ? 1 : 0;
     } else {
         // Fallback: 1 cycle base
         extra_cycles = 0;
@@ -171,11 +193,23 @@ static bool arm_check_condition(ARMCondition condition, uint32_t cpsr) {
 }
 
 // Calculate multiply cycles based on operand value (same logic as Thumb)
+// Signed early termination: checks for all-0s OR all-1s in upper bits
+// Used for MUL/MLA and SMULL/SMLAL
 static uint32_t arm_get_multiply_cycles(uint32_t operand) {
     if (operand == 0) return ARM_CYCLES_MULTIPLY_MIN;
     if ((operand & 0xFFFFFF00) == 0 || (operand & 0xFFFFFF00) == 0xFFFFFF00) return ARM_CYCLES_MULTIPLY_MIN;
     if ((operand & 0xFFFF0000) == 0 || (operand & 0xFFFF0000) == 0xFFFF0000) return ARM_CYCLES_MULTIPLY_MIN + 1;
     if ((operand & 0xFF000000) == 0 || (operand & 0xFF000000) == 0xFF000000) return ARM_CYCLES_MULTIPLY_MIN + 2;
+    return ARM_CYCLES_MULTIPLY_MAX;
+}
+
+// Unsigned early termination: checks for all-0s ONLY in upper bits
+// Used for UMULL/UMLAL — Rs treated as unsigned (implicit 0 at bit 32)
+static uint32_t arm_get_multiply_cycles_unsigned(uint32_t operand) {
+    if (operand == 0) return ARM_CYCLES_MULTIPLY_MIN;
+    if ((operand & 0xFFFFFF00) == 0) return ARM_CYCLES_MULTIPLY_MIN;
+    if ((operand & 0xFFFF0000) == 0) return ARM_CYCLES_MULTIPLY_MIN + 1;
+    if ((operand & 0xFF000000) == 0) return ARM_CYCLES_MULTIPLY_MIN + 2;
     return ARM_CYCLES_MULTIPLY_MAX;
 }
 

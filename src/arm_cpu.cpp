@@ -464,7 +464,8 @@ void ARMCPU::executeOneInstruction() {
                            (instruction & 0x00000090) == 0x00000090 &&
                            (instruction & 0x00000060) != 0x00000000)
                        || ((instruction & 0x0FB00FF0) == 0x01000090)  // SWP
-                       || ((instruction & 0x0FC000F0) == 0x00000090); // MUL
+                       || ((instruction & 0x0FC000F0) == 0x00000090)  // MUL/MLA
+                       || ((instruction & 0x0F8000F0) == 0x00800090); // Long MUL (uses nonseq like store)
     uint32_t fetchCycles = isDataTransfer
         ? mem.getNonseqWaitCycles32(pc)
         : mem.getSeqWaitCycles32(pc);

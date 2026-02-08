@@ -43,9 +43,12 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
         // Format 4: ALU operations
         uint8_t op = (instruction >> 6) & 0xF;
         if (op == 0xD) { // MUL
-            // Multiply cycles depend on operand value
-            uint8_t rs = (instruction >> 3) & 0x7;
-            cycles = THUMB_CYCLES_ALU + thumb_get_multiply_cycles(registers[rs]);
+            // Thumb MUL Rd,Rs: Rd = Rd * Rs
+            // ARM7TDMI quirk: early termination is based on Rd (bits 2:0),
+            // NOT Rs (bits 5:3), despite what the ARM datasheet says.
+            // See GBATEK: "Nocash: actually it is Rd that determines m"
+            uint8_t rd = instruction & 0x7;
+            cycles = THUMB_CYCLES_ALU + thumb_get_multiply_cycles(registers[rd]);
         } else {
             cycles = THUMB_CYCLES_ALU;
         }
@@ -119,16 +122,21 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
     } else if ((instruction & THUMB_FORMAT_MASK_PUSH_POP) == THUMB_FORMAT_VAL_PUSH ||
                (instruction & THUMB_FORMAT_MASK_PUSH_POP) == THUMB_FORMAT_VAL_POP) {
         // Format 14: Push/pop registers
-        uint8_t register_list = instruction & 0xFF;
-        uint8_t lr_pc_bit = (instruction >> 8) & 0x1;
-        uint32_t num_registers = thumb_count_registers(register_list) + (lr_pc_bit ? 1 : 0);
-        cycles = THUMB_CYCLES_PUSH_POP_BASE + (num_registers * THUMB_CYCLES_TRANSFER_REG);
+        // ARM7TDMI timing:
+        //   POP (load):  nS + 1N + 1I → base + 1 internal for writeback
+        //   PUSH (store): (n-1)S + 2N → base only
+        // Per-register memory access cycles charged by addWaitCycles().
+        bool is_pop = (instruction & (1 << 11)) != 0;  // L bit: 1=POP(LDM), 0=PUSH(STM)
+        cycles = THUMB_CYCLES_PUSH_POP_BASE + (is_pop ? 1 : 0);
         
     } else if ((instruction & THUMB_FORMAT_MASK_MULTIPLE) == THUMB_FORMAT_VAL_MULTIPLE) {
-        // Format 15: Multiple load/store
-        uint8_t register_list = instruction & 0xFF;
-        uint32_t num_registers = thumb_count_registers(register_list);
-        cycles = THUMB_CYCLES_MULTIPLE_BASE + (num_registers * THUMB_CYCLES_TRANSFER_REG);
+        // Format 15: Multiple load/store (LDMIA/STMIA)
+        // ARM7TDMI timing:
+        //   LDMIA: nS + 1N + 1I → base + 1 internal for writeback
+        //   STMIA: (n-1)S + 2N → base only
+        // Per-register memory access cycles charged by addWaitCycles().
+        bool is_load = (instruction >> 11) & 1;  // L bit
+        cycles = THUMB_CYCLES_MULTIPLE_BASE + (is_load ? 1 : 0);
         
     } else if ((instruction & THUMB_FORMAT_MASK_BRANCH_COND) == THUMB_FORMAT_VAL_BRANCH_COND) {
         // Format 16: Conditional branch

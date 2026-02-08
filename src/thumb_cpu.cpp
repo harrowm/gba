@@ -1755,7 +1755,9 @@ void ThumbCPU::executeOneInstruction() {
     uint16_t hi5 = instruction >> 11;
     bool isDataTransfer = (hi5 >= 0x09 && hi5 <= 0x13)  // Formats 6-11
                        || (hi5 == 0x18 || hi5 == 0x19)  // Format 15: LDMIA/STMIA
-                       || ((instruction & 0xF600) == 0xB400);  // Format 14: PUSH/POP
+                       || ((instruction & 0xF600) == 0xB400)  // Format 14: PUSH/POP
+                       || ((instruction & 0xFC00) == 0x4000 &&  // Format 4: ALU ops
+                           ((instruction >> 6) & 0xF) == 0xD);  // MUL uses nonseq (like store)
     uint32_t fetchCycles = isDataTransfer
         ? mem.getNonseqWaitCycles16(pc)
         : mem.getSeqWaitCycles16(pc);
