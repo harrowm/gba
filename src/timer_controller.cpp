@@ -54,6 +54,16 @@ void TimerController::writeControl(int timerID, uint16_t value) {
         timer.counter = timer.reload;
         timer.lastReloadCycle = scheduler ? scheduler->getCurrentCycle() : 0;
         
+        // TIMING DEBUG: Track timer 0 enable events
+        if (timerID == 0) {
+            static int timer0_enable_count = 0;
+            if (timer0_enable_count < 50) {
+                fprintf(stderr, "[TIMER0 ENABLE #%d] reload=0x%04X lastReloadCycle=%llu prescaler=%u\n",
+                        timer0_enable_count, timer.reload, timer.lastReloadCycle, timer.getPrescalerValue());
+                timer0_enable_count++;
+            }
+        }
+        
         // Schedule timer event (unless in cascade mode)
         if (!timer.isCountUpMode()) {
             scheduleTimer(timerID);
@@ -92,6 +102,18 @@ uint16_t TimerController::readCounter(int timerID) const {
     // how many samples to mix — a stale read returns 0 delta = silence.
     if (scheduler) {
         uint64_t currentCycle = scheduler->getCurrentCycle();
+        
+        // TIMING DEBUG: Track timer 0 reads
+        if (timerID == 0) {
+            static int timer0_read_count = 0;
+            if (timer0_read_count < 50) {
+                uint64_t rawElapsed = (currentCycle >= timer.lastReloadCycle)
+                                    ? (currentCycle - timer.lastReloadCycle) : 0;
+                fprintf(stderr, "[TIMER0 READ #%d] currentCycle=%llu lastReloadCycle=%llu rawElapsed=%llu prescaler=%u\n",
+                        timer0_read_count, currentCycle, timer.lastReloadCycle, rawElapsed, timer.getPrescalerValue());
+                timer0_read_count++;
+            }
+        }
         
         // Subtract 2 cycles to account for the load instruction reading
         // the timer (1N+1I = 2 cycles). This matches mGBA's approach:

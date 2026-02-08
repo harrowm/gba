@@ -489,6 +489,19 @@ void Memory::write16(uint32_t address, uint16_t value) {
                     default: levelStr = "LOG";  break;
                 }
                 fprintf(stderr, "[mGBA %s] %s\n", levelStr, mgbaDebugString);
+                // Check for skip-on-text match (crashing suites)
+                for (int i = 0; i < skipOnTextCount; i++) {
+                    if (strstr(mgbaDebugString, skipOnTexts[i])) {
+                        skipSuiteTriggered = true;
+                        break;
+                    }
+                }
+                // Check for exit-on-text match
+                if (exitOnText && strstr(mgbaDebugString, exitOnText)) {
+                    if (!skipSuiteTriggered) {
+                        exitOnTextTriggered = true;
+                    }
+                }
                 memset(mgbaDebugString, 0, sizeof(mgbaDebugString));
             }
             return;

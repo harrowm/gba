@@ -283,11 +283,11 @@ void GBA::runFrame() {
         last_pcs[buf_idx] = pc;
         last_cpsrs[buf_idx] = cpu->CPSR();
         if (pc_valid) {
-            // Fetch the instruction for tracing
+            // Fetch the instruction for tracing (use DirectIO to avoid charging wait cycles)
             if (cpu->CPSR() & (1 << 5)) { // Thumb
-                last_instrs[buf_idx] = memory.read16(pc);
+                last_instrs[buf_idx] = memory.readDirectIO16(pc);
             } else { // ARM
-                last_instrs[buf_idx] = memory.read32(pc);
+                last_instrs[buf_idx] = memory.readDirectIO32(pc);
             }
         } else {
             last_instrs[buf_idx] = 0xDEADBEEF; // Invalid PC marker

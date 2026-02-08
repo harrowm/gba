@@ -173,6 +173,23 @@ private:
     // Used by test ROMs (mgba-emu/suite) to output PASS/FAIL results
     char mgbaDebugString[256] = {0};
     bool mgbaDebugEnabled = false;
+
+public:
+    // Auto-exit when mGBA debug output contains this text
+    void setExitOnText(const char* text) { exitOnText = text; exitOnTextTriggered = false; }
+    bool shouldExitOnText() const { return exitOnTextTriggered; }
+    // Skip-on-text: when debug output matches, set a skip flag (for crashing suites)
+    void addSkipOnText(const char* text) {
+        if (skipOnTextCount < 8) skipOnTexts[skipOnTextCount++] = text;
+    }
+    bool shouldSkipSuite() const { return skipSuiteTriggered; }
+    void clearSkipSuite() { skipSuiteTriggered = false; }
+private:
+    const char* exitOnText = nullptr;
+    bool exitOnTextTriggered = false;
+    const char* skipOnTexts[8] = {};
+    int skipOnTextCount = 0;
+    bool skipSuiteTriggered = false;
 };
 
 #endif // MEMORY_H

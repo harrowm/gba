@@ -468,4 +468,5 @@ void ARMCPU::executeOneInstruction() {
     uint32_t fetchCycles = isDataTransfer
         ? mem.getNonseqWaitCycles32(pc)
         : mem.getSeqWaitCycles32(pc);
+    
     parentCPU.advanceCycles(instruction_cycles + fetchCycles + dataCycles);}
