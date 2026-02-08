@@ -289,13 +289,6 @@ void APU::reset() {
     frameSamples.reserve(MAX_SAMPLES_PER_FRAME * 2);
 }
 
-void APU::enable(bool enabled) {
-    audioEnabled = enabled;
-    if (audioDevice != 0) {
-        SDL_PauseAudioDevice(audioDevice, enabled ? 0 : 1);
-    }
-}
-
 // ===== Register Read/Write =====
 
 uint8_t APU::read8(uint32_t address) {
@@ -440,22 +433,4 @@ void APU::write32(uint32_t address, uint32_t value) {
 void APU::writeFIFO_A(uint32_t data) { fifoA.write(data); }
 void APU::writeFIFO_B(uint32_t data) { fifoB.write(data); }
 
-// PSG stubs
-int16_t APU::generatePSGSample() { return 0; }
-int16_t APU::generateChannel1Sample() { return 0; }
-int16_t APU::generateChannel2Sample() { return 0; }
-int16_t APU::generateChannel3Sample() { return 0; }
-int16_t APU::generateChannel4Sample() { return 0; }
 
-void APU::dumpState() const {
-    printf("\n=== APU State ===\n");
-    printf("Master Enable: %s\n", (soundcnt_x & 0x80) ? "ON" : "OFF");
-    printf("SOUNDCNT_L: 0x%04X\n", soundcnt_l);
-    printf("SOUNDCNT_H: 0x%04X\n", soundcnt_h);
-    printf("SOUNDCNT_X: 0x%04X\n", soundcnt_x);
-    printf("SOUNDBIAS: 0x%04X\n", soundbias);
-    printf("FIFO A: %d words, current=0x%02X\n", fifoA.size(), (uint8_t)fifoA.currentSample);
-    printf("FIFO B: %d words, current=0x%02X\n", fifoB.size(), (uint8_t)fifoB.currentSample);
-    printf("SDL queue: %u samples\n", getQueuedSamples());
-    printf("=================\n\n");
-}

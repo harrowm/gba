@@ -148,11 +148,7 @@ private:
     void mixChannels(int16_t& outLeft, int16_t& outRight);
     void scheduleSampleEvent();   // Schedule next AUDIO_SAMPLE on scheduler
     void onSampleEvent();         // Called by scheduler every ~350 cycles
-    int16_t generatePSGSample();
-    int16_t generateChannel1Sample();
-    int16_t generateChannel2Sample();
-    int16_t generateChannel3Sample();
-    int16_t generateChannel4Sample();
+
 
 public:
     APU();
@@ -172,10 +168,7 @@ public:
     void writeFIFO_A(uint32_t data);
     void writeFIFO_B(uint32_t data);
 
-    bool fifoA_needsRefill() const { return fifoA.needsRefill(); }
-    bool fifoB_needsRefill() const { return fifoB.needsRefill(); }
-    int getFifoA_timer() const { return (soundcnt_h & 0x0400) ? 1 : 0; }
-    int getFifoB_timer() const { return (soundcnt_h & 0x4000) ? 1 : 0; }
+
 
     uint32_t getQueuedBytes() const {
         return audioDevice ? SDL_GetQueuedAudioSize(audioDevice) : 0;
@@ -183,13 +176,10 @@ public:
     uint32_t getQueuedSamples() const {
         return getQueuedBytes() / (2 * sizeof(int16_t));
     }
-    uint32_t getBufferLevel() const { return getQueuedSamples(); }
+
 
     void reset();
-    void enable(bool enabled);
     bool isEnabled() const { return audioEnabled && (soundcnt_x & 0x80); }
-    void dumpState() const;
-    uint64_t getCycleCounter() const { return cycleCounter; }
 };
 
 #endif
