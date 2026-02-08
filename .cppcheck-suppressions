@@ -1,0 +1,30 @@
+// cppcheck suppression file for false positives
+// Run: cppcheck --suppressions-list=.cppcheck-suppressions --enable=all -I include/ src/
+
+// Platform model mismatch: cppcheck thinks uint64_t = unsigned long, but on
+// macOS arm64 (clang), uint64_t = unsigned long long. All %llu format strings
+// are correct per the actual compiler.
+invalidPrintfArgType_uint
+
+// ThumbCPU bit-extraction methods are dispatched via constexpr function pointer
+// tables and cannot be made static (would break table-based dispatch).
+functionStatic:include/thumb_cpu.h
+
+// These variables are used by DEBUG_LOG macros at outer scope in debug builds.
+// Moving them into narrower scope would break -DDEBUG_BUILD compilation.
+variableScope:src/arm_exec_multiply.cpp
+
+// Variables need outer scope: used across arg-parsing loop and post-loop.
+variableScope:src/main.cpp
+
+// Variable scope is already minimal for DMA register parsing.
+variableScope:src/memory.cpp
+
+// System headers
+missingIncludeSystem
+
+// Private methods accessed via function pointer tables
+unusedPrivateFunction
+
+// Functions used across translation units via headers
+unusedFunction

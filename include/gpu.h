@@ -480,7 +480,7 @@ public:
     bool isForcedBlank();             // Check if display is blanked
     
     // BGxCNT register parsing
-    BGConfig parseBGCNT(uint16_t bgcnt);
+    static BGConfig parseBGCNT(uint16_t bgcnt);
     BGConfig readBGCNT(int bgNum);    // Read and parse BGxCNT (bgNum: 0-3)
     
     // Helper to get screen dimensions from size code
@@ -505,7 +505,7 @@ public:
                        int& pixelInTileX, int& pixelInTileY);       // Convert pixel to tile coords
     
     // OAM (sprite) functions
-    OBJAttributes parseOBJAttributes(uint16_t attr0, uint16_t attr1, uint16_t attr2);
+    static OBJAttributes parseOBJAttributes(uint16_t attr0, uint16_t attr1, uint16_t attr2);
     OBJAttributes readOBJAttributes(int objNum);                // Read OBJ attributes (objNum: 0-127)
     static void getOBJDimensions(uint8_t shape, uint8_t size, int& width, int& height);
     
@@ -535,7 +535,7 @@ public:
     WindowControl readWindowControl();                          // Read and parse window registers
     static bool isPixelInWindow(int x, int y, const Window& win);     // Check if pixel is in window
     uint8_t getWindowControlForPixel(int x, int y, const WindowControl& winCtrl);  // Get control flags
-    uint16_t applyBlend(uint16_t color1, uint16_t color2, const BlendControl& blend, 
+    static uint16_t applyBlend(uint16_t color1, uint16_t color2, const BlendControl& blend, 
                        int layerType1, int layerType2);         // Apply blend effect
     static uint16_t applyBrightnessIncrease(uint16_t color, uint8_t evy);  // Brighten color
     static uint16_t applyBrightnessDecrease(uint16_t color, uint8_t evy);  // Darken color
