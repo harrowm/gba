@@ -269,7 +269,7 @@ void ARMCPU::exec_arm_undefined(uint32_t instruction) {
     undef_count++;
     if (undef_count <= 20) {
         LOG_CRASH("[UNDEFINED INSTRUCTION #%d] PC=0x%08X Instr=0x%08X\n", undef_count, parentCPU.R()[15], instruction);
-        LOG_CRASH("  CPSR=0x%08X Mode=0x%02X T=%d\n", parentCPU.CPSR(), parentCPU.CPSR() & 0x1F, (parentCPU.CPSR() >> 5) & 1);
+        LOG_CRASH("  CPSR=0x%08X Mode=0x%02X T=%u\n", parentCPU.CPSR(), parentCPU.CPSR() & 0x1F, (parentCPU.CPSR() >> 5) & 1);
         LOG_CRASH("  R0-R3: %08X %08X %08X %08X\n", parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[2], parentCPU.R()[3]);
         LOG_CRASH("  LR=%08X SP=%08X\n", parentCPU.R()[14], parentCPU.R()[13]);
         fflush(stdout);

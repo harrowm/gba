@@ -18,8 +18,10 @@ public:
     static constexpr size_t BLOCK_SIZE = 64 * 1024; // 64KB
     static constexpr size_t NUM_BLOCKS = 0x10000000 / BLOCK_SIZE; // 256MB / 64KB = 4096
 
-    Memory(bool testMode = false);
+    explicit Memory(bool testMode = false);
     ~Memory();
+    Memory(const Memory&) = delete;
+    Memory& operator=(const Memory&) = delete;
 
     // Scheduler integration
     void setScheduler(Scheduler* sched) { scheduler = sched; }

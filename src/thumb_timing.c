@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+// Forward declarations for static helper functions
+static uint32_t thumb_get_multiply_cycles(uint32_t operand);
+static uint32_t thumb_count_registers(uint16_t register_list);
+
 // Calculate cycles for a Thumb instruction before execution
 uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, uint32_t* registers, uint32_t cpsr) {
     // ARM7TDMI Pipeline Model:
@@ -183,7 +187,7 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
 
 // Calculate multiply cycles based on operand value
 // GBA multiply timing: 1S + m cycles, where m is 1-4 depending on operand
-uint32_t thumb_get_multiply_cycles(uint32_t operand) {
+static uint32_t thumb_get_multiply_cycles(uint32_t operand) {
     if (operand == 0) return 1;
     if ((operand & 0xFFFFFF00) == 0 || (operand & 0xFFFFFF00) == 0xFFFFFF00) return 1;
     if ((operand & 0xFFFF0000) == 0 || (operand & 0xFFFF0000) == 0xFFFF0000) return 2;
@@ -192,7 +196,7 @@ uint32_t thumb_get_multiply_cycles(uint32_t operand) {
 }
 
 // Count number of set bits in register list
-uint32_t thumb_count_registers(uint16_t register_list) {
+static uint32_t thumb_count_registers(uint16_t register_list) {
     uint32_t count = 0;
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {

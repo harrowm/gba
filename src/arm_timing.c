@@ -2,6 +2,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Forward declarations for static helper functions
+static bool arm_check_condition(ARMCondition condition, uint32_t cpsr);
+static uint32_t arm_get_multiply_cycles(uint32_t operand);
+static uint32_t arm_count_registers(uint16_t register_list);
+
 // Lookup table for common instruction patterns (indexed by bits 27-20)
 // This covers the most frequent instruction patterns to avoid conditional logic
 static const uint8_t arm_instruction_cycles_lut[256] = {
@@ -24,7 +29,7 @@ static const uint8_t arm_instruction_cycles_lut[256] = {
 };
 
 // Calculate cycles for an ARM instruction before execution
-uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uint32_t* registers, uint32_t cpsr) {
+uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, const uint32_t* registers, uint32_t cpsr) {
     // ARM7TDMI Pipeline Model:
     // The 3-stage pipeline (Fetch -> Decode -> Execute) runs in parallel.
     // While instruction N executes, instruction N+1 is decoded and N+2 is fetched.
@@ -134,7 +139,7 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uin
 }
 
 // Check if ARM condition is satisfied
-bool arm_check_condition(ARMCondition condition, uint32_t cpsr) {
+static bool arm_check_condition(ARMCondition condition, uint32_t cpsr) {
     // Fast path for most common conditions
     if (condition == ARM_COND_AL) return true;  // Always - most common
     
@@ -166,7 +171,7 @@ bool arm_check_condition(ARMCondition condition, uint32_t cpsr) {
 }
 
 // Calculate multiply cycles based on operand value (same logic as Thumb)
-uint32_t arm_get_multiply_cycles(uint32_t operand) {
+static uint32_t arm_get_multiply_cycles(uint32_t operand) {
     if (operand == 0) return ARM_CYCLES_MULTIPLY_MIN;
     if ((operand & 0xFFFFFF00) == 0 || (operand & 0xFFFFFF00) == 0xFFFFFF00) return ARM_CYCLES_MULTIPLY_MIN;
     if ((operand & 0xFFFF0000) == 0 || (operand & 0xFFFF0000) == 0xFFFF0000) return ARM_CYCLES_MULTIPLY_MIN + 1;
@@ -176,7 +181,7 @@ uint32_t arm_get_multiply_cycles(uint32_t operand) {
 
 // Count number of set bits in register list for LDM/STM
 // Uses Brian Kernighan's algorithm for efficient bit counting
-uint32_t arm_count_registers(uint16_t register_list) {
+static uint32_t arm_count_registers(uint16_t register_list) {
     uint32_t count = 0;
     uint32_t value = register_list;
     
@@ -190,7 +195,7 @@ uint32_t arm_count_registers(uint16_t register_list) {
 }
 
 // Calculate shifted register operand (simplified - full implementation would handle all cases)
-uint32_t arm_calculate_shifted_register(uint32_t instruction, uint32_t* registers, uint32_t* carry_out) {
+uint32_t arm_calculate_shifted_register(uint32_t instruction, const uint32_t* registers, uint32_t* carry_out) {
     uint32_t rm = ARM_GET_RM(instruction);
     uint32_t value = registers[rm];
     ARMShiftType shift_type = (ARMShiftType)ARM_GET_SHIFT_TYPE(instruction);
@@ -234,7 +239,11 @@ uint32_t arm_calculate_shifted_register(uint32_t instruction, uint32_t* register
                 return (value & 0x80000000) ? 0xFFFFFFFF : 0;
             }
             *carry_out = (value >> (shift_amount - 1)) & 1;
-            return (int32_t)value >> shift_amount;
+            // Portable arithmetic right shift (avoids implementation-defined signed shift)
+            if (value & 0x80000000) {
+                return (value >> shift_amount) | (~0u << (32 - shift_amount));
+            }
+            return value >> shift_amount;
             
         case ARM_SHIFT_ROR: // Rotate right
             shift_amount &= 31; // Rotate is modulo 32

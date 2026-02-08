@@ -92,9 +92,7 @@ public:
         } else if (hi == 0) {
             if (lo & 0x80000000) cpsr |= (1u << 31); // N
         } else {
-            if (hi == 0 && lo == 0) {
-                cpsr |= (1u << 30); // Z
-            } else if (hi & 0x80000000) {
+            if (hi & 0x80000000) {
                 cpsr |= (1u << 31); // N
             }
         }

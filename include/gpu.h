@@ -362,7 +362,7 @@ private:
     std::function<void()> hblankCallback;
 
 public:
-    GPU(Memory& mem);
+    explicit GPU(Memory& mem);
     
     // Setup video timing with scheduler
     void setupTiming(Scheduler* scheduler);
@@ -391,8 +391,8 @@ public:
                            uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                            const WindowControl& winCtrl);
     
-    void applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, 
-                              uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+    void applyBlendToScanline(uint16_t* lineBuffer, const uint8_t* layerTypeBuffer, 
+                              const uint16_t* secondLayerBuffer, const uint8_t* secondLayerTypeBuffer,
                               uint16_t scanline, const BlendControl& blend, const WindowControl& winCtrl);
     
     // Helper rendering functions
@@ -445,7 +445,7 @@ public:
             return 0;
         }
         
-        uint8_t* vram = memory.getVRAM();
+        const uint8_t* vram = memory.getVRAM();
         uint32_t offset = tileAddr - 0x06000000;
         
         // Calculate byte offset (2 pixels per byte)
@@ -463,7 +463,7 @@ public:
             return 0;
         }
         
-        uint8_t* vram = memory.getVRAM();
+        const uint8_t* vram = memory.getVRAM();
         uint32_t offset = tileAddr - 0x06000000;
         
         // Calculate byte offset (1 pixel per byte)

@@ -97,8 +97,6 @@ extern "C" {
 
 // Function prototypes
 uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, uint32_t* registers, uint32_t cpsr);
-uint32_t thumb_get_multiply_cycles(uint32_t operand);
-uint32_t thumb_count_registers(uint16_t register_list);
 bool thumb_is_branch_taken(uint16_t instruction, uint32_t cpsr);
 
 #ifdef __cplusplus

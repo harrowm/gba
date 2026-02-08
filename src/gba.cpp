@@ -201,7 +201,7 @@ void GBA::runFrame() {
             uint16_t irq_if = memory.readDirectIO16(0x04000202);
             uint8_t postflg = memory.readDirectIO8(0x03007FFA);  // POSTFLG register
             uint32_t irq_handler = memory.readDirectIO32(0x03007FFC);  // User IRQ handler address
-            LOG_TRACE_CAT("[Frame %d] Cycle: %llu, PC: 0x%08X, LR: 0x%08X, POSTFLG=0x%02X, IRQ_HANDLER=0x%08X, IME=%d, IE=0x%04X, IF=0x%04X\n", 
+            LOG_TRACE_CAT("[Frame %d] Cycle: %llu, PC: 0x%08X, LR: 0x%08X, POSTFLG=0x%02X, IRQ_HANDLER=0x%08X, IME=%u, IE=0x%04X, IF=0x%04X\n", 
                    frame_num, scheduler.getCurrentCycle(), pc, lr, postflg, irq_handler, ime, ie, irq_if);
             
             // Check if we've entered ROM
@@ -256,10 +256,10 @@ void GBA::runFrame() {
         uint32_t cpsr = cpu->CPSR();
         uint32_t suspicious_bits = cpsr & 0x0FFFFF00; // Bits 8-27 (NOT including flags 28-31)
         static bool cpsr_corruption_detected = false;
-        if (!cpsr_corruption_detected && suspicious_bits != 0 && suspicious_bits != 0x00000080) {
+        if (!cpsr_corruption_detected && suspicious_bits != 0) {
             LOG_CRASH("\n[CPSR CORRUPTION!] PC=0x%08X, CPSR=0x%08X (suspicious bits 8-27: 0x%08X)\n",
                    pc, cpsr, suspicious_bits);
-            LOG_CRASH("  Mode: 0x%02X, I:%d F:%d T:%d, Flags: N:%d Z:%d C:%d V:%d\n",
+            LOG_CRASH("  Mode: 0x%02X, I:%u F:%u T:%u, Flags: N:%u Z:%u C:%u V:%u\n",
                    cpsr & 0x1F, (cpsr >> 7) & 1, (cpsr >> 6) & 1, (cpsr >> 5) & 1,
                    (cpsr >> 31) & 1, (cpsr >> 30) & 1, (cpsr >> 29) & 1, (cpsr >> 28) & 1);
             cpsr_corruption_detected = true;
@@ -325,7 +325,7 @@ void GBA::runFrame() {
                        cpu->R()[8], cpu->R()[9], cpu->R()[10], cpu->R()[11]);
                 LOG_CRASH("  R12-R15: %08X %08X %08X %08X\n",
                        cpu->R()[12], cpu->R()[13], cpu->R()[14], cpu->R()[15]);
-                LOG_CRASH("  CPSR: %08X, Mode: 0x%02X, T=%d\n",
+                LOG_CRASH("  CPSR: %08X, Mode: 0x%02X, T=%u\n",
                        cpu->CPSR(), cpu->CPSR() & 0x1F, (cpu->CPSR() >> 5) & 1);
                 LOG_CRASH("  Last instruction fetch from: %s\n", last_region);
                 
@@ -353,7 +353,7 @@ void GBA::runFrame() {
                        cpu->R()[8], cpu->R()[9], cpu->R()[10], cpu->R()[11]);
                 LOG_CRASH("  R12-R15: %08X %08X %08X %08X\n",
                        cpu->R()[12], cpu->R()[13], cpu->R()[14], cpu->R()[15]);
-                LOG_CRASH("  CPSR: %08X, Mode: 0x%02X, T=%d\n",
+                LOG_CRASH("  CPSR: %08X, Mode: 0x%02X, T=%u\n",
                        cpu->CPSR(), cpu->CPSR() & 0x1F, (cpu->CPSR() >> 5) & 1);
                 LOG_CRASH("  IRQ handler dump @0x030004B0:\n");
                 for (int i = 0; i < 16; i++) {

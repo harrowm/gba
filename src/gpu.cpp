@@ -15,6 +15,9 @@ GPU::GPU(Memory& mem)
     // Initialize GPU state
     // Clear the tiled framebuffer
     memset(tiledFramebuffer, 0, sizeof(tiledFramebuffer));
+    memset(spriteLayer, 0, sizeof(spriteLayer));
+    memset(spriteOrderLayer, 0, sizeof(spriteOrderLayer));
+    memset(objWindowMask, 0, sizeof(objWindowMask));
     
     // Initialize VCOUNT to 0 (some tests check this before any scanlines run)
     memory.write16(REG_VCOUNT, 0);
@@ -296,7 +299,7 @@ void GPU::renderMode4Scanline(uint16_t scanline) {
     
     bool useSecondFrame = (dispcnt & (1 << 4)) != 0; // Bit 4: frame select
     
-    uint8_t* vram = memory.getVRAM();
+    const uint8_t* vram = memory.getVRAM();
     uint32_t frameOffset = useSecondFrame ? 0xA000 : 0x0000;
     uint32_t scanlineOffset = scanline * 240; // 240 pixels per scanline, 1 byte each
     
@@ -382,9 +385,9 @@ uint16_t GPU::readBGPaletteRaw(int paletteNum, int colorIndex) {
         // Debug: Log palette 0, color 3 reads
         static int debugCount = 0;
         if (paletteNum == 0 && colorIndex == 3 && debugCount < 3) {
-            uint16_t* paletteRAM = reinterpret_cast<uint16_t*>(memory.getPaletteRAM());
+            const uint16_t* paletteRAM = reinterpret_cast<const uint16_t*>(memory.getPaletteRAM());
             uint16_t value = paletteRAM[offset / 2];
-            LOG_TRACE_CAT("[Palette Debug] Reading BG palette[0][3]: offset=%d, value=0x%04X\n", offset, value);
+            LOG_TRACE_CAT("[Palette Debug] Reading BG palette[0][3]: offset=%u, value=0x%04X\n", offset, value);
             debugCount++;
         }
     } else {
@@ -395,7 +398,8 @@ uint16_t GPU::readBGPaletteRaw(int paletteNum, int colorIndex) {
         offset = colorIndex * 2;
     }
     
-    uint8_t* paletteRAM = memory.getPaletteRAM();
+
+    const uint8_t* paletteRAM = memory.getPaletteRAM();
     
     // Read 16-bit color value (little endian)
     return paletteRAM[offset] | (paletteRAM[offset + 1] << 8);
@@ -422,7 +426,7 @@ uint16_t GPU::readOBJPaletteRaw(int paletteNum, int colorIndex) {
         offset = 0x200 + (paletteNum * 16 + colorIndex) * 2;
     }
     
-    uint8_t* paletteRAM = memory.getPaletteRAM();
+    const uint8_t* paletteRAM = memory.getPaletteRAM();
     
     // Read 16-bit color value (little endian)
     return paletteRAM[offset] | (paletteRAM[offset + 1] << 8);
@@ -781,7 +785,7 @@ void GPU::getOBJDimensions(uint8_t shape, uint8_t size, int& width, int& height)
 }
 
 OBJAttributes GPU::parseOBJAttributes(uint16_t attr0, uint16_t attr1, uint16_t attr2) {
-    OBJAttributes obj;
+    OBJAttributes obj{};
     
     // Parse Attribute 0 (Y position, rotation, mode, shape)
     obj.y = attr0 & OBJ_ATTR0_Y_MASK;
@@ -841,7 +845,7 @@ OBJAttributes GPU::readOBJAttributes(int objNum) {
     // Read OAM attributes for sprite objNum (0-127)
     if (objNum < 0 || objNum >= 128) {
         // Return invalid sprite
-        OBJAttributes invalid;
+        OBJAttributes invalid{};
         invalid.visible = false;
         invalid.width = 0;
         invalid.height = 0;
@@ -1246,7 +1250,7 @@ void GPU::renderBGScanlineWithPriority(int bgNum, uint16_t scanline,
  * BG3: 0x04000030-0x0400003F
  */
 AffineBackgroundParams GPU::readAffineBGParams(int bgNum) {
-    AffineBackgroundParams params;
+    AffineBackgroundParams params{};
     
     uint32_t baseAddr = (bgNum == 2) ? REG_BG2PA : REG_BG3PA;
     
@@ -1835,8 +1839,8 @@ void GPU::renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanli
     }
 }
 
-void GPU::applyBlendToScanline(uint16_t* lineBuffer, uint8_t* layerTypeBuffer, 
-                                uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
+void GPU::applyBlendToScanline(uint16_t* lineBuffer, const uint8_t* layerTypeBuffer, 
+                                const uint16_t* secondLayerBuffer, const uint8_t* secondLayerTypeBuffer,
                                 uint16_t scanline, const BlendControl& blend, const WindowControl& winCtrl) {
     // Apply blend effects based on mode
     switch (blend.mode) {
@@ -2200,7 +2204,7 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
                 
                 // Get color index from VRAM
                 uint8_t colorIndex;
-                uint8_t* vram = memory.getVRAM();
+                const uint8_t* vram = memory.getVRAM();
                 uint32_t vramOffset = tileAddr - VRAM_BASE;
                 
                 if (obj.paletteMode) {
@@ -2279,7 +2283,7 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
             
             // Get color index from VRAM
             uint8_t colorIndex;
-            uint8_t* vram = memory.getVRAM();
+            const uint8_t* vram = memory.getVRAM();
             uint32_t vramOffset = tileAddr - VRAM_BASE;
             
             if (obj.paletteMode) {
@@ -2378,7 +2382,7 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
         // Log at multiple X positions to see what's happening
         if (postFrame >= 690 && postFrame <= 695 && scanline == 110 && (x == 40 || x == 80 || x == 120 || x == 160)) {
             uint32_t objNum = (spritePixel & FLAG_ORDER_MASK) >> OFFSET_ORDER;
-            LOG_TRACE_CAT("[POSTPROC F%d L%d x%d] obj%d color=0x%04X isBlend=%d isSemi=%d mode=%d 1stTgt=%d\n",
+            LOG_TRACE_CAT("[POSTPROC F%d L%d x%d] obj%u color=0x%04X isBlend=%d isSemi=%d mode=%d 1stTgt=%d\n",
                    postFrame, scanline, x, objNum, spriteColor, isBlendTarget, isSemiTransparent,
                    blend.mode, blend.firstTargets);
         }
@@ -2438,7 +2442,7 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
                        (dispcnt >> 8) & 1, (dispcnt >> 9) & 1, (dispcnt >> 10) & 1, (dispcnt >> 11) & 1,
                        (dispcnt >> 12) & 1);
                 LOG_TRACE_CAT("  Palette 0: 0x%04X\n", palette0);
-                LOG_TRACE_CAT("  OBJ#: %d\n", objNum);
+                LOG_TRACE_CAT("  OBJ#: %u\n", objNum);
                 LOG_TRACE_CAT("  Sprite color: 0x%04X (R=%d G=%d B=%d)\n", 
                        spriteColor, spriteColor & 0x1F, (spriteColor >> 5) & 0x1F, (spriteColor >> 10) & 0x1F);
                 LOG_TRACE_CAT("  BG color (lineBuffer): 0x%04X (R=%d G=%d B=%d)\n",
@@ -2502,7 +2506,7 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
                 // Debug: Log blending during highlight phase
                 if (postFrame >= 690 && postFrame <= 695 && scanline == 110 && x == 120) {
                     uint32_t objNum = (spritePixel & FLAG_ORDER_MASK) >> OFFSET_ORDER;
-                    LOG_TRACE_CAT("[BLEND F%d L%d x%d] obj%d spriteColor=0x%04X bgColor=0x%04X eva=%d evb=%d behindType=%d\n",
+                    LOG_TRACE_CAT("[BLEND F%d L%d x%d] obj%u spriteColor=0x%04X bgColor=0x%04X eva=%d evb=%d behindType=%d\n",
                            postFrame, scanline, x, objNum, spriteColor, bgColor, blend.eva, blend.evb, behindLayerType);
                 }
             

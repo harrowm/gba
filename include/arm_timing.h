@@ -97,11 +97,8 @@ extern "C" {
 #endif
 
 // Function prototypes
-uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, uint32_t* registers, uint32_t cpsr);
-bool arm_check_condition(ARMCondition condition, uint32_t cpsr);
-uint32_t arm_get_multiply_cycles(uint32_t operand);
-uint32_t arm_count_registers(uint16_t register_list);
-uint32_t arm_calculate_shifted_register(uint32_t instruction, uint32_t* registers, uint32_t* carry_out);
+uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, const uint32_t* registers, uint32_t cpsr);
+uint32_t arm_calculate_shifted_register(uint32_t instruction, const uint32_t* registers, uint32_t* carry_out);
 uint32_t arm_calculate_immediate_operand(uint32_t instruction, uint32_t* carry_out);
 
 #ifdef __cplusplus

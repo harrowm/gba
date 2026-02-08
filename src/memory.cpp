@@ -237,7 +237,7 @@ uint8_t Memory::read8(uint32_t address) const {
     }
 
     uint32_t offset;
-    uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
+    const uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
     if (!base) {
         // ROM open bus: out-of-bounds ROM reads return halfword address reflection
         uint32_t region = address >> 24;
@@ -374,7 +374,7 @@ uint16_t Memory::read16(uint32_t address) const {
     // reads the byte at the exact address (DMA provides pre-aligned addresses).
     if ((address >> 24) >= 0x0E) {
         uint32_t sramOffset;
-        uint8_t* sramBase = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, sramOffset);
+        const uint8_t* sramBase = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, sramOffset);
         if (!sramBase) return 0xFFFF;
         uint8_t byte = sramBase[sramOffset];
         return byte | ((uint16_t)byte << 8);
@@ -396,7 +396,7 @@ uint16_t Memory::read16(uint32_t address) const {
     address &= ~1u;
     
     uint32_t offset;
-    uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
+    const uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, offset);
     if (!base) {
         // ROM open bus: out-of-bounds ROM reads return halfword address reflection
         uint32_t region = address >> 24;
@@ -549,7 +549,7 @@ void Memory::write16(uint32_t address, uint16_t value) {
         if (vram_writes++ < 200) {
             if (address >= 0x06010000) {
                 uint32_t tileNum = (address - 0x06010000) / 32;
-                LOG_VRAM("[OBJ VRAM Write #%d] addr=0x%08X (tile %d, offset 0x%06X) val=0x%04X\n",
+                LOG_VRAM("[OBJ VRAM Write #%d] addr=0x%08X (tile %u, offset 0x%06X) val=0x%04X\n",
                        vram_writes, address, tileNum, address - 0x06010000, val);
             } else {
                 LOG_VRAM("[BG VRAM Write #%d] addr=0x%08X (offset 0x%06X) val=0x%04X\n",
@@ -904,14 +904,14 @@ void Memory::setKeyState(uint16_t keyState) {
 // Used by tracer and debugging code that shouldn't affect timing
 uint8_t Memory::readDirectIO8(uint32_t address) const {
     uint32_t offset;
-    uint8_t* base = get_region_base(this->regionTable, address, offset);
+    const uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return 0xFF;
     return base[offset];
 }
 
 uint16_t Memory::readDirectIO16(uint32_t address) const {
     uint32_t offset;
-    uint8_t* base = get_region_base(this->regionTable, address, offset);
+    const uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return 0xFFFF;
     
     // For IWRAM, we need to properly wrap around at 32KB (0x8000)
@@ -925,7 +925,7 @@ uint16_t Memory::readDirectIO16(uint32_t address) const {
 
 uint32_t Memory::readDirectIO32(uint32_t address) const {
     uint32_t offset;
-    uint8_t* base = get_region_base(this->regionTable, address, offset);
+    const uint8_t* base = get_region_base(this->regionTable, address, offset);
     if (!base) return 0xFFFFFFFF;
     
     // For IWRAM, we need to properly wrap around at 32KB (0x8000)
@@ -989,7 +989,7 @@ uint32_t Memory::read32(uint32_t address) const {
     // reads the byte at the exact address (DMA provides pre-aligned addresses).
     if ((address >> 24) >= 0x0E) {
         uint32_t sramOffset;
-        uint8_t* sramBase = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, sramOffset);
+        const uint8_t* sramBase = get_region_base(const_cast<uint8_t* const*>(this->regionTable), address, sramOffset);
         if (!sramBase) return 0xFFFFFFFF;
         uint8_t byte = sramBase[sramOffset];
         return byte * 0x01010101u;
@@ -1013,7 +1013,7 @@ uint32_t Memory::read32(uint32_t address) const {
     // LDM, DMA, and other bus masters just get the aligned word.
     uint32_t aligned_address = address & ~3u;  // Align to 4-byte boundary
     uint32_t offset;
-    uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), aligned_address, offset);
+    const uint8_t* base = get_region_base(const_cast<uint8_t* const*>(this->regionTable), aligned_address, offset);
     if (!base) {
         // ROM open bus: out-of-bounds ROM reads return halfword address reflection
         uint32_t region = aligned_address >> 24;
@@ -1553,7 +1553,7 @@ void Memory::updateWaitstates(uint16_t waitcnt) {
     static const uint8_t romWaitstatesSeq[] = { 2, 1, 4, 1, 8, 1 }; // S access
     
     // Parse WAITCNT fields
-    int sram   =  waitcnt & 0x0003;
+    int sramWait =  waitcnt & 0x0003;
     int ws0    = (waitcnt & 0x000C) >> 2;
     int ws0seq = (waitcnt & 0x0010) >> 4;
     int ws1    = (waitcnt & 0x0060) >> 5;
@@ -1563,10 +1563,10 @@ void Memory::updateWaitstates(uint16_t waitcnt) {
     prefetchEnabled = (waitcnt & 0x4000) != 0;
     
     // SRAM (region 0x0E, mirror 0x0F)
-    waitstatesNonseq16[0x0E] = waitstatesNonseq16[0x0F] = romWaitstates[sram];
-    waitstatesSeq16[0x0E]    = waitstatesSeq16[0x0F]    = romWaitstates[sram];
-    waitstatesNonseq32[0x0E] = waitstatesNonseq32[0x0F] = 2 * romWaitstates[sram] + 1;
-    waitstatesSeq32[0x0E]    = waitstatesSeq32[0x0F]    = 2 * romWaitstates[sram] + 1;
+    waitstatesNonseq16[0x0E] = waitstatesNonseq16[0x0F] = romWaitstates[sramWait];
+    waitstatesSeq16[0x0E]    = waitstatesSeq16[0x0F]    = romWaitstates[sramWait];
+    waitstatesNonseq32[0x0E] = waitstatesNonseq32[0x0F] = 2 * romWaitstates[sramWait] + 1;
+    waitstatesSeq32[0x0E]    = waitstatesSeq32[0x0F]    = 2 * romWaitstates[sramWait] + 1;
     
     // ROM Wait State 0 (regions 0x08, 0x09) - 16-bit non-sequential
     waitstatesNonseq16[0x08] = waitstatesNonseq16[0x09] = romWaitstates[ws0];

@@ -105,7 +105,7 @@ void ThumbCPU::execute(uint32_t cycles) {
         uint32_t pc = parentCPU.R()[15];
         if (pc >= 0x120 && pc <= 0x126 && loop_trace_count < 20) {
             uint32_t cpsr = parentCPU.CPSR();
-            LOG_TRACE_CAT("[LOOP #%llu] PC=0x%04X Instr=0x%04X | R0=%08X R1=%08X R4=%08X | CPSR=0x%08X (N=%d Z=%d C=%d V=%d)\n",
+            LOG_TRACE_CAT("[LOOP #%llu] PC=0x%04X Instr=0x%04X | R0=%08X R1=%08X R4=%08X | CPSR=0x%08X (N=%u Z=%u C=%u V=%u)\n",
                    loop_trace_count++, pc, instruction,
                    parentCPU.R()[0], parentCPU.R()[1], parentCPU.R()[4],
                    cpsr,
@@ -125,7 +125,6 @@ void ThumbCPU::execute(uint32_t cycles) {
         DEBUG_INFO("Incremented PC to: " + debug_to_hex_string(parentCPU.R()[15], 8));
         
         // Capstone disassembly hook
-        extern bool g_disassemble_enabled;
         if (g_disassemble_enabled && capstone_handle) {
             cs_insn* insn;
             size_t count = cs_disasm(capstone_handle,
@@ -1434,7 +1433,6 @@ void ThumbCPU::thumb_swi(uint16_t instruction) {
     uint8_t comment = instruction & 0xFF; // Software interrupt comment (bits 0-7)
 
     // Track SWI calls - only log decompression SWIs
-    extern uint32_t g_current_frame;
     
     // Handle the software interrupt - trigger SVC exception
     DEBUG_INFO("Executing Thumb SWI: Software interrupt with comment 0x" + std::to_string(comment));
@@ -1596,7 +1594,6 @@ void ThumbCPU::executeOneInstruction() {
     uint16_t instruction = mem.readDirectIO16(pc);
     
     // BIOS tracing for THUMB instructions (matching ARM trace logic)
-    extern uint32_t g_trace_max_instructions;
     static uint64_t thumb_trace_count = 0;
     
     bool pc_in_bios = inBios;

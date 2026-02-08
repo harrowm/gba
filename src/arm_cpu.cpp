@@ -270,7 +270,6 @@ void ARMCPU::executeInstruction(uint32_t pc, uint32_t instruction) {
                 " Instruction=0x" + debug_to_hex_string(instruction, 8) + " using fn table index: 0x" + debug_to_hex_string(index, 3));
 
     // Capstone disassembly hook
-    extern bool g_disassemble_enabled;
     if (g_disassemble_enabled && capstone_handle) {
         cs_insn* insn;
         size_t count = cs_disasm(capstone_handle,
@@ -300,7 +299,7 @@ void ARMCPU::handleException(uint32_t vector_address, uint32_t new_mode, bool di
     CPU::Mode old_mode = static_cast<CPU::Mode>(parentCPU.CPSR() & 0x1F);
     CPU::Mode new_mode_enum = static_cast<CPU::Mode>(new_mode & 0x1F);
     
-    assert((new_mode & 0x1F) >= 0x10 && (new_mode & 0x1F) <= 0x1F && "Invalid new_mode in handleException");
+    assert((new_mode & 0x1F) >= 0x10 && "Invalid new_mode in handleException");
     // Save the current CPSR (SPSR not supported in this implementation)
     uint32_t old_cpsr = parentCPU.CPSR(); UNUSED(old_cpsr);
 

@@ -379,13 +379,13 @@ void DMAController::performTransfer(int channelId) {
     
     // Trigger IRQ if enabled
     if (channel.isIRQEnabled() && interruptController) {
-        uint16_t irqFlags[4] = { 0x0100, 0x0200, 0x0400, 0x0800 };  // DMA0-3 IRQ bits
+        const uint16_t irqFlags[4] = { 0x0100, 0x0200, 0x0400, 0x0800 };  // DMA0-3 IRQ bits
         interruptController->requestInterrupt(irqFlags[channelId]);
     }
 }
 
 void DMAController::updateAddresses(int channelId, uint32_t& srcAddr, uint32_t& destAddr) {
-    DMAChannel& channel = channels[channelId];
+    const DMAChannel& channel = channels[channelId];
     uint32_t transferSize = channel.is32Bit() ? 4 : 2;
     
     // Update source address

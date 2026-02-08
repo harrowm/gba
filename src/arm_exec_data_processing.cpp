@@ -1016,7 +1016,7 @@ void ARMCPU::exec_arm_mrs(uint32_t instruction) {
     // Debug for BIOS
     static int mrs_count = 0;
     if (mrs_count < 10 && parentCPU.R()[15] < 0x4000) {
-        LOG_BIOS("[MRS #%d @0x%08X] R%d = %s (0x%08X), before: R%d=0x%08X, CPSR=0x%08X\n",
+        LOG_BIOS("[MRS #%d @0x%08X] R%u = %s (0x%08X), before: R%u=0x%08X, CPSR=0x%08X\n",
                mrs_count++, parentCPU.R()[15], rd,
                psr_source ? "SPSR" : "CPSR", value, rd, parentCPU.R()[rd],
                parentCPU.CPSR());

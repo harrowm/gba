@@ -41,7 +41,7 @@ public:
         return enabled && instruction_count < max_instructions;
     }
     
-    void traceInstruction(uint32_t* regs, uint32_t cpsr) {
+    void traceInstruction(const uint32_t* regs, uint32_t cpsr) {
         if (!isEnabled()) {
             return;
         }
@@ -84,7 +84,7 @@ public:
             default: mode_name = "Unknown"; break;
         }
         
-        fprintf(trace_file, "cpsr=0x%08X [N=%d Z=%d C=%d V=%d I=%d F=%d T=%d] Mode: %s\n",
+        fprintf(trace_file, "cpsr=0x%08X [N=%u Z=%u C=%u V=%u I=%u F=%u T=%u] Mode: %s\n",
                 cpsr, N, Z, C, V, I, F, T, mode_name);
         
         // Stop tracing after max instructions

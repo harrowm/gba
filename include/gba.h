@@ -25,8 +25,10 @@ private:
     uint64_t frameCount;
 
 public:
-    GBA(bool testMode = false);
+    explicit GBA(bool testMode = false);
     ~GBA();
+    GBA(const GBA&) = delete;
+    GBA& operator=(const GBA&) = delete;
 
     // Main emulation loop
     void runFrame();  // Run one frame (280,896 cycles)
