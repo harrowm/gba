@@ -51,6 +51,7 @@ public:
     }
     
     void open(const char* filename, Memory* mem, uint32_t max_inst = 5000) {
+        close();  // Close any previously opened trace file
         trace_file = fopen(filename, "w");
         if (trace_file) {
             enabled = true;
