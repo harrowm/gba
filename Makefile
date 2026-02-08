@@ -12,8 +12,8 @@ CAPSTONE_FLAGS = -I/opt/homebrew/include
 CAPSTONE_LIBS = -L/opt/homebrew/lib -lcapstone -lkeystone
 
 # Compiler flags
-CXXFLAGS = -std=c++20 -Wall -Wextra -I./include -g -O2 $(SDL2_CFLAGS) $(CAPSTONE_FLAGS)
-CFLAGS = -std=c23 -Wall -Wextra -I./include -g -O2 $(CAPSTONE_FLAGS)
+CXXFLAGS = -std=c++20 -Wall -Wextra -Wunused -Wunreachable-code -Wunused-function -Wunused-variable -Wunused-parameter -I./include -g -O2 $(SDL2_CFLAGS) $(CAPSTONE_FLAGS)
+CFLAGS = -std=c23 -Wall -Wextra -Wunused -Wunreachable-code -Wunused-function -Wunused-variable -Wunused-parameter -I./include -g -O2 $(CAPSTONE_FLAGS)
 
 # Build directory
 BUILD_DIR = build

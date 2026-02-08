@@ -438,43 +438,6 @@ uint32_t GPU::getOBJColor(int paletteNum, int colorIndex) {
     return convertRGB555toARGB8888(rgb555);
 }
 
-// Tile Decoding Functions
-
-void GPU::decodeTile4bpp(uint32_t tileAddr, uint8_t* output) {
-    // 4bpp: 4 bits per pixel, 2 pixels per byte
-    // 8×8 pixels = 64 pixels = 32 bytes
-    // Each byte contains 2 pixels: low nibble (first pixel), high nibble (second pixel)
-    
-    if (!output) return;
-    
-    uint8_t* vram = memory.getVRAM();
-    uint32_t offset = tileAddr - 0x06000000;  // Convert address to VRAM offset
-    
-    for (int i = 0; i < 32; i++) {
-        uint8_t byte = vram[offset + i];
-        
-        // Low nibble (first pixel in pair)
-        output[i * 2] = byte & 0x0F;
-        
-        // High nibble (second pixel in pair)
-        output[i * 2 + 1] = (byte >> 4) & 0x0F;
-    }
-}
-
-void GPU::decodeTile8bpp(uint32_t tileAddr, uint8_t* output) {
-    // 8bpp: 8 bits per pixel, 1 pixel per byte
-    // 8×8 pixels = 64 pixels = 64 bytes
-    
-    if (!output) return;
-    
-    uint8_t* vram = memory.getVRAM();
-    uint32_t offset = tileAddr - 0x06000000;  // Convert address to VRAM offset
-    
-    for (int i = 0; i < 64; i++) {
-        output[i] = vram[offset + i];
-    }
-}
-
 // getTilePixel4bpp and getTilePixel8bpp are now inline in gpu.h for performance
 
 // DISPCNT Register Parsing
@@ -518,19 +481,9 @@ bool GPU::isBGEnabled(int bgNum) {
     return (dispcnt & bgBit) != 0;
 }
 
-bool GPU::isOBJEnabled() {
-    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
-    return (dispcnt & DISPCNT_OBJ_ENABLE) != 0;
-}
-
 bool GPU::isForcedBlank() {
     uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     return (dispcnt & DISPCNT_FORCED_BLANK) != 0;
-}
-
-uint8_t GPU::getVideoMode() {
-    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
-    return dispcnt & DISPCNT_MODE_MASK;
 }
 
 // BGxCNT Register Parsing
@@ -759,194 +712,6 @@ void GPU::getTileCoords(int pixelX, int pixelY, int& tileX, int& tileY,
         tileY = (pixelY - 7) / 8;
         pixelInTileY = pixelY % 8;
         if (pixelInTileY < 0) pixelInTileY += 8;
-    }
-}
-
-// Background Scanline Rendering
-
-void GPU::renderBGScanline(int bgNum, uint16_t scanline) {
-    // Render a single scanline of a background layer
-    
-    // Check if background is valid and enabled
-    if (bgNum < 0 || bgNum > 3) return;
-    if (!isBGEnabled(bgNum)) return;
-    
-    // Get background configuration
-    BGConfig bgConfig = readBGCNT(bgNum);
-    BGScroll scroll = readBGScroll(bgNum);
-    
-    // Get framebuffer
-    uint16_t* framebuffer = getFrameBuffer();
-    if (!framebuffer) return;
-    
-    // Render each pixel in the scanline
-    for (int screenX = 0; screenX < 240; screenX++) {
-        // Apply scrolling to get background coordinates
-        int bgX, bgY;
-        applyScroll(bgConfig, scroll, screenX, scanline, bgX, bgY);
-        
-        // Convert to tile coordinates
-        int tileX, tileY, pixelInTileX, pixelInTileY;
-        getTileCoords(bgX, bgY, tileX, tileY, pixelInTileX, pixelInTileY);
-        
-        // Read the screen entry (tile map) for this tile
-        ScreenEntry entry = readScreenEntry(bgConfig, tileX, tileY);
-        
-        // Skip transparent tiles (tile 0 is often used as transparent)
-        if (entry.tileNumber == 0) {
-            continue;  // Leave background color
-        }
-        
-        // Get the tile address in VRAM
-        uint32_t tileAddr = getTileAddress(bgConfig, entry);
-        
-        // Handle horizontal/vertical flips
-        int actualPixelX = entry.hFlip ? (7 - pixelInTileX) : pixelInTileX;
-        int actualPixelY = entry.vFlip ? (7 - pixelInTileY) : pixelInTileY;
-        
-        // Get the palette index for this pixel
-        uint8_t paletteIndex;
-        if (bgConfig.paletteMode) {
-            // 8bpp mode - 256 colors, single palette
-            paletteIndex = getTilePixel8bpp(tileAddr, actualPixelX, actualPixelY);
-        } else {
-            // 4bpp mode - 16 colors per palette
-            paletteIndex = getTilePixel4bpp(tileAddr, actualPixelX, actualPixelY);
-        }
-        
-        // Skip transparent pixels (palette index 0)
-        if (paletteIndex == 0) {
-            continue;
-        }
-        
-        // Get the color from the palette
-        uint32_t color;
-        if (bgConfig.paletteMode) {
-            // 8bpp uses palette 0 for all 256 colors
-            color = getBGColor(0, paletteIndex);
-        } else {
-            // 4bpp uses the palette specified in the screen entry
-            color = getBGColor(entry.paletteNum, paletteIndex);
-        }
-        
-        // Convert ARGB8888 back to RGB555 for framebuffer
-        uint8_t r = (color >> 16) & 0xFF;
-        uint8_t g = (color >> 8) & 0xFF;
-        uint8_t b = color & 0xFF;
-        
-        // Convert 8-bit channels back to 5-bit
-        uint16_t rgb555 = ((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3);
-        
-        // Write to framebuffer
-        int fbOffset = scanline * 240 + screenX;
-        framebuffer[fbOffset] = rgb555;
-    }
-}
-
-void GPU::renderMode0Scanline(uint16_t scanline) {
-    // Mode 0: Tiled backgrounds with proper priority-based compositing
-    // Priority rules:
-    // 1. Lower priority value = higher priority (0 is highest, 3 is lowest)
-    // 2. When priorities match, lower BG number wins (BG0 > BG1 > BG2 > BG3)
-    // 3. Transparent pixels (palette index 0) don't draw
-    // 4. Backdrop color has lowest priority
-    
-    // First, clear the scanline to backdrop color
-    clearScanlineToBackdrop(scanline);
-    
-    // Read DISPCNT to see which backgrounds are enabled
-    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
-    
-    // Read BGxCNT for all backgrounds to get priorities
-    BGConfig bgConfigs[4];
-    bool bgEnabled[4];
-    for (int i = 0; i < 4; i++) {
-        bgEnabled[i] = (dispcnt & (DISPCNT_BG0_ENABLE << i)) != 0;
-        if (bgEnabled[i]) {
-            bgConfigs[i] = readBGCNT(i);
-        }
-    }
-    
-    // Render each pixel with priority compositing
-    for (int screenX = 0; screenX < 240; screenX++) {
-        // Track the best pixel so far
-        int bestBG = -1;           // -1 means backdrop
-        uint8_t bestPriority = 4;  // Start with priority worse than any BG (backdrop priority)
-        uint16_t bestColor = 0;    // Will be set when we find a pixel
-        
-        // Check each enabled background
-        for (int bgNum = 0; bgNum < 4; bgNum++) {
-            if (!bgEnabled[bgNum]) continue;
-            
-            const BGConfig& bgConfig = bgConfigs[bgNum];
-            BGScroll scroll = readBGScroll(bgNum);
-            
-            // Apply scrolling to get background coordinates
-            int bgX, bgY;
-            applyScroll(bgConfig, scroll, screenX, scanline, bgX, bgY);
-            
-            // Convert to tile coordinates
-            int tileX, tileY, pixelInTileX, pixelInTileY;
-            getTileCoords(bgX, bgY, tileX, tileY, pixelInTileX, pixelInTileY);
-            
-            // Read the screen entry for this tile
-            ScreenEntry entry = readScreenEntry(bgConfig, tileX, tileY);
-            
-            // Skip transparent tiles
-            if (entry.tileNumber == 0) {
-                continue;
-            }
-            
-            // Get the tile address
-            uint32_t tileAddr = getTileAddress(bgConfig, entry);
-            
-            // Handle flips
-            int actualPixelX = entry.hFlip ? (7 - pixelInTileX) : pixelInTileX;
-            int actualPixelY = entry.vFlip ? (7 - pixelInTileY) : pixelInTileY;
-            
-            // Get the palette index
-            uint8_t paletteIndex;
-            if (bgConfig.paletteMode) {
-                paletteIndex = getTilePixel8bpp(tileAddr, actualPixelX, actualPixelY);
-            } else {
-                paletteIndex = getTilePixel4bpp(tileAddr, actualPixelX, actualPixelY);
-            }
-            
-            // Skip transparent pixels
-            if (paletteIndex == 0) {
-                continue;
-            }
-            
-            // Get the color
-            uint32_t color;
-            if (bgConfig.paletteMode) {
-                color = getBGColor(0, paletteIndex);
-            } else {
-                color = getBGColor(entry.paletteNum, paletteIndex);
-            }
-            
-            // Convert to RGB555
-            uint8_t r = (color >> 16) & 0xFF;
-            uint8_t g = (color >> 8) & 0xFF;
-            uint8_t b = color & 0xFF;
-            uint16_t rgb555 = ((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3);
-            
-            // Check if this pixel should win based on priority
-            // Lower priority value = higher priority
-            // Tiebreaker: lower BG number wins
-            if (bgConfig.priority < bestPriority || 
-                (bgConfig.priority == bestPriority && bgNum < bestBG)) {
-                bestBG = bgNum;
-                bestPriority = bgConfig.priority;
-                bestColor = rgb555;
-            }
-        }
-        
-        // Write the winning pixel (or keep backdrop if bestBG == -1)
-        if (bestBG != -1) {
-            int fbOffset = scanline * 240 + screenX;
-            tiledFramebuffer[fbOffset] = bestColor;
-        }
     }
 }
 
@@ -1275,28 +1040,6 @@ void GPU::renderSingleSprite(const OBJAttributes& obj, uint16_t scanline) {
         // Write to framebuffer (TODO: will need priority handling later)
         int fbOffset = scanline * 240 + screenX;
         tiledFramebuffer[fbOffset] = rgb555;
-    }
-}
-
-void GPU::renderSpriteScanline(uint16_t scanline) {
-    // Render all sprites for the current scanline
-    // Note: sprites are rendered in reverse OAM order (127 to 0)
-    // Lower OAM numbers have higher priority (drawn last, appear on top)
-    
-    for (int objNum = 127; objNum >= 0; objNum--) {
-        OBJAttributes obj = readOBJAttributes(objNum);
-        
-        if (isSpriteOnScanline(obj, scanline)) {
-            // Check if this is an affine sprite
-            if (obj.rotScaleFlag) {
-                // Affine sprite - read transformation parameters and render
-                AffineParams params = readAffineParams(obj.rotScaleParam);
-                renderAffineSprite(obj, scanline, params);
-            } else {
-                // Normal sprite
-                renderSingleSprite(obj, scanline);
-            }
-        }
     }
 }
 
@@ -1898,47 +1641,6 @@ void GPU::renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline,
 }
 
 /**
- * Render all sprites with a specific priority to line buffer
- * Only draws sprite pixels if they have higher or equal priority than what's already drawn
- */
-void GPU::renderSpritesWithPriority(uint8_t priority, uint16_t scanline, 
-                                     uint16_t* lineBuffer, uint8_t* priorityBuffer) {
-    // Get DISPCNT for mapping mode
-    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
-    bool mapping1D = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
-    
-    // Render sprites in reverse OAM order (127 → 0)
-    // Lower OAM number = higher priority within same priority level
-    for (int objNum = 127; objNum >= 0; objNum--) {
-        OBJAttributes obj = readOBJAttributes(objNum);
-        
-        if (!isSpriteOnScanline(obj, scanline)) {
-            continue;
-        }
-        
-        // Only process sprites with matching priority
-        if (obj.priority != priority) {
-            continue;
-        }
-        
-        // Calculate priority value
-        // Priority layout: (priority * 4) + 4 (sprites are after BGs within same priority)
-        // This makes sprites render after BGs of the same priority level
-        uint8_t layerPriority = (priority * 4) + 4;
-        
-        // Handle affine vs normal sprites
-        if (obj.rotScaleFlag) {
-            // Affine sprite
-            AffineParams params = readAffineParams(obj.rotScaleParam);
-            renderAffineSpriteWithPriority(obj, scanline, params, lineBuffer, priorityBuffer, layerPriority, mapping1D);
-        } else {
-            // Normal sprite
-            renderNormalSpriteWithPriority(obj, scanline, lineBuffer, priorityBuffer, layerPriority, mapping1D);
-        }
-    }
-}
-
-/**
  * Render a normal (non-affine) sprite with priority checking
  */
 void GPU::renderNormalSpriteWithPriority(const OBJAttributes& obj, uint16_t scanline,
@@ -2288,30 +1990,6 @@ uint8_t GPU::getWindowControlForPixel(int x, int y, const WindowControl& winCtrl
     return winCtrl.winOut;
 }
 
-bool GPU::isLayerVisibleAtPixel(int layerType, int x, int y) {
-    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
-    
-    // If no windows enabled, layer is visible if enabled in DISPCNT
-    bool anyWindowEnabled = (dispcnt & (DISPCNT_WIN0_ENABLE | DISPCNT_WIN1_ENABLE)) != 0;
-    if (!anyWindowEnabled) {
-        return true;  // Windows not used, rely on DISPCNT only
-    }
-    
-    // Get window control for this pixel
-    WindowControl winCtrl = readWindowControl();
-    uint8_t control = getWindowControlForPixel(x, y, winCtrl);
-    
-    // Check if layer is enabled in window control
-    // layerType: 0=BG0, 1=BG1, 2=BG2, 3=BG3, 4=OBJ, 5=Backdrop
-    if (layerType >= 0 && layerType <= 3) {
-        return (control & (1 << layerType)) != 0;
-    } else if (layerType == 4) {
-        return (control & WIN_OBJ_ENABLE) != 0;
-    }
-    
-    return true;  // Backdrop always visible
-}
-
 uint16_t GPU::applyBrightnessIncrease(uint16_t color, uint8_t evy) {
     // Extract RGB components (5 bits each)
     uint8_t r = color & 0x1F;
@@ -2609,55 +2287,6 @@ void GPU::renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanli
         // Advance texture coordinates
         texX += params.pa;
         texY += params.pc;
-    }
-}
-
-void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer,
-                                               uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
-                                               uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
-                                               const WindowControl& winCtrl) {
-    // Get sprite mapping mode
-    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
-    bool mapping1D = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
-    
-    // Render each OBJ in reverse order (OBJ 127 → 0)
-    // Higher numbered OBJs have lower priority within same priority level
-    for (int objNum = 127; objNum >= 0; objNum--) {
-        OBJAttributes obj = readOBJAttributes(objNum);
-        
-        // Skip if not visible or wrong priority
-        if (!obj.visible || obj.priority != priority) {
-            continue;
-        }
-        
-        // Skip prohibited mode
-        if (obj.objMode == OBJ_MODE_PROHIBITED) {
-            continue;
-        }
-        
-        // Check if sprite is on this scanline
-        if (!isSpriteOnScanline(obj, scanline)) {
-            continue;
-        }
-        
-        // Calculate layer priority value
-        uint8_t layerPriority = (priority * 4) + 3;  // Sprites drawn after BGs at same priority
-        
-
-
-        // Handle affine sprites differently
-        if (obj.rotScaleFlag) {
-            AffineParams params = readAffineParams(obj.rotScaleParam);
-            renderAffineSpriteWithPriorityAndWindow(objNum, obj, scanline, params, lineBuffer,
-                                                     priorityBuffer, layerTypeBuffer, 
-                                                     layerPriority, secondLayerBuffer, 
-                                                     secondLayerTypeBuffer, mapping1D, winCtrl);
-        } else {
-            renderNormalSpriteWithPriorityAndWindow(objNum, obj, scanline, lineBuffer, 
-                                                     priorityBuffer, layerTypeBuffer,
-                                                     layerPriority, secondLayerBuffer,
-                                                     secondLayerTypeBuffer, mapping1D, winCtrl);
-        }
     }
 }
 

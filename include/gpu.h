@@ -373,24 +373,16 @@ public:
     void renderScanline(uint16_t scanline);  // New priority-aware renderer
     void renderMode3Scanline(uint16_t scanline);
     void renderMode4Scanline(uint16_t scanline);  // Mode 4: 8bpp indexed bitmap
-    void renderMode0Scanline(uint16_t scanline);  // Mode 0: 4 tiled backgrounds
     void renderMode2Scanline(uint16_t scanline);  // Mode 2: 2 affine backgrounds (BG2, BG3)
-    void renderBGScanline(int bgNum, uint16_t scanline);  // Render a single background scanline
     
     // Priority-aware rendering (new)
     void renderBGScanlineWithPriority(int bgNum, uint16_t scanline, uint16_t* lineBuffer, uint8_t* priorityBuffer);
-    void renderSpritesWithPriority(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer, uint8_t* priorityBuffer);
     
     // Priority + window rendering (Session 3 integration)
     void renderBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, uint16_t* lineBuffer, 
                                                 uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
                                                 uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                 const WindowControl& winCtrl);
-    void renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline, uint16_t* lineBuffer, 
-                                             uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
-                                             uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
-                                             const WindowControl& winCtrl);
-    
     // Two-pass sprite rendering (mgba approach)
     void preprocessSprites(uint16_t scanline, bool mapping1D, const WindowControl& winCtrl);
     void renderObjWindowToMask(const OBJAttributes& obj, int objNum, uint16_t scanline, bool mapping1D);
@@ -409,7 +401,6 @@ public:
     
     // VCOUNT handling
     uint16_t getCurrentScanline() const { return currentScanline; }
-    void setCurrentScanline(uint16_t scanline) { currentScanline = scanline; }
     
     // Interrupt callbacks
     void setVBlankCallback(std::function<void()> callback) { vblankCallback = callback; }
@@ -419,7 +410,6 @@ public:
     // Mode 3+ (bitmap modes): returns VRAM directly
     // Mode 0-2 (tiled modes): returns internal tiled framebuffer
     uint16_t* getFrameBuffer();
-    uint16_t* getTiledFramebuffer() { return tiledFramebuffer; }
     
     // Palette functions
     uint16_t readBGPaletteRaw(int paletteNum, int colorIndex);
@@ -447,10 +437,6 @@ public:
         uint16_t rgb555 = readBGPaletteRaw(paletteNum, colorIndex);
         return convertRGB555toARGB8888(rgb555);
     }
-    
-    // Tile decoding functions
-    void decodeTile4bpp(uint32_t tileAddr, uint8_t* output);
-    void decodeTile8bpp(uint32_t tileAddr, uint8_t* output);
     
     // Hot-path inline functions for tile pixel access
     inline uint8_t getTilePixel4bpp(uint32_t tileAddr, int pixelX, int pixelY) {
@@ -491,9 +477,7 @@ public:
     
     // Helper functions to check specific DISPCNT bits
     bool isBGEnabled(int bgNum);     // Check if BG0-3 is enabled
-    bool isOBJEnabled();              // Check if sprites are enabled
     bool isForcedBlank();             // Check if display is blanked
-    uint8_t getVideoMode();           // Get current video mode (0-5)
     
     // BGxCNT register parsing
     BGConfig parseBGCNT(uint16_t bgcnt);
@@ -527,7 +511,6 @@ public:
     
     // Sprite rendering functions
     uint32_t getOBJTileAddress(const OBJAttributes& obj, int tileX, int tileY, bool mapping1D);
-    void renderSpriteScanline(uint16_t scanline);               // Render all sprites for scanline
     bool isSpriteOnScanline(const OBJAttributes& obj, uint16_t scanline);
     void renderSingleSprite(const OBJAttributes& obj, uint16_t scanline);
     
@@ -576,7 +559,6 @@ public:
     WindowControl readWindowControl();                          // Read and parse window registers
     bool isPixelInWindow(int x, int y, const Window& win);     // Check if pixel is in window
     uint8_t getWindowControlForPixel(int x, int y, const WindowControl& winCtrl);  // Get control flags
-    bool isLayerVisibleAtPixel(int layerType, int x, int y);   // Check if layer visible (window check)
     uint16_t applyBlend(uint16_t color1, uint16_t color2, const BlendControl& blend, 
                        int layerType1, int layerType2);         // Apply blend effect
     uint16_t applyBrightnessIncrease(uint16_t color, uint8_t evy);  // Brighten color
