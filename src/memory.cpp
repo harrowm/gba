@@ -280,6 +280,17 @@ uint8_t Memory::read8(uint32_t address) const {
 }
 
 void Memory::write8(uint32_t address, uint8_t value) {
+    // mGBA debug interface: byte writes to debug string buffer (no wait cycles)
+    if ((address & 0xFFFFF000) == 0x04FFF000) {
+        uint32_t off = address & 0xFFF;
+        if (off >= 0x600 && off < 0x700) {
+            uint32_t idx = off - 0x600;
+            if (idx < 255) {
+                mgbaDebugString[idx] = value;
+            }
+        }
+        return;
+    }
     addWaitCycles(address, 8);
     
     // GBA read-only regions: writes are silently ignored
@@ -380,6 +391,14 @@ void Memory::write8(uint32_t address, uint8_t value) {
 }
 
 uint16_t Memory::read16(uint32_t address) const {
+    // mGBA debug interface reads (no wait cycles - virtual registers)
+    if ((address & 0xFFFFF000) == 0x04FFF000) {
+        uint32_t off = address & 0xFFF;
+        if (off == 0x780) {
+            return mgbaDebugEnabled ? 0x1DEA : 0x0000;
+        }
+        return 0; // other debug regs read as 0
+    }
     addWaitCycles(address, 16);
     
     // --- I/O register region: use ioRead16 handler ---
@@ -443,6 +462,44 @@ uint16_t Memory::read16(uint32_t address) const {
 }
 
 void Memory::write16(uint32_t address, uint16_t value) {
+    // mGBA debug interface: 0x04FFF600-0x04FFF7FF (no wait cycles - virtual registers)
+    if ((address & 0xFFFFF000) == 0x04FFF000) {
+        uint32_t off = address & 0xFFF;
+        if (off >= 0x600 && off < 0x700) {
+            // REG_DEBUG_STRING: write into 256-byte debug buffer
+            uint32_t idx = off - 0x600;
+            if (idx < 254) {
+                mgbaDebugString[idx]     = value & 0xFF;
+                mgbaDebugString[idx + 1] = (value >> 8) & 0xFF;
+            }
+            return;
+        }
+        if (off == 0x700) {
+            // REG_DEBUG_FLAGS: bit 8 = send flag
+            if (value & 0x100) {
+                int level = value & 0x7;
+                mgbaDebugString[255] = '\0';  // ensure null-termination
+                const char* levelStr = "FATAL";
+                switch (level) {
+                    case 0: levelStr = "FATAL"; break;
+                    case 1: levelStr = "ERROR"; break;
+                    case 2: levelStr = "WARN";  break;
+                    case 3: levelStr = "INFO";  break;
+                    case 4: levelStr = "DEBUG"; break;
+                    default: levelStr = "LOG";  break;
+                }
+                fprintf(stderr, "[mGBA %s] %s\n", levelStr, mgbaDebugString);
+                memset(mgbaDebugString, 0, sizeof(mgbaDebugString));
+            }
+            return;
+        }
+        if (off == 0x780) {
+            // REG_DEBUG_ENABLE: write 0xC0DE to enable
+            mgbaDebugEnabled = (value == 0xC0DE);
+            return;
+        }
+        return; // ignore other writes in debug range
+    }
     addWaitCycles(address, 16);
     
     // GBA read-only regions: writes are silently ignored
@@ -985,6 +1042,15 @@ uint32_t Memory::readDirectIO32(uint32_t address) const {
 // This behavior allows unaligned loads to work predictably, with the
 // byte at the requested address ending up in the LSB of the result.
 uint32_t Memory::read32(uint32_t address) const {
+    // mGBA debug interface reads (no wait cycles - virtual registers)
+    if ((address & 0xFFFFF000) == 0x04FFF000) {
+        uint32_t off = address & 0xFFF;
+        if (off == 0x780) {
+            uint16_t val = mgbaDebugEnabled ? 0x1DEA : 0x0000;
+            return val | ((uint32_t)val << 16);
+        }
+        return 0;
+    }
     addWaitCycles(address, 32);
     
     // Debug: trace reads from IRQ handler pointer
@@ -1108,6 +1174,12 @@ uint32_t Memory::read32(uint32_t address) const {
 //
 // Note: This is standard ARM7TDMI behavior, not a GBA-specific quirk.
 void Memory::write32(uint32_t address, uint32_t value) {
+    // mGBA debug interface: 32-bit writes decompose to two 16-bit writes (no wait cycles)
+    if ((address & 0xFFFFF000) == 0x04FFF000) {
+        write16(address, value & 0xFFFF);
+        write16(address + 2, (value >> 16) & 0xFFFF);
+        return;
+    }
     addWaitCycles(address, 32);
     
     // GBA read-only regions: writes are silently ignored

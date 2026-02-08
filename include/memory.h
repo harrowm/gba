@@ -168,6 +168,11 @@ private:
     
     // Get non-sequential wait states for an address
     uint32_t getNonseqWaitStates(uint32_t address, uint32_t accessWidth) const;
+
+    // mGBA debug interface (0x04FFF600 - 0x04FFF780)
+    // Used by test ROMs (mgba-emu/suite) to output PASS/FAIL results
+    char mgbaDebugString[256] = {0};
+    bool mgbaDebugEnabled = false;
 };
 
 #endif // MEMORY_H
