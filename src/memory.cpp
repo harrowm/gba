@@ -250,7 +250,7 @@ uint8_t Memory::read8(uint32_t address) const {
 
     // --- I/O register region: derive from ioRead16 ---
     if ((address >> 24) == 0x04 && (address & 0x00FF0000) == 0) {
-        uint16_t offset = address & 0x3FE;  // halfword-aligned offset
+        uint16_t offset = address & 0xFFFE;  // halfword-aligned offset within 64KB I/O block
         uint16_t val16 = ioRead16(offset);
         return (address & 1) ? (val16 >> 8) : (val16 & 0xFF);
     }
@@ -384,7 +384,7 @@ uint16_t Memory::read16(uint32_t address) const {
     
     // --- I/O register region: use ioRead16 handler ---
     if ((address >> 24) == 0x04 && (address & 0x00FF0000) == 0) {
-        uint16_t offset = address & 0x3FE;  // halfword-aligned offset
+        uint16_t offset = address & 0xFFFE;  // halfword-aligned offset within 64KB I/O block
         return ioRead16(offset);
     }
     
@@ -997,7 +997,7 @@ uint32_t Memory::read32(uint32_t address) const {
     
     // --- I/O register region: combine two ioRead16 calls ---
     if ((address >> 24) == 0x04 && (address & 0x00FF0000) == 0) {
-        uint16_t offset = address & 0x3FC;  // word-aligned offset
+        uint16_t offset = address & 0xFFFC;  // word-aligned offset within 64KB I/O block
         uint16_t lo = ioRead16(offset);
         uint16_t hi = ioRead16(offset + 2);
         return lo | ((uint32_t)hi << 16);
