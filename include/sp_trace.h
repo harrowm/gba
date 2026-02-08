@@ -13,9 +13,6 @@ constexpr uint64_t SP_TRACE_INTERVAL = 10000;
 // File for SP trace output
 extern FILE* g_sp_trace_file;
 
-// Initialize SP tracing (call from main)
-void init_sp_trace();
-
 // Close SP tracing
 void close_sp_trace();
 

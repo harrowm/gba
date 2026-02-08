@@ -61,10 +61,7 @@ public:
     // Specific interrupt triggers
     void triggerVBlank() { requestInterrupt(IRQ_VBLANK); }
     void triggerHBlank() { requestInterrupt(IRQ_HBLANK); }
-    void triggerVCount() { requestInterrupt(IRQ_VCOUNT); }
-    
-    // Legacy method for compatibility
-    void triggerInterrupt() { requestInterrupt(IRQ_VBLANK); }
+
 };
 
 #endif

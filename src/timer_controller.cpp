@@ -207,14 +207,3 @@ void TimerController::onTimerOverflow(int timerID) {
         scheduleTimer(timerID);
     }
 }
-
-void TimerController::updateCounter(int timerID) {
-    if (timerID < 0 || timerID >= 4) return;
-    if (!scheduler) return;
-    
-    Timer& timer = timers[timerID];
-    if (!timer.enabled || timer.isCountUpMode()) return;
-    
-    // This would calculate how much the counter has advanced since last update
-    // For now, the scheduler event-driven approach handles this automatically
-}

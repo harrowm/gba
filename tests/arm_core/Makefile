@@ -37,7 +37,10 @@ RUN_ALL_SRCS = test_basic.cpp \
   ../../src/timer_controller.cpp \
   ../../src/dma.cpp \
   ../../src/gba.cpp \
-  ../../src/gpu.cpp
+  ../../src/gpu.cpp \
+  ../../src/apu.cpp \
+  ../../src/display.cpp \
+  ../../src/sp_trace.cpp
 
 # Map each source file to build/obj name
 define make_obj
@@ -59,7 +62,7 @@ all: $(TARGETS)
 
 
 run_all: $(RUN_ALL_OBJS) include/inst_table.inc
-	$(CXX) $(CXXFLAGS) -o $@ $(RUN_ALL_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 -L/opt/homebrew/lib -lcapstone -lkeystone
+	$(CXX) $(CXXFLAGS) -o $@ $(RUN_ALL_OBJS) $(GTEST_FLAGS) -DDEBUG_LEVEL=0 -L/opt/homebrew/lib -lcapstone -lkeystone -lSDL2
 
 # Ensure build directory exists before compiling object files
 

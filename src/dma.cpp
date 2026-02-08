@@ -64,11 +64,6 @@ uint32_t DMAController::readDestAddress(int channelId) const {
     return channels[channelId].getDestAddress();
 }
 
-uint16_t DMAController::readWordCount(int channelId) const {
-    if (channelId < 0 || channelId >= 4) return 0;
-    return channels[channelId].getWordCount();
-}
-
 uint16_t DMAController::readControl(int channelId) const {
     if (channelId < 0 || channelId >= 4) return 0;
     return channels[channelId].getControl();
@@ -513,11 +508,4 @@ void DMAController::startTriggeredTransfers(DMATimingMode mode) {
             performTransfer(i);
         }
     }
-}
-
-bool DMAController::isAnyChannelActive() const {
-    for (int i = 0; i < 4; i++) {
-        if (channels[i].active) return true;
-    }
-    return false;
 }

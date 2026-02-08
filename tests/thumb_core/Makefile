@@ -42,7 +42,10 @@ CPP_SRCS = test_thumb01.cpp \
 	../../src/scheduler.cpp \
 	../../src/interrupt.cpp \
 	../../src/timer_controller.cpp \
-	../../src/dma.cpp
+	../../src/dma.cpp \
+	../../src/apu.cpp \
+	../../src/display.cpp \
+	../../src/sp_trace.cpp
 
 
 C_SRCS = ../../src/arm_timing.c \
@@ -130,7 +133,7 @@ $(BUILD_DIR)/test_thumb19.o: test_thumb19.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 thumb_core_tests: $(CPP_OBJS) $(C_OBJS) $(INST_TABLE_INC)
-	$(CXX) $(CXXFLAGS) -o $@ $(CPP_OBJS) $(C_OBJS) $(GTEST_FLAGS) $(KEYSTONE_FLAGS) -L/opt/homebrew/lib -lcapstone
+	$(CXX) $(CXXFLAGS) -o $@ $(CPP_OBJS) $(C_OBJS) $(GTEST_FLAGS) $(KEYSTONE_FLAGS) -L/opt/homebrew/lib -lcapstone -lSDL2
 
 .PHONY: clean
 clean:

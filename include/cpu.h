@@ -151,18 +151,8 @@ public:
     void enableMemoryTracing(const char* filename, uint32_t max_instructions = 5000) {
         memoryTracer.open(filename, &memory, max_instructions);
     }
-    void disableTracing() {
-        tracer.close();
-        memoryTracer.close();
-    }
-    bool isTracingEnabled() const {
-        return tracer.isEnabled();
-    }
     bool isMemoryTracingComplete() const {
         return memoryTracer.isComplete();
-    }
-    bool isMemoryTracingEnabled() const {
-        return memoryTracer.isEnabled();
     }
     
     // SPSR (Saved Program Status Register) accessors
@@ -316,7 +306,6 @@ public:
     }
     
     Memory& getMemory() { return memory; }
-    InterruptController& getInterruptController() { return interruptController; }
     
     // Access to CPU delegates
     ARMCPU& getARMCPU() { return *armCPU; }
@@ -373,44 +362,6 @@ public:
         } else {
             // Standard ASR behavior
             cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
-        }
-    }
-
-    constexpr void updateCFlagShiftRight(uint32_t value, uint8_t shift_amount, char shift_type) {
-        if (shift_amount == 0) {
-            return; // Do not alter the carry flag for other cases
-        }
-
-        switch (shift_type) {
-            case 'L': // Logical Shift Right (LSR)
-                cpsr = (shift_amount >= 32) ? (cpsr & ~FLAG_C) : 
-                       ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
-                break;
-
-            case 'A': // Arithmetic Shift Right (ASR)
-                if (shift_amount >= 32) {
-                    cpsr = (value & (1 << 31)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // Sign bit
-                } else {
-                    cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
-                }
-                break;
-
-            case 'O': // Rotate Right (ROR)
-                if (shift_amount == 0) {
-                    // Rotate Right (ROR) with shift amount 0 is treated as RRX
-                    cpsr = (value & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // LSB becomes carry
-                } else {
-                    cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
-                }
-                break;
-
-            case 'X': // Rotate Right with Extend (RRX)
-                cpsr = (value & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // LSB becomes carry
-                break;
-
-            default:
-                // Invalid shift type
-                break;
         }
     }
 

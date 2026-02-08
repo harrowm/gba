@@ -67,12 +67,6 @@ public:
     // Check if user requested quit
     bool shouldQuit() const { return quit; }
     
-    // Get SDL window for additional manipulation if needed
-    SDL_Window* getWindow() { return window; }
-    
     // Set memory pointer for KEYINPUT register updates
     void setMemory(Memory* mem) { memory = mem; }
-    
-    // Get current key state (for debugging)
-    uint16_t getKeyState() const { return keyState; }
 };

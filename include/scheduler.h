@@ -72,12 +72,6 @@ public:
     // Get current global cycle count
     uint64_t getCurrentCycle() const { return currentCycle; }
     
-    // Get total events processed (for debugging/stats)
-    uint64_t getEventsProcessed() const { return eventsProcessed; }
-
-    // Check if event queue is empty
-    bool isEmpty() const { return eventQueue.empty(); }
-    
     // Get number of pending events
     size_t getPendingEventCount() const { return eventQueue.size(); }
 

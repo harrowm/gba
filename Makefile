@@ -40,7 +40,8 @@ CPP_SOURCES = \
 	$(SRC_DIR)/dma.cpp \
 	$(SRC_DIR)/debug.cpp \
 	$(SRC_DIR)/display.cpp \
-	$(SRC_DIR)/apu.cpp
+	$(SRC_DIR)/apu.cpp \
+	$(SRC_DIR)/sp_trace.cpp
 
 C_SOURCES = \
 	$(SRC_DIR)/arm_timing.c \

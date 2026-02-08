@@ -67,10 +67,7 @@ public:
     
     // Direct access to memory regions (for GPU, DMA, etc.)
     uint8_t* getVRAM() { return vram; }
-    uint8_t* getOAM() { return oam; }
     uint8_t* getPaletteRAM() { return palette; }
-    uint8_t* getROM() { return rom; }
-    size_t getRomSize() const { return romSize; }
     
     // Key input - set KEYINPUT register state directly (bypasses read-only protection)
     void setKeyState(uint16_t keyState);

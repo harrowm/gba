@@ -512,11 +512,7 @@ public:
     // Sprite rendering functions
     uint32_t getOBJTileAddress(const OBJAttributes& obj, int tileX, int tileY, bool mapping1D);
     bool isSpriteOnScanline(const OBJAttributes& obj, uint16_t scanline);
-    void renderSingleSprite(const OBJAttributes& obj, uint16_t scanline);
-    
-    // Affine sprite functions
     AffineParams readAffineParams(uint8_t paramIndex);          // Read affine params (0-31) from OAM
-    void renderAffineSprite(const OBJAttributes& obj, uint16_t scanline, const AffineParams& params);
     void applyAffineTransform(const AffineParams& params, 
                                int screenX, int screenY,        // Screen coords relative to sprite center
                                int& textureX, int& textureY);   // Output: texture coords
@@ -532,27 +528,7 @@ public:
                                                      uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                      const WindowControl& winCtrl);
     
-    // Helper functions for priority rendering
-    void renderNormalSpriteWithPriority(const OBJAttributes& obj, uint16_t scanline,
-                                         uint16_t* lineBuffer, uint8_t* priorityBuffer,
-                                         uint8_t layerPriority, bool mapping1D);
-    void renderAffineSpriteWithPriority(const OBJAttributes& obj, uint16_t scanline,
-                                         const AffineParams& params, uint16_t* lineBuffer,
-                                         uint8_t* priorityBuffer, uint8_t layerPriority,
-                                         bool mapping1D);
-                                        
     // Window-aware sprite rendering
-    void renderNormalSpriteWithPriorityAndWindow(int objNum, const OBJAttributes& obj, uint16_t scanline,
-                                                 uint16_t* lineBuffer, uint8_t* priorityBuffer,
-                                                 uint8_t* layerTypeBuffer, uint8_t layerPriority, 
-                                                 uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
-                                                 bool mapping1D, const WindowControl& winCtrl);
-    void renderAffineSpriteWithPriorityAndWindow(int objNum, const OBJAttributes& obj, uint16_t scanline,
-                                                 const AffineParams& params, uint16_t* lineBuffer,
-                                                 uint8_t* priorityBuffer, uint8_t* layerTypeBuffer,
-                                                 uint8_t layerPriority, 
-                                                 uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
-                                                 bool mapping1D, const WindowControl& winCtrl);
     
     // Blend and window functions (Session 3: Advanced Features)
     BlendControl readBlendControl();                            // Read and parse blend registers

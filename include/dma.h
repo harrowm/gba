@@ -98,7 +98,6 @@ public:
     // Register I/O
     uint32_t readSourceAddress(int channelId) const;
     uint32_t readDestAddress(int channelId) const;
-    uint16_t readWordCount(int channelId) const;
     uint16_t readControl(int channelId) const;
     
     void writeSourceAddress(int channelId, uint32_t value);
@@ -112,9 +111,6 @@ public:
     
     // Sound FIFO DMA trigger (called when FIFO needs refill)
     void triggerSoundFIFO(int fifoIndex);  // 0 = FIFO A, 1 = FIFO B
-    
-    // Check if any DMA is active
-    bool isAnyChannelActive() const;
     
     // Reset all channels
     void reset();
