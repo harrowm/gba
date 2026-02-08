@@ -371,7 +371,7 @@ public:
     // Rendering
     void renderScanline();
     void renderScanline(uint16_t scanline);  // New priority-aware renderer
-    void renderMode3Scanline(uint16_t scanline);
+    static void renderMode3Scanline(uint16_t scanline);
     void renderMode4Scanline(uint16_t scanline);  // Mode 4: 8bpp indexed bitmap
     void renderMode2Scanline(uint16_t scanline);  // Mode 2: 2 affine backgrounds (BG2, BG3)
     
@@ -417,7 +417,7 @@ public:
     uint32_t getOBJColor(int paletteNum, int colorIndex);
     
     // Hot-path inline color conversion functions
-    inline uint32_t convertRGB555toARGB8888(uint16_t rgb555) {
+    static inline uint32_t convertRGB555toARGB8888(uint16_t rgb555) {
         // RGB555 format: 0BBBBBGGGGGRRRRR (5 bits per channel)
         uint8_t r5 = (rgb555 & 0x001Fu);
         uint8_t g5 = (rgb555 & 0x03E0u) >> 5;
@@ -472,7 +472,7 @@ public:
     }
     
     // DISPCNT register parsing
-    DisplayControl parseDISPCNT(uint16_t dispcnt);
+    static DisplayControl parseDISPCNT(uint16_t dispcnt);
     DisplayControl readDISPCNT();  // Read and parse from memory
     
     // Helper functions to check specific DISPCNT bits
@@ -484,42 +484,42 @@ public:
     BGConfig readBGCNT(int bgNum);    // Read and parse BGxCNT (bgNum: 0-3)
     
     // Helper to get screen dimensions from size code
-    void getScreenDimensions(uint8_t sizeCode, int& widthTiles, int& heightTiles);
+    static void getScreenDimensions(uint8_t sizeCode, int& widthTiles, int& heightTiles);
     
     // Tile map (screen entry) functions
-    ScreenEntry parseScreenEntry(uint16_t entry);
+    static ScreenEntry parseScreenEntry(uint16_t entry);
     ScreenEntry readScreenEntry(const BGConfig& bgConfig, int tileX, int tileY);
     uint16_t readScreenEntryRaw(const BGConfig& bgConfig, int tileX, int tileY);
     
     // Get tile address from screen entry
-    uint32_t getTileAddress(const BGConfig& bgConfig, const ScreenEntry& entry);
+    static uint32_t getTileAddress(const BGConfig& bgConfig, const ScreenEntry& entry);
     
     // Helper to get screen block offset for large screens
-    uint32_t getScreenBlockOffset(const BGConfig& bgConfig, int tileX, int tileY);
+    static uint32_t getScreenBlockOffset(const BGConfig& bgConfig, int tileX, int tileY);
     
     // Scroll functions
     BGScroll readBGScroll(int bgNum);                           // Read scroll from registers
-    void applyScroll(const BGConfig& bgConfig, const BGScroll& scroll, 
+    static void applyScroll(const BGConfig& bgConfig, const BGScroll& scroll, 
                      int screenX, int screenY, int& bgX, int& bgY);  // Apply scroll to coords
-    void getTileCoords(int pixelX, int pixelY, int& tileX, int& tileY, 
+    static void getTileCoords(int pixelX, int pixelY, int& tileX, int& tileY, 
                        int& pixelInTileX, int& pixelInTileY);       // Convert pixel to tile coords
     
     // OAM (sprite) functions
     OBJAttributes parseOBJAttributes(uint16_t attr0, uint16_t attr1, uint16_t attr2);
     OBJAttributes readOBJAttributes(int objNum);                // Read OBJ attributes (objNum: 0-127)
-    void getOBJDimensions(uint8_t shape, uint8_t size, int& width, int& height);
+    static void getOBJDimensions(uint8_t shape, uint8_t size, int& width, int& height);
     
     // Sprite rendering functions
-    uint32_t getOBJTileAddress(const OBJAttributes& obj, int tileX, int tileY, bool mapping1D);
-    bool isSpriteOnScanline(const OBJAttributes& obj, uint16_t scanline);
+    static uint32_t getOBJTileAddress(const OBJAttributes& obj, int tileX, int tileY, bool mapping1D);
+    static bool isSpriteOnScanline(const OBJAttributes& obj, uint16_t scanline);
     AffineParams readAffineParams(uint8_t paramIndex);          // Read affine params (0-31) from OAM
-    void applyAffineTransform(const AffineParams& params, 
+    static void applyAffineTransform(const AffineParams& params, 
                                int screenX, int screenY,        // Screen coords relative to sprite center
                                int& textureX, int& textureY);   // Output: texture coords
     
     // Affine background functions (Mode 1/2)
     AffineBackgroundParams readAffineBGParams(int bgNum);       // Read BG2/BG3 affine parameters
-    void getAffineBGDimensions(uint8_t sizeCode, int& widthPixels, int& heightPixels, int& widthTiles);
+    static void getAffineBGDimensions(uint8_t sizeCode, int& widthPixels, int& heightPixels, int& widthTiles);
     void renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline, 
                                             uint16_t* lineBuffer, uint8_t* priorityBuffer);
     void renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, 
@@ -533,12 +533,12 @@ public:
     // Blend and window functions (Session 3: Advanced Features)
     BlendControl readBlendControl();                            // Read and parse blend registers
     WindowControl readWindowControl();                          // Read and parse window registers
-    bool isPixelInWindow(int x, int y, const Window& win);     // Check if pixel is in window
+    static bool isPixelInWindow(int x, int y, const Window& win);     // Check if pixel is in window
     uint8_t getWindowControlForPixel(int x, int y, const WindowControl& winCtrl);  // Get control flags
     uint16_t applyBlend(uint16_t color1, uint16_t color2, const BlendControl& blend, 
                        int layerType1, int layerType2);         // Apply blend effect
-    uint16_t applyBrightnessIncrease(uint16_t color, uint8_t evy);  // Brighten color
-    uint16_t applyBrightnessDecrease(uint16_t color, uint8_t evy);  // Darken color
+    static uint16_t applyBrightnessIncrease(uint16_t color, uint8_t evy);  // Brighten color
+    static uint16_t applyBrightnessDecrease(uint16_t color, uint8_t evy);  // Darken color
 };
 
 #endif
