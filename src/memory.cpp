@@ -1470,6 +1470,18 @@ void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
     // - ROM 32-bit (default): 1+7=8 cycles
     uint32_t waitCycles = 1 + getNonseqWaitStates(address, accessWidth);
     
+    // Track whether data accesses target non-ROM addresses (for prefetch buffer)
+    if (accumulatingCycles) {
+        uint8_t dataRegion = (address >> 24) & 0xFF;
+        if (dataRegion < 0x08) {
+            hadNonRomDataAccess = true;
+            nonRomDataCycles += waitCycles;
+        } else if (dataRegion >= 0x08 && dataRegion <= 0x0D) {
+            // ROM data access uses the Game Pak bus, blocking prefetch
+            hadRomDataAccess = true;
+        }
+    }
+    
     if (accumulatingCycles) {
         // During CPU instruction execution: accumulate for end-of-instruction commit.
         // This prevents timer/other I/O side effects from seeing mid-instruction
@@ -1479,6 +1491,83 @@ void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
         // Outside instruction execution (DMA, etc.): advance scheduler immediately
         scheduler->advanceCycles(waitCycles);
     }
+}
+
+// Game Pak prefetch buffer stall reduction (matches mGBA's GBAMemoryStall).
+//
+// When the CPU is executing from ROM with prefetch enabled, and a data access
+// stalls the CPU on a non-ROM address (e.g. EWRAM, IWRAM), the prefetch unit
+// continues fetching sequential halfwords from ROM into its 8-entry buffer.
+// When the CPU resumes, those instruction fetches are free.
+//
+// The model is retroactive: we compute how many S-cycle ROM halfword fetches
+// fit in the data stall time, then reduce the wait accordingly.
+int32_t Memory::prefetchStall(uint32_t pc, int32_t waitCycles, bool isThumb) const {
+    uint8_t pcRegion = (pc >> 24) & 0xFF;
+    
+    // Only benefits execution from ROM (regions 0x08-0x0D) with prefetch enabled
+    if (pcRegion < 0x08 || pcRegion > 0x0D || !prefetchEnabled) {
+        return waitCycles;
+    }
+    
+    // How many halfwords are already in the buffer from previous prefetching?
+    int32_t previousLoads = 0;
+    int32_t maxLoads = 8;  // Buffer holds 8 halfwords
+    
+    // The instruction width determines the fetch PC offset
+    uint32_t instrWidth = isThumb ? 2 : 4;
+    // The CPU pipeline: executing instruction at pc means fetch is at pc + 2*instrWidth
+    // (execute, decode, fetch). The prefetch reads ahead of the fetch stage.
+    uint32_t fetchAhead = pc + instrWidth;  // Next instruction to be fetched
+    
+    if (lastPrefetchedPc > fetchAhead) {
+        uint32_t dist = lastPrefetchedPc - fetchAhead;
+        if (dist < 16) {
+            previousLoads = dist >> 1;
+            maxLoads -= previousLoads;
+        }
+    }
+    
+    if (maxLoads <= 0) {
+        // Buffer already full — no additional prefetch benefit, but the
+        // first fetch after stall still converts N→S
+        return waitCycles;
+    }
+    
+    // Sequential 16-bit ROM wait for the current ROM region
+    int32_t sCycles = waitstatesSeq16[pcRegion];
+    
+    // Count how many S-cycle fetches fit in the wait time
+    // Each S fetch takes (sCycles + 1) total cycles (base 1 + extra waits)
+    int32_t stall = sCycles + 1;  // First fetch costs 1 S
+    int32_t loads = 1;
+    while (stall < waitCycles && loads < maxLoads) {
+        stall += sCycles + 1;
+        ++loads;
+    }
+    
+    // Update how far ahead we've prefetched
+    // (const_cast because this is logically mutable state — the prefetch
+    // buffer is a hardware side effect, not part of the read/write contract)
+    Memory* self = const_cast<Memory*>(this);
+    self->lastPrefetchedPc = fetchAhead + (loads + previousLoads) * 2;
+    
+    if (stall > waitCycles) {
+        // Prefetch took longer than the stall — we get partial benefit
+        // but the CPU has to wait for the last prefetch to complete
+        waitCycles = stall;
+    }
+    
+    // Convert first N access to S (savings = N16 - S16 for current region)
+    int32_t nCycles = waitstatesNonseq16[pcRegion];
+    waitCycles -= (nCycles - sCycles);
+    
+    // Subtract the prefetched fetches (each saves sCycles + 1)
+    waitCycles -= stall;
+    
+    if (waitCycles < 0) waitCycles = 0;
+    
+    return waitCycles;
 }
 
 uint32_t Memory::getWaitStates(uint32_t address, uint32_t accessWidth) const {

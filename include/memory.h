@@ -39,8 +39,11 @@ public:
     // in pendingDataCycles instead of advancing the scheduler immediately.
     // The CPU drains them at the end of each instruction so that I/O side effects
     // (timer enable/read) see instruction-boundary cycle values, not mid-instruction ones.
-    void beginInstructionCycles() const { accumulatingCycles = true; pendingDataCycles = 0; }
+    void beginInstructionCycles() const { accumulatingCycles = true; pendingDataCycles = 0; hadNonRomDataAccess = false; hadRomDataAccess = false; nonRomDataCycles = 0; }
     uint32_t endInstructionCycles() const { accumulatingCycles = false; uint32_t c = pendingDataCycles; pendingDataCycles = 0; return c; }
+    bool hadNonRomAccess() const { return hadNonRomDataAccess; }
+    bool hadRomAccess() const { return hadRomDataAccess; }
+    uint32_t getNonRomDataCycles() const { return nonRomDataCycles; }
 
     // Accessors (now with cycle-accurate timing)
     uint8_t read8(uint32_t address) const;
@@ -125,6 +128,25 @@ public:
     // Whether the Game Pak prefetch buffer is enabled (WAITCNT bit 14)
     bool prefetchEnabled = false;
     
+    // CPU state tracking for prefetch buffer (set by CPU before each instruction)
+    bool cpuIsThumb = false;
+    
+    // Game Pak prefetch buffer state (matches mGBA's model).
+    // Instead of a full FIFO, we track how far ahead the prefetch unit has
+    // speculatively fetched. During data access stalls, the prefetch unit
+    // fills the buffer with sequential ROM halfwords, making subsequent
+    // instruction fetches free.
+    uint32_t lastPrefetchedPc = 0;
+    
+    // Flush prefetch buffer (called on branches, DMA, non-sequential access)
+    void flushPrefetch() { lastPrefetchedPc = 0; }
+    
+    // Apply prefetch buffer stall reduction to data access wait cycles.
+    // When executing from ROM with prefetch enabled and the data access
+    // targets a non-ROM address, the prefetch unit fills the buffer during
+    // the stall. Returns the reduced wait cycle count.
+    int32_t prefetchStall(uint32_t pc, int32_t waitCycles, bool isThumb) const;
+    
     // Get sequential/non-sequential wait states for a region (for CPU fetch cycle computation)
     uint8_t getSeqWaitCycles16(uint32_t address) const { return waitstatesSeq16[(address >> 24) & 0xFF]; }
     uint8_t getSeqWaitCycles32(uint32_t address) const { return waitstatesSeq32[(address >> 24) & 0xFF]; }
@@ -140,6 +162,15 @@ private:
     // instead of advancing the scheduler (used during CPU instruction execution)
     mutable bool accumulatingCycles = false;
     mutable uint32_t pendingDataCycles = 0;
+    
+    // Tracks whether any data access during the current instruction targeted
+    // a non-ROM address (< 0x08000000). Used to determine if the Game Pak
+    // prefetch buffer could have filled during the stall.
+    mutable bool hadNonRomDataAccess = false;
+    // Tracks if any data access targeted ROM (Game Pak bus) — blocks prefetch
+    mutable bool hadRomDataAccess = false;
+    // Accumulated data cycles from non-ROM accesses only (for prefetch stall calc)
+    mutable uint32_t nonRomDataCycles = 0;
     
     // Wait state tables (matching mGBA's model)
     // These track non-sequential and sequential access times for each memory region

@@ -1727,6 +1727,7 @@ void ThumbCPU::executeOneInstruction() {
     
     // Track PC for debug output in memory.cpp
     g_cpu_pc = pc;
+    mem.cpuIsThumb = true;
     
     // Increment PC before execution (Thumb instructions do this)
     parentCPU.R()[15] += 2;
@@ -1758,8 +1759,41 @@ void ThumbCPU::executeOneInstruction() {
                        || ((instruction & 0xF600) == 0xB400)  // Format 14: PUSH/POP
                        || ((instruction & 0xFC00) == 0x4000 &&  // Format 4: ALU ops
                            ((instruction >> 6) & 0xF) == 0xD);  // MUL uses nonseq (like store)
+    
+    // Compute base fetch cost
     uint32_t fetchCycles = isDataTransfer
         ? mem.getNonseqWaitCycles16(pc)
         : mem.getSeqWaitCycles16(pc);
+    
+    // Game Pak prefetch buffer: when executing from ROM with prefetch enabled
+    // and data accessed non-ROM memory, the prefetch unit fills during the
+    // stall. The benefit is applied to fetchCycles (next instruction fetch)
+    // since the prefetch buffer handles upcoming instruction reads.
+    if (isDataTransfer && mem.prefetchEnabled && mem.hadNonRomAccess()
+        && !mem.hadRomAccess()) {
+        uint8_t pcRegion = (pc >> 24) & 0xFF;
+        if (pcRegion >= 0x08 && pcRegion <= 0x0D) {
+            // S16 fetch cost for current ROM region (total = extra + 1 base)
+            uint32_t sFetchCost = mem.getSeqWaitCycles16(pc) + 1;
+            // How many S16 fetches completed during the NON-ROM data stall?
+            uint32_t nonRomStall = mem.getNonRomDataCycles();
+            uint32_t completedFetches = nonRomStall / sFetchCost;
+            // Thumb 16-bit fetch = 1 halfword from ROM.
+            if (completedFetches >= 1) {
+                // Fetch is fully prefetched: free
+                fetchCycles = 0;
+            }
+            // If 0 fetches completed, no prefetch benefit
+        }
+    }
+    
+    // Detect branches: if PC changed non-sequentially, flush the prefetch buffer.
+    // A sequential Thumb step increments PC by 2 (done before executeInstruction,
+    // so after execution the new PC should be (pc + 2) + 2 = pc + 4).
+    uint32_t newPc = parentCPU.R()[15];
+    if (newPc != pc + 4) {
+        mem.flushPrefetch();
+    }
+    
     parentCPU.advanceCycles(instruction_cycles + fetchCycles + dataCycles);
 }

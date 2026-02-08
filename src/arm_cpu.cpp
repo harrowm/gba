@@ -429,6 +429,7 @@ void ARMCPU::executeOneInstruction() {
     
     // Track PC for debug output in memory.cpp
     g_cpu_pc = pc;
+    mem.cpuIsThumb = false;
     
     // Debug: Log first few instructions (DISABLED FOR PERFORMANCE)
     // static int debug_count = 0;
@@ -466,8 +467,46 @@ void ARMCPU::executeOneInstruction() {
                        || ((instruction & 0x0FB00FF0) == 0x01000090)  // SWP
                        || ((instruction & 0x0FC000F0) == 0x00000090)  // MUL/MLA
                        || ((instruction & 0x0F8000F0) == 0x00800090); // Long MUL (uses nonseq like store)
+    
+    // Compute base fetch cost
     uint32_t fetchCycles = isDataTransfer
         ? mem.getNonseqWaitCycles32(pc)
         : mem.getSeqWaitCycles32(pc);
+    
+    // Game Pak prefetch buffer: when executing from ROM with prefetch enabled
+    // and data accessed non-ROM memory, the prefetch unit fills during the
+    // stall. The benefit is applied to fetchCycles (next instruction fetch)
+    // since the prefetch buffer handles upcoming instruction reads.
+    // dataCycles remain unchanged — the data access still took its full time.
+    if (isDataTransfer && mem.prefetchEnabled && mem.hadNonRomAccess()
+        && !mem.hadRomAccess()) {
+        uint8_t pcRegion = (pc >> 24) & 0xFF;
+        if (pcRegion >= 0x08 && pcRegion <= 0x0D) {
+            // S16 fetch cost for current ROM region (total = extra + 1 base)
+            uint32_t sFetchCost = mem.getSeqWaitCycles16(pc) + 1;
+            // How many S16 fetches completed during the NON-ROM data stall?
+            // Only non-ROM data cycles allow prefetch (ROM accesses use the bus)
+            uint32_t nonRomStall = mem.getNonRomDataCycles();
+            uint32_t completedFetches = nonRomStall / sFetchCost;
+            // ARM 32-bit fetch = 2 halfword fetches from ROM.
+            // Each prefetched halfword replaces one S16 ROM access.
+            // Also, first fetch converts from N→S (savings = N16-S16 extra waits).
+            if (completedFetches >= 2) {
+                // Both halves of the 32-bit fetch are prefetched: fetch is free
+                fetchCycles = 0;
+            } else if (completedFetches == 1) {
+                // One halfword prefetched: save the N→S conversion on first half
+                fetchCycles = mem.getSeqWaitCycles32(pc);
+            }
+            // If 0 fetches completed, no prefetch benefit
+        }
+    }
+    
+    // Detect branches: if PC changed non-sequentially, flush the prefetch buffer.
+    // A sequential ARM step increments PC by 4 (done before executeInstruction).
+    uint32_t newPc = parentCPU.R()[15];
+    if (newPc != pc + 4) {
+        mem.flushPrefetch();
+    }
     
     parentCPU.advanceCycles(instruction_cycles + fetchCycles + dataCycles);}
