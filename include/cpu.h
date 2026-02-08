@@ -26,11 +26,7 @@ class CPU {
 public:
     // Accessors for User mode banked SP/LR
     uint32_t& bankedLRUser() { return banked_r14_usr; }
-    uint32_t& bankedSPUser() { return banked_r13_usr; }
-    struct CPUState {
-        std::array<uint32_t, 16> registers; // General-purpose registers
-        uint32_t cpsr; // Current Program Status Register
-    };
+
 
     // ARM privileged mode banked registers
     // FIQ: R8_fiq-R14_fiq, others: R13/R14 for each mode
@@ -93,16 +89,6 @@ public:
     // ARM mode, +4 in Thumb mode).  Updated at the start of each instruction
     // by ARMCPU / ThumbCPU and used by Memory for open bus reads.
     uint32_t openBusPrefetch = 0;
-    uint32_t& SP() {
-        switch (getMode()) {
-            case FIQ: return banked_r13_fiq;
-            case SVC: return banked_r13_svc;
-            case ABT: return banked_r13_abt;
-            case IRQ: return banked_r13_irq;
-            case UND: return banked_r13_und;
-            default:  return registers[13];
-        }
-    }
     uint32_t& LR() {
         switch (getMode()) {
             case FIQ: return banked_r14_fiq;
@@ -114,17 +100,7 @@ public:
         }
     }
 
-    // For test/debug: direct access to all banks
-    uint32_t& bankedSP(Mode m) {
-        switch (m) {
-            case FIQ: return banked_r13_fiq;
-            case SVC: return banked_r13_svc;
-            case ABT: return banked_r13_abt;
-            case IRQ: return banked_r13_irq;
-            case UND: return banked_r13_und;
-            default:  return registers[13];
-        }
-    }
+    // For test/debug: direct access to banked registers
     uint32_t& bankedLR(Mode m) {
         switch (m) {
             case FIQ: return banked_r14_fiq;
@@ -465,9 +441,6 @@ public:
     FORCE_INLINE bool getFlag(uint32_t flag) const {
         return (cpsr & flag) != 0;
     }
-
-    CPUState getCPUState() const;
-    void printCPUState() const;
 
     const std::array<uint32_t, 16>& R() const { return registers; }
     const uint32_t& CPSR() const { return cpsr; }

@@ -9,9 +9,6 @@
 #include "timer_controller.h"
 #include "dma.h"
 #include "apu.h"
-#include <thread>
-#include <mutex>
-#include <condition_variable>
 #include <cstdint>
 
 class GBA {
@@ -25,10 +22,6 @@ private:
     DMAController dmaController;
     APU apu;
 
-    std::mutex syncMutex;
-    std::condition_variable syncCondition;
-    
-    bool running;
     uint64_t frameCount;
 
 public:
@@ -36,9 +29,7 @@ public:
     ~GBA();
 
     // Main emulation loop
-    void run();
     void runFrame();  // Run one frame (280,896 cycles)
-    void stop() { running = false; }
     
     // ROM and BIOS loading
     bool loadROM(const char* filepath) { return memory.loadROM(filepath); }
@@ -46,9 +37,6 @@ public:
     
     // Skip BIOS and jump directly to ROM (for simple test ROMs without proper headers)
     void skipBIOS();
-    
-    // Legacy sync
-    void syncScanline();
     
     // Accessors
     CPU& getCPU() { return *cpu; }

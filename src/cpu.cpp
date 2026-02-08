@@ -36,16 +36,6 @@ CPU::CPU(Memory& mem, InterruptController& ic) : memory(mem), interruptControlle
     spsr_und = 0x1F;  // System mode
 }
 
-CPU::CPUState CPU::getCPUState() const {
-    DEBUG_INFO("Getting CPU state");
-    CPUState state;
-    for (int i = 0; i < 16; ++i) {
-        state.registers[i] = registers[i];
-    }
-    state.cpsr = cpsr;
-    return state;
-}
-
 void CPU::execute(uint32_t cycles) {
     // Use macro-based debug system
     DEBUG_INFO("Executing CPU for " + std::to_string(cycles) + " cycles");
@@ -57,26 +47,6 @@ void CPU::execute(uint32_t cycles) {
         DEBUG_LOG("Executing ARM instructions");
         armCPU->execute(cycles); // Use pointer
     }
-}
-
-void CPU::printCPUState() const {
-    DEBUG_INFO("Printing CPU state");
-
-    std::string stateStr = "\nCPU State:\n";
-    for (int i = 0; i < 16; ++i) {
-        stateStr += "R" + std::to_string(i) + (i < 10 ? " : " : ": ") + debug_to_hex_string(registers[i], 8) + "\t";
-        if ((i + 1) % 4 == 0) {
-            stateStr += "\n"; // New line every 4 registers
-        }
-    }
-
-    stateStr += "CPSR: " + debug_to_hex_string(cpsr, 8);
-
-    stateStr += " Flags: Z:" + std::to_string(getFlag(FLAG_Z)) + " N:" + std::to_string(getFlag(FLAG_N)) + 
-              " V:" + std::to_string(getFlag(FLAG_V)) + " C:" + std::to_string(getFlag(FLAG_C)) + 
-              " T:" + std::to_string(getFlag(FLAG_T)) + " E:" + std::to_string(getFlag(FLAG_E)) + "\n";
-
-    DEBUG_INFO(stateStr);
 }
 
 // Destructor

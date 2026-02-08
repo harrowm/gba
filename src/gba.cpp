@@ -6,14 +6,11 @@
 #include "scheduler.h"
 #include "apu.h"
 #include "debug.h"
-#include <thread>
-#include <mutex>
-#include <condition_variable>
 #include <algorithm>
 
 GBA::GBA(bool testMode) 
     : memory(testMode), scheduler(), interruptController(), 
-      timerController(), dmaController(), apu(), running(false), frameCount(0) {
+      timerController(), dmaController(), apu(), frameCount(0) {
     
     // Create CPU and GPU on heap to avoid stack overflow
     cpu = new CPU(memory, interruptController);
@@ -190,17 +187,6 @@ void GBA::skipBIOS() {
             cpu->R()[13], cpu->R()[14]);
 
     DEBUG_INFO("Skipped BIOS, jumping directly to ROM at 0x08000000");
-}
-
-void GBA::run() {
-    DEBUG_INFO("Starting GBA main loop");
-    running = true;
-    
-    while (running) {
-        runFrame();
-    }
-    
-    DEBUG_INFO("GBA main loop stopped");
 }
 
 void GBA::runFrame() {
@@ -471,8 +457,4 @@ void GBA::runFrame() {
     // - Process audio samples
 }
 
-void GBA::syncScanline() {
-    std::unique_lock<std::mutex> lock(syncMutex);
-    syncCondition.notify_all();
-    syncCondition.wait(lock);
-}
+
