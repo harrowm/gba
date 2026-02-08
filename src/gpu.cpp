@@ -348,7 +348,7 @@ uint16_t* GPU::getFrameBuffer() {
         uint8_t* vram_ptr = memory.getVRAM();
         static int debugCount = 0;
         if (debugCount < 3) {
-            LOG_TRACE_CAT("[GPU::getFrameBuffer] Mode %d, returning VRAM=%p\n", mode, (void*)vram_ptr);
+            LOG_TRACE_CAT("[GPU::getFrameBuffer] Mode %d, returning VRAM=%p\n", mode, static_cast<const void*>(vram_ptr));
             debugCount++;
         }
         return reinterpret_cast<uint16_t*>(vram_ptr);

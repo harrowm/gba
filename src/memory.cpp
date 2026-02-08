@@ -23,7 +23,7 @@ extern uint32_t g_cpu_pc; // For debug tracking - set by CPU before each instruc
 Memory::Memory(bool testMode) {
     if (testMode) {
         // Only allocate and map test RAM at 0x00000000 (32KB)
-        test_ram = (uint8_t*)std::malloc(32 * 1024);
+        test_ram = static_cast<uint8_t*>(std::malloc(32 * 1024));
         
         // Initialize with infinite loop instruction (ARM: B #-8, opcode 0xEAFFFFFE)
         // This provides safe default code if no test instructions are loaded
@@ -38,12 +38,12 @@ Memory::Memory(bool testMode) {
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = test_ram + (addr - 0x00000000);
         
         // Allocate IO region even in test mode (needed for video timing tests)
-        io = (uint8_t*)std::malloc(1 * 1024);
+        io = static_cast<uint8_t*>(std::malloc(1 * 1024));
         memset(io, 0, 1 * 1024);  // Zero-initialize
         regionTable[0x04000000 / BLOCK_SIZE] = io;
         
         // Allocate palette RAM in test mode (GPU needs it for rendering)
-        palette = (uint8_t*)std::malloc(1 * 1024);
+        palette = static_cast<uint8_t*>(std::malloc(1 * 1024));
         memset(palette, 0, 1 * 1024);  // Zero-initialize  
         for (uint32_t addr = 0x05000000; addr < 0x05000400; addr += BLOCK_SIZE)
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = palette;
@@ -53,7 +53,7 @@ Memory::Memory(bool testMode) {
 
     } else {
         // --- BIOS: 16KB at 0x00000000 ---
-        bios = (uint8_t*)std::malloc(16 * 1024);
+        bios = static_cast<uint8_t*>(std::malloc(16 * 1024));
         regionTable[0x00000000 / BLOCK_SIZE] = bios;
         // Load BIOS file - try relative path first, then absolute path
         {
@@ -80,12 +80,12 @@ Memory::Memory(bool testMode) {
         }
 
         // --- WRAM: 256KB at 0x02000000, mirrored every 256KB throughout 0x02000000-0x02FFFFFF ---
-        wram = (uint8_t*)std::calloc(256 * 1024, 1);
+        wram = static_cast<uint8_t*>(std::calloc(256 * 1024, 1));
         for (uint32_t addr = 0x02000000; addr < 0x03000000; addr += BLOCK_SIZE)
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = wram + ((addr - 0x02000000) % (256 * 1024));
 
         // --- IWRAM: 32KB at 0x03000000, mirrored throughout 0x03000000-0x03FFFFFF ---
-        iwram = (uint8_t*)std::calloc(32 * 1024, 1);
+        iwram = static_cast<uint8_t*>(std::calloc(32 * 1024, 1));
         // Mirror IWRAM every 64KB across the entire 16MB range
         // Each 64KB block in the 0x03000000-0x03FFFFFF range should point to IWRAM
         // but the actual IWRAM is only 32KB, so we need special handling in the read/write functions
@@ -97,7 +97,7 @@ Memory::Memory(bool testMode) {
         // The GBA I/O register space is 0x04000000-0x04000301, but games may
         // access undocumented registers (e.g. 0x04000410, 0x04000800) and the
         // regionTable maps a full 64KB block to this pointer.
-        io = (uint8_t*)std::malloc(BLOCK_SIZE);
+        io = static_cast<uint8_t*>(std::malloc(BLOCK_SIZE));
         memset(io, 0, BLOCK_SIZE);  // Zero-initialize IO memory
         regionTable[0x04000000 / BLOCK_SIZE] = io;
         // Initialize critical boot-related registers for clean BIOS boot
@@ -114,7 +114,7 @@ Memory::Memory(bool testMode) {
 
         // --- Palette RAM: 1KB at 0x05000000, mirrored throughout 0x05000000-0x05FFFFFF ---
         // Allocate full block to prevent overflow from offset calculations
-        palette = (uint8_t*)std::malloc(BLOCK_SIZE);
+        palette = static_cast<uint8_t*>(std::malloc(BLOCK_SIZE));
         memset(palette, 0, BLOCK_SIZE);
         for (uint32_t addr = 0x05000000; addr < 0x06000000; addr += BLOCK_SIZE)
             regionTable[addr / BLOCK_SIZE] = palette;
@@ -122,7 +122,7 @@ Memory::Memory(bool testMode) {
         // --- VRAM: 96KB at 0x06000000, mirrored in 128KB period throughout 0x06000000-0x06FFFFFF ---
         // 128KB period: first 64KB = BG VRAM, second 64KB = OBJ VRAM (32KB real + 32KB mirror)
         // get_region_base handles the 32KB fold-back within each OBJ block
-        vram = (uint8_t*)std::malloc(96 * 1024);
+        vram = static_cast<uint8_t*>(std::malloc(96 * 1024));
         memset(vram, 0, 96 * 1024);
         for (uint32_t addr = 0x06000000; addr < 0x07000000; addr += BLOCK_SIZE) {
             uint32_t periodOffset = (addr - 0x06000000) % 0x20000; // 128KB period
@@ -134,20 +134,20 @@ Memory::Memory(bool testMode) {
 
         // --- OAM: 1KB at 0x07000000, mirrored throughout 0x07000000-0x07FFFFFF ---
         // Allocate full block to prevent overflow (get_region_base handles 1KB mirroring)
-        oam = (uint8_t*)std::malloc(BLOCK_SIZE);
+        oam = static_cast<uint8_t*>(std::malloc(BLOCK_SIZE));
         memset(oam, 0, BLOCK_SIZE);
         for (uint32_t addr = 0x07000000; addr < 0x08000000; addr += BLOCK_SIZE)
             regionTable[addr / BLOCK_SIZE] = oam;
 
         // --- Game Pak ROM: up to 32MB at 0x08000000 ---
-        rom = (uint8_t*)std::malloc(32 * 1024 * 1024);
+        rom = static_cast<uint8_t*>(std::malloc(32 * 1024 * 1024));
         memset(rom, 0, 32 * 1024 * 1024);  // Initialize with zeros
         for (uint32_t addr = 0x08000000; addr < 0x0A000000; addr += BLOCK_SIZE)
             regionTable[(addr & 0x0FFFFFFF) / BLOCK_SIZE] = rom + (addr - 0x08000000);
 
         // --- Game Pak SRAM: 64KB at 0x0E000000, mirrored throughout 0x0E-0x0F ---
         // SRAM has an 8-bit bus; read16/read32 handle byte replication
-        sram = (uint8_t*)std::malloc(64 * 1024);
+        sram = static_cast<uint8_t*>(std::malloc(64 * 1024));
         memset(sram, 0, 64 * 1024);
         for (uint32_t addr = 0x0E000000; addr < 0x10000000; addr += BLOCK_SIZE)
             regionTable[addr / BLOCK_SIZE] = sram;
@@ -943,7 +943,7 @@ uint32_t Memory::readDirectIO32(uint32_t address) const {
         static int bios18_read_count = 0;
         bios18_read_count++;
         LOG_BIOS("[BIOS 0x18 DirectIO READ #%d] offset=%u, bytes: %02X %02X %02X %02X = value 0x%08X (base=%p)\n",
-               bios18_read_count, offset, b0, b1, b2, b3, val, (void*)base);
+               bios18_read_count, offset, b0, b1, b2, b3, val, static_cast<const void*>(base));
     }
     
     return val;
@@ -1242,7 +1242,7 @@ void Memory::write32(uint32_t address, uint32_t value) {
         static int vramWriteCount = 0;
         if (vramWriteCount < 10) {
             LOG_VRAM("[VRAM Write32] Address: 0x%08X, Value: 0x%08X, base=%p, vram=%p, offset=%u\n", 
-                   address, value, (void*)base, (void*)vram, offset);
+                   address, value, static_cast<const void*>(base), static_cast<const void*>(vram), offset);
             vramWriteCount++;
         }
     }
