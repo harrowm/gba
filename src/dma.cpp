@@ -273,8 +273,17 @@ void DMAController::performTransfer(int channelId) {
         // On real GBA hardware, DMA cannot read from BIOS (region 0x00) or
         // unmapped memory (region 0x01). Reads from these regions return the
         // DMA open bus latch (the last value successfully transferred by DMA).
+        // Additionally, DMA0 can only source from internal memory (0x00-0x07);
+        // Game Pak ROM/SRAM (0x08-0x0E) is only accessible to DMA1-3.
         uint32_t srcRegion = srcAddr >> 24;
-        bool srcReadable = (srcRegion >= 0x02 && srcRegion <= 0x0E);
+        bool srcReadable;
+        if (channelId == 0) {
+            // DMA0: source must be internal memory (0x02-0x07)
+            srcReadable = (srcRegion >= 0x02 && srcRegion <= 0x07);
+        } else {
+            // DMA1-3: source can be any valid memory (0x02-0x0E)
+            srcReadable = (srcRegion >= 0x02 && srcRegion <= 0x0E);
+        }
         
         // Sound DMA buffer overrun safety clamp
         if (isSoundDMA && srcAddr >= soundDmaBase + soundBufferLimit) {

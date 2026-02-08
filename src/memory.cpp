@@ -1177,9 +1177,23 @@ bool Memory::loadROM(const char* filepath) {
         return false;
     }
     
-    // Zero-fill remaining ROM space
-    if (read < 32 * 1024 * 1024) {
-        memset(rom + read, 0, 32 * 1024 * 1024 - read);
+    // Store actual ROM size for open bus detection
+    romSize = read;
+    
+    // Fill remaining ROM space with GBA open bus pattern instead of zeros.
+    // On real GBA hardware, reading from ROM addresses beyond the loaded ROM
+    // returns (address >> 1) per halfword — the "open bus" value.
+    // Pre-filling the buffer with this pattern makes all read sizes (8/16/32)
+    // and all access paths (CPU, DMA, SWI) return correct values automatically.
+    size_t fillStart = (read + 1) & ~(size_t)1; // Round up to halfword boundary
+    if (read < fillStart && fillStart <= 32 * 1024 * 1024) {
+        // Zero the gap byte if ROM size was odd
+        rom[read] = 0;
+    }
+    for (size_t i = fillStart; i < 32 * 1024 * 1024; i += 2) {
+        uint16_t openbus = (uint16_t)(i >> 1);
+        rom[i]     = openbus & 0xFF;
+        rom[i + 1] = (openbus >> 8) & 0xFF;
     }
     
     printf("ROM loaded: %zu bytes from %s\n", read, filepath);

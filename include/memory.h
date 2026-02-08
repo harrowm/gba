@@ -62,6 +62,7 @@ public:
     uint8_t* getOAM() { return oam; }
     uint8_t* getPaletteRAM() { return palette; }
     uint8_t* getROM() { return rom; }
+    size_t getRomSize() const { return romSize; }
     
     // Key input - set KEYINPUT register state directly (bypasses read-only protection)
     void setKeyState(uint16_t keyState);
@@ -81,6 +82,9 @@ private:
     uint8_t* rom = nullptr;
     uint8_t* sram = nullptr;
     uint8_t* test_ram = nullptr;
+    
+    // Actual loaded ROM size (for open bus detection)
+    size_t romSize = 0;
 
     // Scheduler for cycle-accurate timing
     Scheduler* scheduler = nullptr;
