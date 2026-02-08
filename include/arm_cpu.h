@@ -149,7 +149,9 @@ public:
             res.value = (value & 0x80000000) ? 0xFFFFFFFF : 0;
             res.carry_out = (value & 0x80000000) ? 1 : 0;
         } else if (shift_val < 32) {
-            res.value = ((int32_t)value) >> shift_val;
+            // Portable ASR: unsigned shift then sign-extend
+            uint32_t sign_bit = value >> 31;
+            res.value = (value >> shift_val) | (sign_bit ? ~(UINT32_MAX >> shift_val) : 0);
             res.carry_out = (value >> (shift_val - 1)) & 1;
         } else {  // shift_val >= 32
             res.value = (value & 0x80000000) ? 0xFFFFFFFF : 0;

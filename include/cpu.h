@@ -319,7 +319,7 @@ public:
     }
 
     constexpr void updateNFlag(uint32_t result) {
-        cpsr = (result & (1 << 31)) ? (cpsr | FLAG_N) : (cpsr & ~FLAG_N);
+        cpsr = (result & (1u << 31)) ? (cpsr | FLAG_N) : (cpsr & ~FLAG_N);
     }
 
     constexpr void updateCFlagSub(uint32_t op1, uint32_t op2) {
@@ -348,7 +348,7 @@ public:
     constexpr void updateCFlagShiftLSR(uint32_t value, uint8_t shift_amount) {
         if (shift_amount == 0) {
             // Special case: LSR with shift amount 0 means shift by 32
-            cpsr = (value & (1 << 31)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // MSB becomes carry
+            cpsr = (value & (1u << 31)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // MSB becomes carry
         } else {
             // Standard LSR behavior
             cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
@@ -358,7 +358,7 @@ public:
     constexpr void updateCFlagShiftASR(uint32_t value, uint8_t shift_amount) {
         if (shift_amount == 0) {
             // Special case: ASR with shift amount 0 means shift by 32
-            cpsr = (value & (1 << 31)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // MSB becomes carry
+            cpsr = (value & (1u << 31)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C); // MSB becomes carry
         } else {
             // Standard ASR behavior
             cpsr = ((value >> (shift_amount - 1)) & 1) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
@@ -366,14 +366,14 @@ public:
     }
 
     constexpr void updateVFlag(uint32_t op1, uint32_t op2, uint32_t result) {
-        cpsr = (((op1 ^ result) & (op2 ^ result) & (1 << 31)) != 0) ? (cpsr | FLAG_V) : (cpsr & ~FLAG_V);
+        cpsr = (((op1 ^ result) & (op2 ^ result) & (1u << 31)) != 0) ? (cpsr | FLAG_V) : (cpsr & ~FLAG_V);
     }
     
     constexpr void updateVFlagSub(uint32_t op1, uint32_t op2, uint32_t result) {
-        cpsr = ((((op1 ^ op2) & (op1 ^ result)) & (1 << 31)) != 0) ? (cpsr | FLAG_V) : (cpsr & ~FLAG_V);
+        cpsr = ((((op1 ^ op2) & (op1 ^ result)) & (1u << 31)) != 0) ? (cpsr | FLAG_V) : (cpsr & ~FLAG_V);
     }
     
-    static constexpr uint32_t FLAG_N = 1 << 31; // Negative flag
+    static constexpr uint32_t FLAG_N = 1u << 31; // Negative flag
     static constexpr uint32_t FLAG_Z = 1 << 30; // Zero flag
     static constexpr uint32_t FLAG_C = 1 << 29; // Carry flag
     static constexpr uint32_t FLAG_V = 1 << 28; // Overflow flag
