@@ -211,8 +211,8 @@ bool CPU::checkPendingInterrupts() {
         check_count++;
         // Print every 1000th IRQ to avoid spam, but show details
         if (check_count % 1000 == 0) {
-            uint16_t ie = memory.read16(0x04000200);
-            uint16_t ifReg = memory.read16(0x04000202);
+            uint16_t ie = memory.readDirectIO16(0x04000200);
+            uint16_t ifReg = memory.readDirectIO16(0x04000202);
             LOG_IRQ("[CHECK_IRQ #%d] IE=0x%04X IF=0x%04X (VBlank=%d HBlank=%d Timer0=%d)\n",
                    check_count, ie, ifReg, (ifReg & 0x01), (ifReg & 0x02) >> 1, (ifReg & 0x08) >> 3);
         }

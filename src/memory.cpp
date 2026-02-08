@@ -219,20 +219,21 @@ uint8_t Memory::read8(uint32_t address) const {
     addWaitCycles(address, 8);
 
     // --- BIOS region protection (0x00000000 - 0x00FFFFFF) ---
-    // Real GBA: BIOS (16 KB) is only readable when the CPU is executing from
-    // within the BIOS.  Outside BIOS, reads from 0-0x3FFF return the BIOS
-    // prefetch latch; reads from 0x4000+ return CPU open bus.
     if (bios && (address >> 24) == 0x00) {
         if (address >= 0x4000) {
-            // Past BIOS bounds: open bus
             uint32_t ob = cpu ? cpu->openBusPrefetch : 0;
             return (ob >> ((address & 3) * 8)) & 0xFF;
         }
         if (!cpuInBios) {
-            // BIOS protection: return latched prefetch
             return (biosPrefetch >> ((address & 3) * 8)) & 0xFF;
         }
-        // CPU inside BIOS — fall through to normal read
+    }
+
+    // --- I/O register region: derive from ioRead16 ---
+    if ((address >> 24) == 0x04 && (address & 0x00FF0000) == 0) {
+        uint16_t offset = address & 0x3FE;  // halfword-aligned offset
+        uint16_t val16 = ioRead16(offset);
+        return (address & 1) ? (val16 >> 8) : (val16 & 0xFF);
     }
 
     uint32_t offset;
@@ -362,36 +363,10 @@ void Memory::write8(uint32_t address, uint8_t value) {
 uint16_t Memory::read16(uint32_t address) const {
     addWaitCycles(address, 16);
     
-    // Handle DMA register reads (word count and control only)
-    if (dmaController) {
-        if (address >= 0x040000B0 && address <= 0x040000DE) {
-            int channelID = (address - 0x040000B0) / 12;
-            int regOffset = (address - 0x040000B0) % 12;
-            
-            if (regOffset == 8) {  // Word count (DMAxCNT_L)
-                uint16_t count = dmaController->readWordCount(channelID);
-                LOG_DMA("[DMA%d] Read Word Count: 0x%04X\n", channelID, count);
-                return count;
-            } else if (regOffset == 10) {  // Control (DMAxCNT_H)
-                uint16_t ctrl = dmaController->readControl(channelID);
-                LOG_DMA("[DMA%d] Read Control: 0x%04X (Enable=%d)\n", channelID, ctrl, (ctrl >> 15) & 1);
-                return ctrl;
-            }
-        }
-    }
-    
-    // Handle timer register reads
-    if (timerController) {
-        if (address >= 0x04000100 && address <= 0x0400010E) {
-            int timerID = (address - 0x04000100) / 4;
-            bool isControl = ((address - 0x04000100) % 4) == 2;
-            
-            if (isControl) {
-                return timerController->readControl(timerID);
-            } else {
-                return timerController->readCounter(timerID);
-            }
-        }
+    // --- I/O register region: use ioRead16 handler ---
+    if ((address >> 24) == 0x04 && (address & 0x00FF0000) == 0) {
+        uint16_t offset = address & 0x3FE;  // halfword-aligned offset
+        return ioRead16(offset);
     }
     
     // SRAM (0x0E-0x0F) has 8-bit bus: reads return single byte duplicated.
@@ -717,6 +692,147 @@ void Memory::write16(uint32_t address, uint16_t value) {
     }
 }
 
+// ============================================================================
+// I/O Register Read Handler
+// ============================================================================
+// GBA I/O registers have three categories:
+// 1. Readable: return the stored value, optionally masked for unused bits
+// 2. Write-only: return CPU open bus (the instruction prefetch pipeline value)
+// 3. Unused gaps: return 0 or open bus depending on the specific address
+//
+// This matches mGBA's GBAIORead() behavior.  The test suite writes 0xFFFF
+// then reads back, expecting: mask for readable, 0xDEAD for write-only
+// (because the test asm places 0xDEADDEAD as a literal after the ldrh),
+// or 0 for unused-zero gaps.
+// ============================================================================
+uint16_t Memory::ioRead16(uint16_t offset) const {
+    // Helper: read 16-bit from io buffer
+    auto ioVal = [&](uint16_t off) -> uint16_t {
+        return io[off] | (io[off + 1] << 8);
+    };
+
+    // Helper: open bus value (halfword from CPU prefetch)
+    auto openBus = [&]() -> uint16_t {
+        uint32_t ob = cpu ? cpu->openBusPrefetch : 0;
+        return (ob >> ((offset & 2) * 8)) & 0xFFFF;
+    };
+
+    // --- Timer registers (via timerController for live counter) ---
+    if (timerController && offset >= 0x100 && offset <= 0x10E) {
+        int timerID = (offset - 0x100) / 4;
+        bool isControl = ((offset - 0x100) % 4) == 2;
+        if (isControl) return timerController->readControl(timerID);
+        return timerController->readCounter(timerID);
+    }
+
+    // --- DMA registers ---
+    if (offset >= 0x0B0 && offset <= 0x0DE) {
+        int ch = (offset - 0x0B0) / 12;
+        int reg = (offset - 0x0B0) % 12;
+        if (reg == 10) {
+            // CNT_HI: readable with mask (bits 0-4 always 0)
+            uint16_t ctrl = dmaController ? dmaController->readControl(ch) : 0;
+            // DMA0-2: bit 11 (game pak DRQ) not present → mask 0xF7E0
+            // DMA3: bit 11 present → mask 0xFFE0
+            uint16_t mask = (ch == 3) ? 0xFFE0 : 0xF7E0;
+            return ctrl & mask;
+        }
+        if (reg == 8) return 0;     // CNT_LO (word count): always reads 0
+        return openBus();            // SAD / DAD: write-only → open bus
+    }
+
+    switch (offset) {
+    // ----- Video: readable registers -----
+    case 0x000: return ioVal(offset);                       // DISPCNT
+    case 0x002: return ioVal(offset);                       // Green Swap / STEREOCNT
+    case 0x004: return ioVal(offset);                       // DISPSTAT
+    case 0x006: return ioVal(offset);                       // VCOUNT
+    case 0x008: return ioVal(offset) & 0xDFFF;              // BG0CNT (bit 13 not readable)
+    case 0x00A: return ioVal(offset) & 0xDFFF;              // BG1CNT
+    case 0x00C: return ioVal(offset);                       // BG2CNT
+    case 0x00E: return ioVal(offset);                       // BG3CNT
+
+    // ----- Video: write-only registers → open bus -----
+    case 0x010: case 0x012: case 0x014: case 0x016:         // BGxHOFS/VOFS
+    case 0x018: case 0x01A: case 0x01C: case 0x01E:
+    case 0x020: case 0x022: case 0x024: case 0x026:         // BG2 affine params
+    case 0x028: case 0x02A: case 0x02C: case 0x02E:         // BG2 ref point
+    case 0x030: case 0x032: case 0x034: case 0x036:         // BG3 affine params
+    case 0x038: case 0x03A: case 0x03C: case 0x03E:         // BG3 ref point
+    case 0x040: case 0x042: case 0x044: case 0x046:         // WINxH/V
+    case 0x04C:                                              // MOSAIC
+    case 0x054:                                              // BLDY
+        return openBus();
+
+    // ----- Video: readable with masks -----
+    case 0x048: return ioVal(offset) & 0x3F3F;              // WININ
+    case 0x04A: return ioVal(offset) & 0x3F3F;              // WINOUT
+    case 0x050: return ioVal(offset) & 0x3FFF;              // BLDCNT
+    case 0x052: return ioVal(offset) & 0x1F1F;              // BLDALPHA
+
+    // ----- Sound: readable with masks -----
+    case 0x060: return ioVal(offset) & 0x007F;              // SOUND1CNT_LO
+    case 0x062: return ioVal(offset) & 0xFFC0;              // SOUND1CNT_HI
+    case 0x064: return ioVal(offset) & 0x4000;              // SOUND1CNT_X
+    case 0x068: return ioVal(offset) & 0xFFC0;              // SOUND2CNT_LO
+    case 0x06C: return ioVal(offset) & 0x4000;              // SOUND2CNT_HI
+    case 0x070: return ioVal(offset) & 0x00E0;              // SOUND3CNT_LO
+    case 0x072: return ioVal(offset) & 0xE000;              // SOUND3CNT_HI
+    case 0x074: return ioVal(offset) & 0x4000;              // SOUND3CNT_X
+    case 0x078: return ioVal(offset) & 0xFF00;              // SOUND4CNT_LO
+    case 0x07C: return ioVal(offset) & 0x40FF;              // SOUND4CNT_HI
+    case 0x080: return ioVal(offset) & 0xFF77;              // SOUNDCNT_LO
+    case 0x082: return ioVal(offset) & 0x770F;              // SOUNDCNT_HI
+    case 0x084: return ioVal(offset) & 0x0080;              // SOUNDCNT_X (only master enable readable; ch flags are hw-managed)
+    case 0x088: return ioVal(offset);                        // SOUNDBIAS
+
+    // ----- Sound: unused gaps → 0 -----
+    case 0x066: case 0x06A: case 0x06E:
+    case 0x076: case 0x07A: case 0x07E:
+    case 0x086: case 0x08A:
+        return 0;
+
+    // ----- WAVE_RAM: readable -----
+    case 0x090: case 0x092: case 0x094: case 0x096:
+    case 0x098: case 0x09A: case 0x09C: case 0x09E:
+        return ioVal(offset);
+
+    // ----- FIFO: write-only → open bus -----
+    case 0x0A0: case 0x0A2: case 0x0A4: case 0x0A6:
+        return openBus();
+
+    // ----- Keypad -----
+    case 0x130: return ioVal(offset);                        // KEYINPUT
+    case 0x132: return ioVal(offset);                        // KEYCNT
+
+    // ----- Serial I/O (stubs) -----
+    case 0x120: case 0x122: case 0x124: case 0x126:         // SIO multi
+    case 0x128: case 0x12A:                                  // SIOCNT / SIO send
+    case 0x134:                                              // RCNT
+    case 0x140:                                              // JOYCNT
+    case 0x150: case 0x152:                                  // JOY_RECV
+    case 0x154: case 0x156:                                  // JOY_TRANS
+    case 0x158:                                              // JOYSTAT
+        return ioVal(offset);
+
+    // ----- Interrupts / system -----
+    case 0x200: return ioVal(offset);                        // IE
+    case 0x202: return ioVal(offset);                        // IF
+    case 0x204: return ioVal(offset);                        // WAITCNT
+    case 0x208: return ioVal(offset);                        // IME
+    case 0x300: return ioVal(offset);                        // POSTFLG
+
+    // ----- Unused addresses that return 0 -----
+    case 0x136: case 0x142: case 0x15A:
+    case 0x206: case 0x20A: case 0x302:
+        return 0;
+
+    default:
+        // Unknown / unmapped I/O → open bus
+        return openBus();
+    }
+}
+
 void Memory::writeDirectIO(uint32_t address, uint16_t value) {
     // Direct write to I/O registers (bypasses write-to-clear and other special handling)
     // Used by hardware components to set registers
@@ -815,18 +931,12 @@ uint32_t Memory::read32(uint32_t address) const {
         }
     }
     
-    // Handle DMA register reads (source and dest addresses)
-    if (dmaController) {
-        if (address >= 0x040000B0 && address <= 0x040000DE) {
-            int channelID = (address - 0x040000B0) / 12;
-            int regOffset = (address - 0x040000B0) % 12;
-            
-            if (regOffset == 0) {  // Source address (DMAxSAD)
-                return dmaController->readSourceAddress(channelID);
-            } else if (regOffset == 4) {  // Dest address (DMAxDAD)
-                return dmaController->readDestAddress(channelID);
-            }
-        }
+    // --- I/O register region: combine two ioRead16 calls ---
+    if ((address >> 24) == 0x04 && (address & 0x00FF0000) == 0) {
+        uint16_t offset = address & 0x3FC;  // word-aligned offset
+        uint16_t lo = ioRead16(offset);
+        uint16_t hi = ioRead16(offset + 2);
+        return lo | ((uint32_t)hi << 16);
     }
     
     // SRAM (0x0E-0x0F) has 8-bit bus: reads return single byte replicated to 32 bits.

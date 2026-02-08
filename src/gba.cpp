@@ -179,11 +179,11 @@ void GBA::skipBIOS() {
     printf("=== END PHASE 2 VERIFICATION ===\n\n");
     
     // Print ROM ENTRY style state for comparison with BIOS boot
-    uint16_t ime = memory.read16(0x04000208);
-    uint16_t ie = memory.read16(0x04000200);
-    uint16_t if_reg = memory.read16(0x04000202);
-    uint8_t postflg = memory.read8(0x04000300);
-    uint16_t dispcnt = memory.read16(0x04000000);
+    uint16_t ime = memory.readDirectIO16(0x04000208);
+    uint16_t ie = memory.readDirectIO16(0x04000200);
+    uint16_t if_reg = memory.readDirectIO16(0x04000202);
+    uint8_t postflg = memory.readDirectIO8(0x04000300);
+    uint16_t dispcnt = memory.readDirectIO16(0x04000000);
     fprintf(stderr, "[SKIP-BIOS] IME=0x%04X IE=0x%04X IF=0x%04X POSTFLG=0x%02X DISPCNT=0x%04X\n",
             ime, ie, if_reg, postflg, dispcnt);
     fprintf(stderr, "[SKIP-BIOS] R13(SP)=0x%08X R14(LR)=0x%08X\n",
@@ -394,7 +394,7 @@ void GBA::runFrame() {
             if (!rom_entered) {
                 // Clear IF register - BIOS should do this before jumping to ROM
                 // Some games check IF to detect whether they're starting fresh
-                uint16_t if_reg = memory.read16(0x04000202);
+                uint16_t if_reg = memory.readDirectIO16(0x04000202);
                 if (if_reg != 0) {
                     // Write to IF clears the bits that are written (W1C - write 1 to clear)
                     memory.write16(0x04000202, if_reg);

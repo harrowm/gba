@@ -131,6 +131,11 @@ private:
     // Helper to add wait state cycles
     void addWaitCycles(uint32_t address, uint32_t accessWidth) const;
     
+    // I/O register read handler: implements per-register read behavior
+    // (write-only → open bus, readable → value & mask, unused → 0)
+    // offset is the 16-bit aligned register offset from 0x04000000
+    uint16_t ioRead16(uint16_t offset) const;
+    
     // Calculate wait states for different memory regions
     uint32_t calculateWaitStates(uint32_t address, uint32_t accessWidth) const;
     

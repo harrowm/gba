@@ -122,7 +122,7 @@ void GPU::setupTiming(Scheduler* scheduler) {
 
 void GPU::renderScanline() {
     // Debug: trace scanlines periodically
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     
     // SEGA logo effect debug: log BG scroll registers during frames 30-90
     // to understand the scrolling/trail effect
@@ -131,14 +131,14 @@ void GPU::renderScanline() {
     if (g_current_frame >= 30 && g_current_frame <= 60) {
         // Log once per frame at specific scanlines to see variation
         if (currentScanline == 0 || currentScanline == 40 || currentScanline == 80 || currentScanline == 120) {
-            uint16_t dispcnt_dbg = memory.read16(REG_DISPCNT);
+            uint16_t dispcnt_dbg = memory.readDirectIO16(REG_DISPCNT);
             int mode_dbg = dispcnt_dbg & 0x7;
-            uint16_t bg0hofs = memory.read16(REG_BG0HOFS) & 0x1FF;
-            uint16_t bg0vofs = memory.read16(REG_BG0VOFS) & 0x1FF;
-            uint16_t bg1hofs = memory.read16(REG_BG1HOFS) & 0x1FF;
-            uint16_t bg1vofs = memory.read16(REG_BG1VOFS) & 0x1FF;
-            uint16_t bg2hofs = memory.read16(REG_BG2HOFS) & 0x1FF;
-            uint16_t bg2vofs = memory.read16(REG_BG2VOFS) & 0x1FF;
+            uint16_t bg0hofs = memory.readDirectIO16(REG_BG0HOFS) & 0x1FF;
+            uint16_t bg0vofs = memory.readDirectIO16(REG_BG0VOFS) & 0x1FF;
+            uint16_t bg1hofs = memory.readDirectIO16(REG_BG1HOFS) & 0x1FF;
+            uint16_t bg1vofs = memory.readDirectIO16(REG_BG1VOFS) & 0x1FF;
+            uint16_t bg2hofs = memory.readDirectIO16(REG_BG2HOFS) & 0x1FF;
+            uint16_t bg2vofs = memory.readDirectIO16(REG_BG2VOFS) & 0x1FF;
             fprintf(stderr, "[SEGA F%d S%d] Mode=%d BG0(%d,%d) BG1(%d,%d) BG2(%d,%d)\n",
                     g_current_frame, currentScanline, mode_dbg, bg0hofs, bg0vofs, 
                     bg1hofs, bg1vofs, bg2hofs, bg2vofs);
@@ -176,13 +176,13 @@ void GPU::renderScanline() {
             
             // If Mode 2 with BG3, log the affine parameters
             if (isMode2WithBG3) {
-                int16_t bg3pa = (int16_t)memory.read16(0x04000030);
-                int16_t bg3pb = (int16_t)memory.read16(0x04000032);
-                int16_t bg3pc = (int16_t)memory.read16(0x04000034);
-                int16_t bg3pd = (int16_t)memory.read16(0x04000036);
-                uint32_t bg3x = memory.read32(0x04000038);
-                uint32_t bg3y = memory.read32(0x0400003C);
-                uint16_t bg3cnt = memory.read16(0x0400000E);
+                int16_t bg3pa = (int16_t)memory.readDirectIO16(0x04000030);
+                int16_t bg3pb = (int16_t)memory.readDirectIO16(0x04000032);
+                int16_t bg3pc = (int16_t)memory.readDirectIO16(0x04000034);
+                int16_t bg3pd = (int16_t)memory.readDirectIO16(0x04000036);
+                uint32_t bg3x = memory.readDirectIO32(0x04000038);
+                uint32_t bg3y = memory.readDirectIO32(0x0400003C);
+                uint16_t bg3cnt = memory.readDirectIO16(0x0400000E);
                 LOG_TRACE_CAT("[GPU] BG3 Affine: PA=%d PB=%d PC=%d PD=%d X=0x%08X Y=0x%08X BGCNT=0x%04X\n",
                        bg3pa, bg3pb, bg3pc, bg3pd, bg3x, bg3y, bg3cnt);
             }
@@ -195,9 +195,9 @@ void GPU::renderScanline() {
                 LOG_TRACE_CAT("\n[OAM FRAME %d]\n", oamLogFrames);
                 for (int objNum = 0; objNum < 16; objNum++) { // Check first 16 sprites
                     uint32_t oamAddr = OAM_BASE + (objNum * 8);
-                    uint16_t attr0 = memory.read16(oamAddr + 0);
-                    uint16_t attr1 = memory.read16(oamAddr + 2);
-                    uint16_t attr2 = memory.read16(oamAddr + 4);
+                    uint16_t attr0 = memory.readDirectIO16(oamAddr + 0);
+                    uint16_t attr1 = memory.readDirectIO16(oamAddr + 2);
+                    uint16_t attr2 = memory.readDirectIO16(oamAddr + 4);
                     
                     // Check if sprite is enabled (not disabled by bit 9 when not affine)
                     bool isAffine = (attr0 & (1 << 8)) != 0;
@@ -284,7 +284,7 @@ void GPU::renderMode4Scanline(uint16_t scanline) {
     // Each pixel is 1 byte (palette index 0-255)
     // Output to tiledFramebuffer as RGB555
     
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     
     // Check if BG2 is enabled (bit 10)
     bool bg2Enabled = (dispcnt & (1 << 10)) != 0;
@@ -337,7 +337,7 @@ void GPU::renderMode4Scanline(uint16_t scanline) {
 
 uint16_t* GPU::getFrameBuffer() {
     // Return appropriate framebuffer based on video mode
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     uint16_t mode = dispcnt & DISPCNT_MODE_MASK;
     
     if (mode == 3) {
@@ -502,7 +502,7 @@ DisplayControl GPU::parseDISPCNT(uint16_t dispcnt) {
 
 DisplayControl GPU::readDISPCNT() {
     // Read DISPCNT from memory and parse it
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     return parseDISPCNT(dispcnt);
 }
 
@@ -512,24 +512,24 @@ bool GPU::isBGEnabled(int bgNum) {
         return false;
     }
     
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     uint16_t bgBit = DISPCNT_BG0_ENABLE << bgNum;  // BG0=bit 8, BG1=bit 9, etc.
     
     return (dispcnt & bgBit) != 0;
 }
 
 bool GPU::isOBJEnabled() {
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     return (dispcnt & DISPCNT_OBJ_ENABLE) != 0;
 }
 
 bool GPU::isForcedBlank() {
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     return (dispcnt & DISPCNT_FORCED_BLANK) != 0;
 }
 
 uint8_t GPU::getVideoMode() {
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     return dispcnt & DISPCNT_MODE_MASK;
 }
 
@@ -602,7 +602,7 @@ BGConfig GPU::readBGCNT(int bgNum) {
     }
     
     uint32_t bgcntAddr = REG_BG0CNT + (bgNum * 2);
-    uint16_t bgcnt = memory.read16(bgcntAddr);
+    uint16_t bgcnt = memory.readDirectIO16(bgcntAddr);
     
     return parseBGCNT(bgcnt);
 }
@@ -683,7 +683,7 @@ uint16_t GPU::readScreenEntryRaw(const BGConfig& bgConfig, int tileX, int tileY)
     // Final address
     uint32_t addr = bgConfig.screenBaseAddr + screenBlockOffset + entryOffset;
     
-    return memory.read16(addr);
+    return memory.readDirectIO16(addr);
 }
 
 ScreenEntry GPU::readScreenEntry(const BGConfig& bgConfig, int tileX, int tileY) {
@@ -719,8 +719,8 @@ BGScroll GPU::readBGScroll(int bgNum) {
     
     // Scroll registers are write-only in hardware, but we read from memory
     // Only lower 9 bits are used (0-511)
-    scroll.hofs = memory.read16(hofsAddr) & 0x01FF;
-    scroll.vofs = memory.read16(vofsAddr) & 0x01FF;
+    scroll.hofs = memory.readDirectIO16(hofsAddr) & 0x01FF;
+    scroll.vofs = memory.readDirectIO16(vofsAddr) & 0x01FF;
     
     return scroll;
 }
@@ -855,7 +855,7 @@ void GPU::renderMode0Scanline(uint16_t scanline) {
     clearScanlineToBackdrop(scanline);
     
     // Read DISPCNT to see which backgrounds are enabled
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     
     // Read BGxCNT for all backgrounds to get priorities
     BGConfig bgConfigs[4];
@@ -1086,9 +1086,9 @@ OBJAttributes GPU::readOBJAttributes(int objNum) {
     // Each OBJ entry is 8 bytes (4 × 16-bit attributes, but we only use first 3)
     uint32_t oamAddr = OAM_BASE + (objNum * 8);
     
-    uint16_t attr0 = memory.read16(oamAddr + 0);
-    uint16_t attr1 = memory.read16(oamAddr + 2);
-    uint16_t attr2 = memory.read16(oamAddr + 4);
+    uint16_t attr0 = memory.readDirectIO16(oamAddr + 0);
+    uint16_t attr1 = memory.readDirectIO16(oamAddr + 2);
+    uint16_t attr2 = memory.readDirectIO16(oamAddr + 4);
     
     return parseOBJAttributes(attr0, attr1, attr2);
 }
@@ -1314,10 +1314,10 @@ AffineParams GPU::readAffineParams(uint8_t paramIndex) {
     
     // Read the 4 transformation matrix values
     // They're at offsets +0x06, +0x0E, +0x16, +0x1E within each 32-byte block
-    params.pa = static_cast<int16_t>(memory.read16(baseAddr + 0x06));
-    params.pb = static_cast<int16_t>(memory.read16(baseAddr + 0x0E));
-    params.pc = static_cast<int16_t>(memory.read16(baseAddr + 0x16));
-    params.pd = static_cast<int16_t>(memory.read16(baseAddr + 0x1E));
+    params.pa = static_cast<int16_t>(memory.readDirectIO16(baseAddr + 0x06));
+    params.pb = static_cast<int16_t>(memory.readDirectIO16(baseAddr + 0x0E));
+    params.pc = static_cast<int16_t>(memory.readDirectIO16(baseAddr + 0x16));
+    params.pd = static_cast<int16_t>(memory.readDirectIO16(baseAddr + 0x1E));
     
     return params;
 }
@@ -1357,7 +1357,7 @@ void GPU::renderAffineSprite(const OBJAttributes& obj, uint16_t scanline, const 
     }
     
     // Get display control for mapping mode
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     bool mapping1D = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
     
     // Determine sprite dimensions
@@ -1454,7 +1454,7 @@ void GPU::renderAffineSprite(const OBJAttributes& obj, uint16_t scanline, const 
         }
         
         // Read color from OBJ palette (starts at 0x05000200)
-        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        uint16_t rgb555 = memory.readDirectIO16(0x05000200 + paletteIndex * 2);
         
         // Write to framebuffer (RGB555 format)
         int fbOffset = scanline * 240 + screenX;
@@ -1489,7 +1489,7 @@ void GPU::renderScanline(uint16_t scanline) {
     }
     
     // Get DISPCNT to check which layers are enabled
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     uint16_t mode = dispcnt & DISPCNT_MODE_MASK;
     
     // Mode 3 doesn't use priority system (direct bitmap)
@@ -1526,7 +1526,7 @@ void GPU::renderScanline(uint16_t scanline) {
     uint8_t secondLayerTypeBuffer[240];
     
     // 1. Fill line buffers with backdrop color (lowest priority)
-    uint16_t backdrop = memory.read16(0x05000000);  // Palette 0, color 0
+    uint16_t backdrop = memory.readDirectIO16(0x05000000);  // Palette 0, color 0
     
     for (int i = 0; i < 240; i++) {
         lineBuffer[i] = backdrop;
@@ -1576,7 +1576,7 @@ void GPU::renderScanline(uint16_t scanline) {
             
             if (dispcnt & (DISPCNT_BG0_ENABLE << bg)) {
                 // Check if this BG has the current priority
-                uint16_t bgcnt = memory.read16(REG_BG0CNT + (bg * 2));
+                uint16_t bgcnt = memory.readDirectIO16(REG_BG0CNT + (bg * 2));
                 uint8_t bgPriority = bgcnt & BGCNT_PRIORITY_MASK;
                 
                 if (bgPriority == priority) {
@@ -1657,7 +1657,7 @@ void GPU::renderScanline(uint16_t scanline) {
 void GPU::renderBGScanlineWithPriority(int bgNum, uint16_t scanline, 
                                         uint16_t* lineBuffer, uint8_t* priorityBuffer) {
     // Get BG configuration
-    uint16_t bgcnt = memory.read16(REG_BG0CNT + (bgNum * 2));
+    uint16_t bgcnt = memory.readDirectIO16(REG_BG0CNT + (bgNum * 2));
     BGConfig bgConfig = parseBGCNT(bgcnt);
     
     // Get scroll values
@@ -1689,11 +1689,11 @@ void GPU::renderBGScanlineWithPriority(int bgNum, uint16_t scanline,
         if (bgConfig.paletteMode) {
             // 8bpp mode
             int pixelOffset = pixelInTileY * 8 + pixelInTileX;
-            colorIndex = memory.read8(tileAddr + pixelOffset);
+            colorIndex = memory.readDirectIO8(tileAddr + pixelOffset);
         } else {
             // 4bpp mode
             int byteOffset = pixelInTileY * 4 + pixelInTileX / 2;
-            uint8_t byte = memory.read8(tileAddr + byteOffset);
+            uint8_t byte = memory.readDirectIO8(tileAddr + byteOffset);
             if (pixelInTileX & 1) {
                 colorIndex = (byte >> 4) & 0x0F;
             } else {
@@ -1716,7 +1716,7 @@ void GPU::renderBGScanlineWithPriority(int bgNum, uint16_t scanline,
                 paletteIndex = (entry.paletteNum * 16) + colorIndex;
             }
             
-            uint16_t rgb555 = memory.read16(0x05000000 + paletteIndex * 2);
+            uint16_t rgb555 = memory.readDirectIO16(0x05000000 + paletteIndex * 2);
             
             // Update line buffer and priority
             lineBuffer[screenX] = rgb555;
@@ -1736,15 +1736,15 @@ AffineBackgroundParams GPU::readAffineBGParams(int bgNum) {
     uint32_t baseAddr = (bgNum == 2) ? REG_BG2PA : REG_BG3PA;
     
     // Read 8.8 fixed-point transformation matrix parameters
-    params.pa = static_cast<int16_t>(memory.read16(baseAddr + 0));   // dx
-    params.pb = static_cast<int16_t>(memory.read16(baseAddr + 2));   // dmx
-    params.pc = static_cast<int16_t>(memory.read16(baseAddr + 4));   // dy
-    params.pd = static_cast<int16_t>(memory.read16(baseAddr + 6));   // dmy
+    params.pa = static_cast<int16_t>(memory.readDirectIO16(baseAddr + 0));   // dx
+    params.pb = static_cast<int16_t>(memory.readDirectIO16(baseAddr + 2));   // dmx
+    params.pc = static_cast<int16_t>(memory.readDirectIO16(baseAddr + 4));   // dy
+    params.pd = static_cast<int16_t>(memory.readDirectIO16(baseAddr + 6));   // dmy
     
     // Read 19.8 fixed-point reference points (28-bit signed)
     // BG2X/BG3X at offset 8, BG2Y/BG3Y at offset 12
-    uint32_t refXRaw = memory.read32(baseAddr + 8);
-    uint32_t refYRaw = memory.read32(baseAddr + 12);
+    uint32_t refXRaw = memory.readDirectIO32(baseAddr + 8);
+    uint32_t refYRaw = memory.readDirectIO32(baseAddr + 12);
     
     // Sign extend from 28 bits to 32 bits
     params.refX = (refXRaw & 0x08000000) ? (refXRaw | 0xF0000000) : (refXRaw & 0x0FFFFFFF);
@@ -1784,7 +1784,7 @@ void GPU::getAffineBGDimensions(uint8_t sizeCode, int& widthPixels, int& heightP
 void GPU::renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline, 
                                               uint16_t* lineBuffer, uint8_t* priorityBuffer) {
     // Read BG control register
-    uint16_t bgcnt = memory.read16(REG_BG0CNT + (bgNum * 2));
+    uint16_t bgcnt = memory.readDirectIO16(REG_BG0CNT + (bgNum * 2));
     
     // Parse BGCNT for affine BG
     uint8_t priority = bgcnt & BGCNT_PRIORITY_MASK;
@@ -1864,14 +1864,14 @@ void GPU::renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline,
         
         // Read map entry (8-bit tile index for affine BGs)
         uint32_t mapOffset = tileY * mapWidthTiles + tileX;
-        uint8_t tileIndex = memory.read8(screenBaseAddr + mapOffset);
+        uint8_t tileIndex = memory.readDirectIO8(screenBaseAddr + mapOffset);
         
         // Get tile address (affine BGs always use 8bpp = 64 bytes per tile)
         uint32_t tileAddr = charBaseAddr + (tileIndex * 64);
         
         // Read pixel color index (8bpp)
         uint32_t pixelOffset = pixelInTileY * 8 + pixelInTileX;
-        uint8_t colorIndex = memory.read8(tileAddr + pixelOffset);
+        uint8_t colorIndex = memory.readDirectIO8(tileAddr + pixelOffset);
         
         // Color 0 is transparent
         if (colorIndex == 0) {
@@ -1884,7 +1884,7 @@ void GPU::renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline,
         // Only draw if this pixel has higher or equal priority
         if (layerPriority <= priorityBuffer[screenX]) {
             // Get color from BG palette (256-color mode uses single palette)
-            uint16_t rgb555 = memory.read16(0x05000000 + colorIndex * 2);
+            uint16_t rgb555 = memory.readDirectIO16(0x05000000 + colorIndex * 2);
             
             // Update line buffer and priority
             lineBuffer[screenX] = rgb555;
@@ -1904,7 +1904,7 @@ void GPU::renderAffineBGScanlineWithPriority(int bgNum, uint16_t scanline,
 void GPU::renderSpritesWithPriority(uint8_t priority, uint16_t scanline, 
                                      uint16_t* lineBuffer, uint8_t* priorityBuffer) {
     // Get DISPCNT for mapping mode
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     bool mapping1D = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
     
     // Render sprites in reverse OAM order (127 → 0)
@@ -2030,7 +2030,7 @@ void GPU::renderNormalSpriteWithPriority(const OBJAttributes& obj, uint16_t scan
             paletteIndex = (obj.paletteNum * 16) + colorIndex;
         }
         
-        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        uint16_t rgb555 = memory.readDirectIO16(0x05000200 + paletteIndex * 2);
         
         // Update line buffer and priority
         lineBuffer[screenX] = rgb555;
@@ -2157,7 +2157,7 @@ void GPU::renderAffineSpriteWithPriority(const OBJAttributes& obj, uint16_t scan
             paletteIndex = (obj.paletteNum * 16) + colorIndex;
         }
         
-        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        uint16_t rgb555 = memory.readDirectIO16(0x05000200 + paletteIndex * 2);
         
         // Update line buffer and priority
         lineBuffer[screenX] = rgb555;
@@ -2172,9 +2172,9 @@ void GPU::renderAffineSpriteWithPriority(const OBJAttributes& obj, uint16_t scan
 BlendControl GPU::readBlendControl() {
     BlendControl blend = {};
     
-    uint16_t bldcnt = memory.read16(REG_BLDCNT);
-    uint16_t bldalpha = memory.read16(REG_BLDALPHA);
-    uint16_t bldy = memory.read16(REG_BLDY);
+    uint16_t bldcnt = memory.readDirectIO16(REG_BLDCNT);
+    uint16_t bldalpha = memory.readDirectIO16(REG_BLDALPHA);
+    uint16_t bldy = memory.readDirectIO16(REG_BLDY);
     
     // Parse BLDCNT
     blend.firstTargets = bldcnt & 0x3F;              // Bits 0-5
@@ -2199,40 +2199,40 @@ BlendControl GPU::readBlendControl() {
 WindowControl GPU::readWindowControl() {
     WindowControl winCtrl = {};
     
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     
     // Window 0
     winCtrl.win0.enabled = (dispcnt & DISPCNT_WIN0_ENABLE) != 0;
     if (winCtrl.win0.enabled) {
-        uint16_t win0h = memory.read16(REG_WIN0H);
-        uint16_t win0v = memory.read16(REG_WIN0V);
+        uint16_t win0h = memory.readDirectIO16(REG_WIN0H);
+        uint16_t win0v = memory.readDirectIO16(REG_WIN0V);
         
         winCtrl.win0.right = win0h & 0xFF;           // Bits 0-7
         winCtrl.win0.left = (win0h >> 8) & 0xFF;     // Bits 8-15
         winCtrl.win0.bottom = win0v & 0xFF;          // Bits 0-7
         winCtrl.win0.top = (win0v >> 8) & 0xFF;      // Bits 8-15
         
-        uint16_t winin = memory.read16(REG_WININ);
+        uint16_t winin = memory.readDirectIO16(REG_WININ);
         winCtrl.win0.control = winin & 0x3F;         // Bits 0-5
     }
     
     // Window 1
     winCtrl.win1.enabled = (dispcnt & DISPCNT_WIN1_ENABLE) != 0;
     if (winCtrl.win1.enabled) {
-        uint16_t win1h = memory.read16(REG_WIN1H);
-        uint16_t win1v = memory.read16(REG_WIN1V);
+        uint16_t win1h = memory.readDirectIO16(REG_WIN1H);
+        uint16_t win1v = memory.readDirectIO16(REG_WIN1V);
         
         winCtrl.win1.right = win1h & 0xFF;
         winCtrl.win1.left = (win1h >> 8) & 0xFF;
         winCtrl.win1.bottom = win1v & 0xFF;
         winCtrl.win1.top = (win1v >> 8) & 0xFF;
         
-        uint16_t winin = memory.read16(REG_WININ);
+        uint16_t winin = memory.readDirectIO16(REG_WININ);
         winCtrl.win1.control = (winin >> 8) & 0x3F;  // Bits 8-13
     }
     
     // Outside window control
-    uint16_t winout = memory.read16(REG_WINOUT);
+    uint16_t winout = memory.readDirectIO16(REG_WINOUT);
     winCtrl.winOut = winout & 0x3F;                  // Bits 0-5
     winCtrl.winObj = (winout >> 8) & 0x3F;           // Bits 8-13
     
@@ -2278,7 +2278,7 @@ uint8_t GPU::getWindowControlForPixel(int x, int y, const WindowControl& winCtrl
     
     // Check OBJ Window (built from OBJ_MODE_OBJ_WINDOW sprites)
     // OBJ Window has priority between WIN0/WIN1 and WINOUT
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     bool objWinEnabled = (dispcnt & DISPCNT_WINOBJ_ENABLE) != 0;
     if (objWinEnabled && x >= 0 && x < 240 && objWindowMask[x]) {
         return winCtrl.winObj;  // Return OBJ Window control settings
@@ -2289,7 +2289,7 @@ uint8_t GPU::getWindowControlForPixel(int x, int y, const WindowControl& winCtrl
 }
 
 bool GPU::isLayerVisibleAtPixel(int layerType, int x, int y) {
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     
     // If no windows enabled, layer is visible if enabled in DISPCNT
     bool anyWindowEnabled = (dispcnt & (DISPCNT_WIN0_ENABLE | DISPCNT_WIN1_ENABLE)) != 0;
@@ -2415,7 +2415,7 @@ void GPU::renderBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, ui
                                                   uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                   const WindowControl& winCtrl) {
     // Get BG configuration
-    uint16_t bgcnt = memory.read16(REG_BG0CNT + (bgNum * 2));
+    uint16_t bgcnt = memory.readDirectIO16(REG_BG0CNT + (bgNum * 2));
     BGConfig bgConfig = parseBGCNT(bgcnt);
     
     // Get scroll values
@@ -2476,10 +2476,10 @@ void GPU::renderBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanline, ui
             // Get color from palette
             uint16_t rgb555;
             if (bgConfig.paletteMode) {
-                rgb555 = memory.read16(0x05000000 + colorIndex * 2);
+                rgb555 = memory.readDirectIO16(0x05000000 + colorIndex * 2);
             } else {
                 uint16_t paletteIndex = (entry.paletteNum * 16) + colorIndex;
-                rgb555 = memory.read16(0x05000000 + paletteIndex * 2);
+                rgb555 = memory.readDirectIO16(0x05000000 + paletteIndex * 2);
             }
             
             // Save current pixel as second layer (for alpha blending)
@@ -2504,7 +2504,7 @@ void GPU::renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanli
                                                        uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                        const WindowControl& winCtrl) {
     // Read BG control register
-    uint16_t bgcnt = memory.read16(REG_BG0CNT + (bgNum * 2));
+    uint16_t bgcnt = memory.readDirectIO16(REG_BG0CNT + (bgNum * 2));
     
     // Parse BGCNT for affine BG
     uint8_t priority = bgcnt & BGCNT_PRIORITY_MASK;
@@ -2576,14 +2576,14 @@ void GPU::renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanli
         
         // Read map entry (8-bit tile index)
         uint32_t mapOffset = tileY * mapWidthTiles + tileX;
-        uint8_t tileIndex = memory.read8(screenBaseAddr + mapOffset);
+        uint8_t tileIndex = memory.readDirectIO8(screenBaseAddr + mapOffset);
         
         // Get tile address (8bpp = 64 bytes per tile)
         uint32_t tileAddr = charBaseAddr + (tileIndex * 64);
         
         // Read pixel color index
         uint32_t pixelOffset = pixelInTileY * 8 + pixelInTileX;
-        uint8_t colorIndex = memory.read8(tileAddr + pixelOffset);
+        uint8_t colorIndex = memory.readDirectIO8(tileAddr + pixelOffset);
         
         // Color 0 is transparent
         if (colorIndex == 0) {
@@ -2594,7 +2594,7 @@ void GPU::renderAffineBGScanlineWithPriorityAndWindow(int bgNum, uint16_t scanli
         
         // Only draw if this pixel has higher or equal priority
         if (layerPriority <= priorityBuffer[screenX]) {
-            uint16_t rgb555 = memory.read16(0x05000000 + colorIndex * 2);
+            uint16_t rgb555 = memory.readDirectIO16(0x05000000 + colorIndex * 2);
             
             // Save current pixel as second layer
             secondLayerBuffer[screenX] = lineBuffer[screenX];
@@ -2617,7 +2617,7 @@ void GPU::renderSpritesWithPriorityAndWindow(uint8_t priority, uint16_t scanline
                                                uint16_t* secondLayerBuffer, uint8_t* secondLayerTypeBuffer,
                                                const WindowControl& winCtrl) {
     // Get sprite mapping mode
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     bool mapping1D = (dispcnt & DISPCNT_OBJ_1D_MAP) != 0;
     
     // Render each OBJ in reverse order (OBJ 127 → 0)
@@ -2749,7 +2749,7 @@ void GPU::renderNormalSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
             paletteIndex = (obj.paletteNum * 16) + colorIndex;
         }
         
-        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        uint16_t rgb555 = memory.readDirectIO16(0x05000200 + paletteIndex * 2);
         
         // Save current pixel as second layer (for alpha blending)
         uint16_t secondLayerColor = lineBuffer[screenX];
@@ -2764,7 +2764,7 @@ void GPU::renderNormalSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
         if (obj.objMode == OBJ_MODE_SEMI_TRANSPARENT) {
             // Read blend control
             BlendControl blend = readBlendControl();
-            uint16_t bldcnt = memory.read16(0x04000050);
+            uint16_t bldcnt = memory.readDirectIO16(0x04000050);
             uint8_t blendMode = (bldcnt >> 6) & 0x3;
             bool objIsFirstTarget = (bldcnt & (1 << 4)) != 0;
             
@@ -2906,7 +2906,7 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
             paletteIndex = (obj.paletteNum * 16) + colorIndex;
         }
         
-        uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+        uint16_t rgb555 = memory.readDirectIO16(0x05000200 + paletteIndex * 2);
         
         // Save current pixel as second layer (for alpha blending)
         uint16_t secondLayerColor = lineBuffer[screenX];
@@ -2921,7 +2921,7 @@ void GPU::renderAffineSpriteWithPriorityAndWindow(int objNum, const OBJAttribute
         if (obj.objMode == OBJ_MODE_SEMI_TRANSPARENT) {
             // Read blend control
             BlendControl blend = readBlendControl();
-            uint16_t bldcnt = memory.read16(0x04000050);
+            uint16_t bldcnt = memory.readDirectIO16(0x04000050);
             uint8_t blendMode = (bldcnt >> 6) & 0x3;
             bool objIsFirstTarget = (bldcnt & (1 << 4)) != 0;
             
@@ -3093,10 +3093,10 @@ void GPU::renderObjWindowToMask(const OBJAttributes& obj, int objNum, uint16_t s
             
             if (obj.paletteMode) {
                 tileAddr += pixelInTileY * 8 + pixelInTileX;
-                colorIndex = memory.read8(tileAddr);
+                colorIndex = memory.readDirectIO8(tileAddr);
             } else {
                 tileAddr += pixelInTileY * 4 + (pixelInTileX / 2);
-                uint8_t tileData = memory.read8(tileAddr);
+                uint8_t tileData = memory.readDirectIO8(tileAddr);
                 colorIndex = (pixelInTileX & 1) ? (tileData >> 4) : (tileData & 0x0F);
             }
             
@@ -3125,10 +3125,10 @@ void GPU::renderObjWindowToMask(const OBJAttributes& obj, int objNum, uint16_t s
             
             if (obj.paletteMode) {
                 tileAddr += pixelInTileY * 8 + pixelInTileX;
-                colorIndex = memory.read8(tileAddr);
+                colorIndex = memory.readDirectIO8(tileAddr);
             } else {
                 tileAddr += pixelInTileY * 4 + (pixelInTileX / 2);
-                uint8_t tileData = memory.read8(tileAddr);
+                uint8_t tileData = memory.readDirectIO8(tileAddr);
                 colorIndex = (pixelInTileX & 1) ? (tileData >> 4) : (tileData & 0x0F);
             }
             
@@ -3154,14 +3154,14 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
     // spriteLayer and objWindowMask are initialized in renderScanline
     
     // Check if OBJ Window is enabled in DISPCNT
-    uint16_t dispcnt = memory.read16(REG_DISPCNT);
+    uint16_t dispcnt = memory.readDirectIO16(REG_DISPCNT);
     bool objWinEnabled = (dispcnt & DISPCNT_WINOBJ_ENABLE) != 0;
     
 
     
     // Read BLDCNT to check if NORMAL sprites should be blend targets
     // Per mGBA: NORMAL sprites can be 1st targets if BLDCNT enables them + alpha mode
-    uint16_t bldcnt = memory.read16(REG_BLDCNT);
+    uint16_t bldcnt = memory.readDirectIO16(REG_BLDCNT);
     bool objIsFirstTarget = (bldcnt & 0x0010) != 0;  // Bit 4: OBJ is 1st target
     uint8_t blendMode = (bldcnt >> 6) & 0x03;        // Bits 6-7: blend mode
     bool normalSpritesCanBlend = objIsFirstTarget && (blendMode == 1);  // Alpha blend mode
@@ -3348,7 +3348,7 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
                     paletteIndex = (obj.paletteNum * 16) + colorIndex;
                 }
                 
-                uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+                uint16_t rgb555 = memory.readDirectIO16(0x05000200 + paletteIndex * 2);
                 
                 // Store in spriteLayer
                 spriteLayer[screenX] = rgb555 | flags;
@@ -3428,7 +3428,7 @@ void GPU::preprocessSprites(uint16_t scanline, bool mapping1D, const WindowContr
                 paletteIndex = (obj.paletteNum * 16) + colorIndex;
             }
             
-            uint16_t rgb555 = memory.read16(0x05000200 + paletteIndex * 2);
+            uint16_t rgb555 = memory.readDirectIO16(0x05000200 + paletteIndex * 2);
             
             // Color lookup successful
             
@@ -3551,10 +3551,10 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
             if (postFrame >= 690 && postFrame <= 692 && scanline == 110 && x == 100) {
                 uint32_t objNum = (spritePixel & FLAG_ORDER_MASK) >> OFFSET_ORDER;
                 uint16_t bgColor = lineBuffer[x];
-                uint16_t bldcnt = memory.read16(0x04000050);
-                uint16_t bldalpha = memory.read16(0x04000052);
-                uint16_t dispcnt = memory.read16(0x04000000);
-                uint16_t palette0 = memory.read16(0x05000000);
+                uint16_t bldcnt = memory.readDirectIO16(0x04000050);
+                uint16_t bldalpha = memory.readDirectIO16(0x04000052);
+                uint16_t dispcnt = memory.readDirectIO16(0x04000000);
+                uint16_t palette0 = memory.readDirectIO16(0x05000000);
                 LOG_TRACE_CAT("=== BLEND DEBUG F%d L%d x%d ===\n", postFrame, scanline, x);
                 LOG_TRACE_CAT("  DISPCNT: 0x%04X (mode=%d, BGs=%d%d%d%d, OBJ=%d)\n",
                        dispcnt, dispcnt & 7,
@@ -3573,12 +3573,12 @@ void GPU::postprocessSprites(uint8_t priority, uint16_t scanline, uint16_t* line
                 LOG_TRACE_CAT("  isSemiTransparent: %d, isBlendTarget: %d\n", isSemiTransparent, isBlendTarget);
                 LOG_TRACE_CAT("  shouldBlend: %d\n", shouldBlend);
                 // Also show what BG3 is doing
-                uint16_t bg3cnt = memory.read16(0x04000000 + 0x0E);  // BG3CNT
+                uint16_t bg3cnt = memory.readDirectIO16(0x04000000 + 0x0E);  // BG3CNT
                 LOG_TRACE_CAT("  BG3CNT: 0x%04X (priority=%d, charBase=%d, screenBase=%d)\n",
                        bg3cnt, bg3cnt & 3, (bg3cnt >> 2) & 3, (bg3cnt >> 8) & 0x1F);
                 
-                uint16_t winin = memory.read16(0x04000048);
-                uint16_t winout = memory.read16(0x0400004A);
+                uint16_t winin = memory.readDirectIO16(0x04000048);
+                uint16_t winout = memory.readDirectIO16(0x0400004A);
                 LOG_TRACE_CAT("  WININ: 0x%04X, WINOUT: 0x%04X\n", winin, winout);
                 
                 // Check if any OBJ Window sprites exist
