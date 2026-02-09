@@ -490,6 +490,29 @@ void ARMCPU::executeOneInstruction() {
         }
     }
     
+    // For multiply instructions, the internal (m) cycles represent bus-idle
+    // time during which the prefetch buffer fills — exactly like a data stall.
+    // mGBA's ARM_WAIT_SMUL / ARM_WAIT_UMUL macros pass the multiply wait
+    // (WAIT + m_cycles) through GBAMemoryStall(). Replicate that here.
+    // Hardware enforces a minimum: the total can never be less than the
+    // multiply's own execution time (instruction_cycles), since the multiply
+    // unit physically needs those cycles regardless of prefetch benefits.
+    bool isMultiply = ((instruction & 0x0FC000F0) == 0x00000090)   // MUL/MLA
+                   || ((instruction & 0x0F8000F0) == 0x00800090);  // Long MUL
+    int32_t mulMinCycles = 0;
+    if (isMultiply && mem.prefetchEnabled && !prefetchApplied) {
+        uint8_t pcRegion = (pc >> 24) & 0xFF;
+        if (pcRegion >= 0x08 && pcRegion <= 0x0D) {
+            mulMinCycles = (int32_t)instruction_cycles;
+            int32_t mulExtra = (int32_t)instruction_cycles - 1;
+            int32_t stallResult = mem.prefetchStall(pc, mulExtra, false);
+            // Replace the multiply's contribution: base 1 + stall result
+            adjustedDataCycles = stallResult;
+            instruction_cycles = 1;
+            prefetchApplied = true;
+        }
+    }
+
     // mGBA cycle accounting difference for loads:
     // In mGBA, load functions (GBALoad32/16/8) include the internal cycle in
     // the data access wait (wait += 2) vs stores which add only +1 (++wait).
@@ -540,4 +563,8 @@ void ARMCPU::executeOneInstruction() {
     int32_t totalCycles = (int32_t)instruction_cycles + (int32_t)fetchCycles
                         + adjustedDataCycles + (int32_t)branchRefillCycles;
     if (totalCycles < 1) totalCycles = 1;  // minimum 1 cycle per instruction
+    // Multiply minimum: total can't be less than the multiply's own execution
+    // time — the multiply unit physically occupies the CPU for m+1 cycles.
+    if (mulMinCycles > 0 && totalCycles < mulMinCycles)
+        totalCycles = mulMinCycles;
     parentCPU.advanceCycles((uint32_t)totalCycles);}

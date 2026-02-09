@@ -1780,6 +1780,25 @@ void ThumbCPU::executeOneInstruction() {
         }
     }
     
+    // For Thumb multiply (Format 4, opcode 0xD), the internal (m) cycles are
+    // bus-idle time during which the prefetch buffer fills. mGBA's Thumb MUL
+    // uses ARM_WAIT_SMUL which passes the wait through GBAMemoryStall.
+    // Hardware enforces a minimum: total can't be less than the multiply's
+    // own execution time (instruction_cycles), same as ARM mode.
+    bool isThumbMul = ((instruction & 0xFFC0) == 0x4340);  // Format 4, op=0xD (MUL)
+    int32_t mulMinCycles = 0;
+    if (isThumbMul && mem.prefetchEnabled && !prefetchApplied) {
+        uint8_t pcRegion = (pc >> 24) & 0xFF;
+        if (pcRegion >= 0x08 && pcRegion <= 0x0D) {
+            mulMinCycles = (int32_t)instruction_cycles;
+            int32_t mulExtra = (int32_t)instruction_cycles - 1;
+            int32_t stallResult = mem.prefetchStall(pc, mulExtra, true);
+            adjustedDataCycles = stallResult;
+            instruction_cycles = 1;
+            prefetchApplied = true;
+        }
+    }
+
     // mGBA cycle accounting difference for loads (same issue as ARM):
     // mGBA load functions include the internal cycle in the data wait (+2),
     // while stores use +1. Our instruction_cycles has the internal cycle (2
@@ -1839,5 +1858,9 @@ void ThumbCPU::executeOneInstruction() {
     int32_t totalCycles = (int32_t)instruction_cycles + (int32_t)fetchCycles
                         + adjustedDataCycles + (int32_t)branchRefillCycles;
     if (totalCycles < 1) totalCycles = 1;  // minimum 1 cycle per instruction
+    // Multiply minimum: total can't be less than the multiply's own execution
+    // time — the multiply unit physically occupies the CPU for m+1 cycles.
+    if (mulMinCycles > 0 && totalCycles < mulMinCycles)
+        totalCycles = mulMinCycles;
     parentCPU.advanceCycles((uint32_t)totalCycles);
 }
