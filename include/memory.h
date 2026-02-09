@@ -138,8 +138,15 @@ public:
     // instruction fetches free.
     uint32_t lastPrefetchedPc = 0;
     
+    // When a Thumb/ARM load from non-ROM triggers a prefetch stall with
+    // reduced S-wait (S16 < 2), the prefetch buffer fills the next sequential
+    // fetch during the stall.  The NEXT non-data-transfer instruction should
+    // get its sequential fetch for free (−1 cycle).  This flag tracks that
+    // pending credit; it's consumed exactly once by the next seq-fetch insn.
+    bool prefetchSeqCreditPending = false;
+
     // Flush prefetch buffer (called on branches, DMA, non-sequential access)
-    void flushPrefetch() { lastPrefetchedPc = 0; }
+    void flushPrefetch() { lastPrefetchedPc = 0; prefetchSeqCreditPending = false; }
     
     // Apply prefetch buffer stall reduction to data access wait cycles.
     // When executing from ROM with prefetch enabled and the data access
