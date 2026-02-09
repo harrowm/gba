@@ -502,11 +502,24 @@ void ARMCPU::executeOneInstruction() {
         }
     }
     
-    // Detect branches: if PC changed non-sequentially, flush the prefetch buffer.
-    // A sequential ARM step increments PC by 4 (done before executeInstruction).
+    // Detect branches: if PC changed non-sequentially, the ARM7TDMI must
+    // refill its 3-stage pipeline at the target address.  This costs 1N + 1S
+    // fetch cycles at the target (matching mGBA's ARMWritePC/ThumbWritePC).
+    // The 2 internal cycles for the refill are already included in
+    // instruction_cycles (arm_timing.c returns 3 for B/BL/BX/SWI).
+    uint32_t branchRefillCycles = 0;
     uint32_t newPc = parentCPU.R()[15];
     if (newPc != pc + 4) {
+        if (parentCPU.getFlag(CPU::FLAG_T)) {
+            // BX switched to Thumb mode — refill uses 16-bit fetches
+            branchRefillCycles = mem.getNonseqWaitCycles16(newPc)
+                               + mem.getSeqWaitCycles16(newPc);
+        } else {
+            // Still in ARM mode — refill uses 32-bit fetches
+            branchRefillCycles = mem.getNonseqWaitCycles32(newPc)
+                               + mem.getSeqWaitCycles32(newPc);
+        }
         mem.flushPrefetch();
     }
     
-    parentCPU.advanceCycles(instruction_cycles + fetchCycles + dataCycles);}
+    parentCPU.advanceCycles(instruction_cycles + fetchCycles + dataCycles + branchRefillCycles);}
