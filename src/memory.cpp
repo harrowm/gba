@@ -1502,7 +1502,10 @@ void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
 //
 // The model is retroactive: we compute how many S-cycle ROM halfword fetches
 // fit in the data stall time, then reduce the wait accordingly.
+// The return value CAN be negative — this represents a net cycle credit from
+// the prefetch buffer's N→S conversion and absorbed fetches.
 int32_t Memory::prefetchStall(uint32_t pc, int32_t waitCycles, bool isThumb) const {
+    (void)isThumb;  // mGBA always uses halfword (WORD_SIZE_THUMB=2) for prefetch tracking
     uint8_t pcRegion = (pc >> 24) & 0xFF;
     
     // Only benefits execution from ROM (regions 0x08-0x0D) with prefetch enabled
@@ -1510,62 +1513,44 @@ int32_t Memory::prefetchStall(uint32_t pc, int32_t waitCycles, bool isThumb) con
         return waitCycles;
     }
     
-    // How many halfwords are already in the buffer from previous prefetching?
     int32_t previousLoads = 0;
+    
+    // Don't prefetch too much if we're overlapping with a previous prefetch.
+    // Unsigned subtraction intentional: if lastPrefetchedPc < pc, dist wraps
+    // to a large value (>= 16), giving previousLoads = 0. Matches mGBA.
+    uint32_t dist = (lastPrefetchedPc - pc);
     int32_t maxLoads = 8;  // Buffer holds 8 halfwords
-    
-    // The instruction width determines the fetch PC offset
-    uint32_t instrWidth = isThumb ? 2 : 4;
-    // The CPU pipeline: executing instruction at pc means fetch is at pc + 2*instrWidth
-    // (execute, decode, fetch). The prefetch reads ahead of the fetch stage.
-    uint32_t fetchAhead = pc + instrWidth;  // Next instruction to be fetched
-    
-    if (lastPrefetchedPc > fetchAhead) {
-        uint32_t dist = lastPrefetchedPc - fetchAhead;
-        if (dist < 16) {
-            previousLoads = dist >> 1;
-            maxLoads -= previousLoads;
-        }
+    if (dist < 16) {
+        previousLoads = dist >> 1;
+        maxLoads -= previousLoads;
     }
     
-    if (maxLoads <= 0) {
-        // Buffer already full — no additional prefetch benefit, but the
-        // first fetch after stall still converts N→S
-        return waitCycles;
-    }
-    
-    // Sequential 16-bit ROM wait for the current ROM region
-    int32_t sCycles = waitstatesSeq16[pcRegion];
-    
-    // Count how many S-cycle fetches fit in the wait time
-    // Each S fetch takes (sCycles + 1) total cycles (base 1 + extra waits)
-    int32_t stall = sCycles + 1;  // First fetch costs 1 S
+    // Figure out how many sequential loads we can jam in.
+    // First fetch costs s+1, subsequent fetches cost just s (mGBA model).
+    int32_t s = waitstatesSeq16[pcRegion];
+    int32_t stall = s + 1;
     int32_t loads = 1;
+    
     while (stall < waitCycles && loads < maxLoads) {
-        stall += sCycles + 1;
+        stall += s;
         ++loads;
     }
     
-    // Update how far ahead we've prefetched
-    // (const_cast because this is logically mutable state — the prefetch
-    // buffer is a hardware side effect, not part of the read/write contract)
+    // Update how far ahead we've prefetched (always in halfword units)
     Memory* self = const_cast<Memory*>(this);
-    self->lastPrefetchedPc = fetchAhead + (loads + previousLoads) * 2;
+    self->lastPrefetchedPc = pc + 2 * (loads + previousLoads - 1);
     
     if (stall > waitCycles) {
-        // Prefetch took longer than the stall — we get partial benefit
-        // but the CPU has to wait for the last prefetch to complete
+        // The wait cannot take less time than the prefetch stalls
         waitCycles = stall;
     }
     
-    // Convert first N access to S (savings = N16 - S16 for current region)
-    int32_t nCycles = waitstatesNonseq16[pcRegion];
-    waitCycles -= (nCycles - sCycles);
+    // This instruction used to have an N, convert it to an S.
+    waitCycles -= (int32_t)waitstatesNonseq16[pcRegion] - s;
     
-    // Subtract the prefetched fetches (each saves sCycles + 1)
+    // The next |loads| S waitstates disappear entirely, so long as
+    // they're all in a row
     waitCycles -= stall;
-    
-    if (waitCycles < 0) waitCycles = 0;
     
     return waitCycles;
 }
