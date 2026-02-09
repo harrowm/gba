@@ -461,7 +461,7 @@ void ARMCPU::executeOneInstruction() {
     uint32_t bits27_25 = (instruction >> 25) & 0x7;
     bool isDataTransfer = (bits27_26 == 0x01)                     // LDR/STR/LDRB/STRB
                        || (bits27_25 == 0x4)                       // LDM/STM
-                       || ((bits27_25 <= 0x1) &&                   // Halfword/signed xfer
+                       || ((bits27_25 == 0x0) &&                   // Halfword/signed xfer (register encoding only)
                            (instruction & 0x00000090) == 0x00000090 &&
                            (instruction & 0x00000060) != 0x00000000)
                        || ((instruction & 0x0FB00FF0) == 0x01000090)  // SWP
