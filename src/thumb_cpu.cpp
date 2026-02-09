@@ -1766,24 +1766,50 @@ void ThumbCPU::executeOneInstruction() {
         : mem.getSeqWaitCycles16(pc);
     
     // Game Pak prefetch buffer: when executing from ROM with prefetch enabled
-    // and data accessed non-ROM memory, the prefetch unit fills during the
-    // stall. The benefit is applied to fetchCycles (next instruction fetch)
-    // since the prefetch buffer handles upcoming instruction reads.
-    if (isDataTransfer && mem.prefetchEnabled && mem.hadNonRomAccess()
-        && !mem.hadRomAccess()) {
+    // and the data access targeted non-ROM memory, the prefetch unit fills
+    // during the stall. Apply mGBA-compatible GBAMemoryStall reduction to the
+    // data access wait — the savings account for N→S conversion of the next
+    // instruction fetch plus absorbed prefetched halfwords.
+    int32_t adjustedDataCycles = (int32_t)dataCycles;
+    bool prefetchApplied = false;
+    if (mem.prefetchEnabled && mem.hadNonRomAccess() && !mem.hadRomAccess()) {
         uint8_t pcRegion = (pc >> 24) & 0xFF;
         if (pcRegion >= 0x08 && pcRegion <= 0x0D) {
-            // S16 fetch cost for current ROM region (total = extra + 1 base)
-            uint32_t sFetchCost = mem.getSeqWaitCycles16(pc) + 1;
-            // How many S16 fetches completed during the NON-ROM data stall?
-            uint32_t nonRomStall = mem.getNonRomDataCycles();
-            uint32_t completedFetches = nonRomStall / sFetchCost;
-            // Thumb 16-bit fetch = 1 halfword from ROM.
-            if (completedFetches >= 1) {
-                // Fetch is fully prefetched: free
-                fetchCycles = 0;
-            }
-            // If 0 fetches completed, no prefetch benefit
+            adjustedDataCycles = mem.prefetchStall(pc, adjustedDataCycles, true);
+            prefetchApplied = true;
+        }
+    }
+    
+    // mGBA cycle accounting difference for loads (same issue as ARM):
+    // mGBA load functions include the internal cycle in the data wait (+2),
+    // while stores use +1. Our instruction_cycles has the internal cycle (2
+    // for loads, 1 for stores), but the prefetch stall returns a constant
+    // regardless of input, so the internal cycle stays un-absorbed in our
+    // model. Fix: subtract 1 for single Thumb loads when prefetch is active.
+    //
+    // HOWEVER: when S-wait is reduced (S16 < 2), the stall function returns
+    // an extra -1 benefit (s - N16 decreases by 1) that naturally compensates
+    // for our +1 internal cycle. Applying the -1 fix in that case would
+    // overcorrect. This matches real GBA hardware behavior where loads with
+    // reduced S-wait take 1 more cycle than mGBA predicts.
+    // Applies to formats 6-11 loads (LDR/LDRB/LDRH/LDSB/LDSH), NOT POP/LDMIA.
+    if (prefetchApplied) {
+        bool isSingleLoad = false;
+        switch (hi5) {
+        case 0x09:  // Format 6: LDR Rd, [PC, #imm]
+        case 0x0B:  // Format 7/8: LDR/LDRB/LDRH/LDSB/LDSH (register offset)
+        case 0x0D:  // Format 9: LDR Rd, [Rb, #imm]
+        case 0x0F:  // Format 9: LDRB Rd, [Rb, #imm]
+        case 0x11:  // Format 10: LDRH Rd, [Rb, #imm]
+        case 0x13:  // Format 11: LDR Rd, [SP, #imm]
+            isSingleLoad = true;
+            break;
+        }
+        // Only subtract when the S16 sequential wait is at default (>= 2).
+        // With reduced S-wait (S16=1), the increased stall magnitude already
+        // compensates for the +1 internal cycle in instruction_cycles.
+        if (isSingleLoad && mem.getSeqWaitCycles16(pc) >= 2) {
+            adjustedDataCycles -= 1;
         }
     }
     
@@ -1810,5 +1836,8 @@ void ThumbCPU::executeOneInstruction() {
         mem.flushPrefetch();
     }
     
-    parentCPU.advanceCycles(instruction_cycles + fetchCycles + dataCycles + branchRefillCycles);
+    int32_t totalCycles = (int32_t)instruction_cycles + (int32_t)fetchCycles
+                        + adjustedDataCycles + (int32_t)branchRefillCycles;
+    if (totalCycles < 1) totalCycles = 1;  // minimum 1 cycle per instruction
+    parentCPU.advanceCycles((uint32_t)totalCycles);
 }

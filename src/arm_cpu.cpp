@@ -474,31 +474,46 @@ void ARMCPU::executeOneInstruction() {
         : mem.getSeqWaitCycles32(pc);
     
     // Game Pak prefetch buffer: when executing from ROM with prefetch enabled
-    // and data accessed non-ROM memory, the prefetch unit fills during the
-    // stall. The benefit is applied to fetchCycles (next instruction fetch)
-    // since the prefetch buffer handles upcoming instruction reads.
-    // dataCycles remain unchanged — the data access still took its full time.
-    if (isDataTransfer && mem.prefetchEnabled && mem.hadNonRomAccess()
-        && !mem.hadRomAccess()) {
+    // and the data access targeted non-ROM memory, the prefetch unit fills
+    // during the stall. Apply mGBA-compatible GBAMemoryStall reduction to the
+    // data access wait — the savings account for N→S conversion of the next
+    // instruction fetch plus absorbed prefetched halfwords.
+    // The reduction is applied to dataCycles (not fetchCycles) matching mGBA's
+    // model where the stall function modifies the data access wait in-place.
+    int32_t adjustedDataCycles = (int32_t)dataCycles;
+    bool prefetchApplied = false;
+    if (mem.prefetchEnabled && mem.hadNonRomAccess() && !mem.hadRomAccess()) {
         uint8_t pcRegion = (pc >> 24) & 0xFF;
         if (pcRegion >= 0x08 && pcRegion <= 0x0D) {
-            // S16 fetch cost for current ROM region (total = extra + 1 base)
-            uint32_t sFetchCost = mem.getSeqWaitCycles16(pc) + 1;
-            // How many S16 fetches completed during the NON-ROM data stall?
-            // Only non-ROM data cycles allow prefetch (ROM accesses use the bus)
-            uint32_t nonRomStall = mem.getNonRomDataCycles();
-            uint32_t completedFetches = nonRomStall / sFetchCost;
-            // ARM 32-bit fetch = 2 halfword fetches from ROM.
-            // Each prefetched halfword replaces one S16 ROM access.
-            // Also, first fetch converts from N→S (savings = N16-S16 extra waits).
-            if (completedFetches >= 2) {
-                // Both halves of the 32-bit fetch are prefetched: fetch is free
-                fetchCycles = 0;
-            } else if (completedFetches == 1) {
-                // One halfword prefetched: save the N→S conversion on first half
-                fetchCycles = mem.getSeqWaitCycles32(pc);
-            }
-            // If 0 fetches completed, no prefetch benefit
+            adjustedDataCycles = mem.prefetchStall(pc, adjustedDataCycles, false);
+            prefetchApplied = true;
+        }
+    }
+    
+    // mGBA cycle accounting difference for loads:
+    // In mGBA, load functions (GBALoad32/16/8) include the internal cycle in
+    // the data access wait (wait += 2) vs stores which add only +1 (++wait).
+    // The prefetch stall function returns a constant (s - N16) regardless of
+    // input, so the internal cycle effectively gets absorbed by stall reduction.
+    // In our model, instruction_cycles includes the internal cycle (2 for loads,
+    // 1 for stores), keeping it outside the stall path. When prefetch is active,
+    // this produces a +1 overcounting for loads. Fix by subtracting 1.
+    // Only applies to single loads (LDR/LDRB/LDRH/LDRSB/LDRSH), NOT LDM.
+    if (prefetchApplied) {
+        bool isSingleLoad = false;
+        // LDR/LDRB (single word/byte transfer with L bit set)
+        if (bits27_26 == 0x01 && (instruction & (1 << 20))) {
+            isSingleLoad = true;
+        }
+        // LDRH/LDRSB/LDRSH (halfword/signed transfer with L bit set)
+        else if ((bits27_25 == 0x0) &&
+                 (instruction & 0x00000090) == 0x00000090 &&
+                 (instruction & 0x00000060) != 0x00000000 &&
+                 (instruction & (1 << 20))) {
+            isSingleLoad = true;
+        }
+        if (isSingleLoad) {
+            adjustedDataCycles -= 1;
         }
     }
     
@@ -522,4 +537,7 @@ void ARMCPU::executeOneInstruction() {
         mem.flushPrefetch();
     }
     
-    parentCPU.advanceCycles(instruction_cycles + fetchCycles + dataCycles + branchRefillCycles);}
+    int32_t totalCycles = (int32_t)instruction_cycles + (int32_t)fetchCycles
+                        + adjustedDataCycles + (int32_t)branchRefillCycles;
+    if (totalCycles < 1) totalCycles = 1;  // minimum 1 cycle per instruction
+    parentCPU.advanceCycles((uint32_t)totalCycles);}
