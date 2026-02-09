@@ -481,6 +481,8 @@ void ARMCPU::executeOneInstruction() {
     // The reduction is applied to dataCycles (not fetchCycles) matching mGBA's
     // model where the stall function modifies the data access wait in-place.
     int32_t adjustedDataCycles = (int32_t)dataCycles;
+    int32_t originalDataCycles = (int32_t)dataCycles;
+    int32_t originalInstructionCycles = (int32_t)instruction_cycles;
     bool prefetchApplied = false;
     if (mem.prefetchEnabled && mem.hadNonRomAccess() && !mem.hadRomAccess()) {
         uint8_t pcRegion = (pc >> 24) & 0xFF;
@@ -521,21 +523,27 @@ void ARMCPU::executeOneInstruction() {
     // In our model, instruction_cycles includes the internal cycle (2 for loads,
     // 1 for stores), keeping it outside the stall path. When prefetch is active,
     // this produces a +1 overcounting for loads. Fix by subtracting 1.
-    // Only applies to single loads (LDR/LDRB/LDRH/LDRSB/LDRSH), NOT LDM.
+    // Applies to single loads (LDR/LDRB/LDRH/LDRSB/LDRSH) AND LDM loads.
+    // mGBA's GBALoadMultiple includes ++wait after the loop (internal cycle)
+    // in the data wait that flows through stall. Our instruction_cycles has it.
     if (prefetchApplied) {
-        bool isSingleLoad = false;
+        bool isLoad = false;
         // LDR/LDRB (single word/byte transfer with L bit set)
         if (bits27_26 == 0x01 && (instruction & (1 << 20))) {
-            isSingleLoad = true;
+            isLoad = true;
         }
         // LDRH/LDRSB/LDRSH (halfword/signed transfer with L bit set)
         else if ((bits27_25 == 0x0) &&
                  (instruction & 0x00000090) == 0x00000090 &&
                  (instruction & 0x00000060) != 0x00000000 &&
                  (instruction & (1 << 20))) {
-            isSingleLoad = true;
+            isLoad = true;
         }
-        if (isSingleLoad) {
+        // LDM (block data transfer with L bit set)
+        else if ((bits27_25 == 0x4) && (instruction & (1 << 20))) {
+            isLoad = true;
+        }
+        if (isLoad) {
             adjustedDataCycles -= 1;
         }
     }
@@ -567,4 +575,12 @@ void ARMCPU::executeOneInstruction() {
     // time — the multiply unit physically occupies the CPU for m+1 cycles.
     if (mulMinCycles > 0 && totalCycles < mulMinCycles)
         totalCycles = mulMinCycles;
+    // Block transfer minimum: prefetch only helps fetch cost, not data access
+    // time. For LDM/STM with many registers, the data access dominates.
+    // Floor = original instruction_cycles + dataCycles (= nS+1N+1I for LDM,
+    // (n-1)S+2N for STM, with 0-wait memory where each access = 1 cycle).
+    if (prefetchApplied && (bits27_25 == 0x4)) {
+        int32_t blockFloor = originalInstructionCycles + originalDataCycles;
+        if (totalCycles < blockFloor) totalCycles = blockFloor;
+    }
     parentCPU.advanceCycles((uint32_t)totalCycles);}
