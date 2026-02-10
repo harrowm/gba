@@ -491,7 +491,7 @@ void ThumbCPU::thumb_alu_adc(uint8_t rd, uint8_t rs) {
 
     parentCPU.updateZFlag(result);
     parentCPU.updateCFlagAddWithCarry(op1, op2);
-    parentCPU.updateVFlag(op1, (op2 + carry_in), result);
+    parentCPU.updateVFlag(op1, op2, result);
     parentCPU.updateNFlag(result);
 
     DEBUG_INFO("Executing Thumb ADC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " + R" + std::to_string(rs) + " + Carry");
@@ -507,7 +507,7 @@ void ThumbCPU::thumb_alu_sbc(uint8_t rd, uint8_t rs) {
 
     parentCPU.updateZFlag(result);
     parentCPU.updateCFlagSubWithCarry(op1, op2);
-    parentCPU.updateVFlagSub(op1, op2 + borrow, result);
+    parentCPU.updateVFlagSub(op1, op2, result);
     parentCPU.updateNFlag(result);
 
     DEBUG_INFO("Executing Thumb SBC: R" + std::to_string(rd) + " = R" + std::to_string(rd) + " - R" + std::to_string(rs) + " - Borrow");

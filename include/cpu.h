@@ -331,11 +331,23 @@ public:
     };
 
     constexpr void updateCFlagSubWithCarry(uint32_t op1, uint32_t op2) {
-        cpsr = (op1 >= (op2 + (1 - getFlag(FLAG_C)))) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+        // Avoid combining op2 + borrow which can wrap at 32 bits
+        uint32_t carry_in = getFlag(FLAG_C);
+        // carry=1 (no borrow input): C = (op1 >= op2)  [standard SUB]
+        // carry=0 (borrow input):    C = (op1 > op2)   [strict greater]
+        if (carry_in) {
+            cpsr = (op1 >= op2) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+        } else {
+            cpsr = (op1 > op2) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+        }
     }
 
     constexpr void updateCFlagAddWithCarry(uint32_t op1, uint32_t op2) {
-        cpsr = (op1 > (UINT32_MAX - op2 - getFlag(FLAG_C))) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
+        // Avoid UINT32_MAX - op2 - carry which can underflow
+        uint32_t carry_in = getFlag(FLAG_C);
+        uint32_t temp = op1 + op2;
+        uint32_t result = temp + carry_in;
+        cpsr = ((temp < op1) || (result < temp)) ? (cpsr | FLAG_C) : (cpsr & ~FLAG_C);
     };
 
     constexpr void updateCFlagShiftLSL(uint32_t value, uint8_t shift_amount) {

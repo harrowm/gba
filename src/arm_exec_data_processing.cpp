@@ -585,7 +585,7 @@ void ARMCPU::exec_arm_adc_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsAdd(op1, value + carry, result);
+        if (set_flags) updateFlagsAdc(op1, value, result, carry);
     } else {
         // When rd == 15 and S bit is set, restore CPSR from SPSR
         bool set_flags = bits<20,20>(instruction);
@@ -623,7 +623,7 @@ void ARMCPU::exec_arm_adc_reg(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsAdd(op1, shifted.value + carry, result);
+        if (set_flags) updateFlagsAdc(op1, shifted.value, result, carry);
     } else {
         // When rd == 15 and S bit is set, restore CPSR from SPSR
         bool set_flags = bits<20,20>(instruction);
@@ -656,7 +656,7 @@ void ARMCPU::exec_arm_sbc_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsSub(op1, value + (1 - carry), result);
+        if (set_flags) updateFlagsSbc(op1, value, result, carry);
     } else {
         // When rd == 15 and S bit is set, restore CPSR from SPSR
         bool set_flags = bits<20,20>(instruction);
@@ -693,7 +693,7 @@ void ARMCPU::exec_arm_sbc_reg(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsSub(op1, shifted.value + (1 - carry), result);
+        if (set_flags) updateFlagsSbc(op1, shifted.value, result, carry);
     } else {
         // When rd == 15 and S bit is set, restore CPSR from SPSR
         bool set_flags = bits<20,20>(instruction);
@@ -726,7 +726,7 @@ void ARMCPU::exec_arm_rsc_imm(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsSub(value, op1 + (1 - carry), result);
+        if (set_flags) updateFlagsSbc(value, op1, result, carry);
     } else {
         // When rd == 15 and S bit is set, restore CPSR from SPSR
         bool set_flags = bits<20,20>(instruction);
@@ -763,7 +763,7 @@ void ARMCPU::exec_arm_rsc_reg(uint32_t instruction) {
     if (rd != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction);
-        if (set_flags) updateFlagsSub(shifted.value, op1 + (1 - carry), result);
+        if (set_flags) updateFlagsSbc(shifted.value, op1, result, carry);
     } else {
         // When rd == 15 and S bit is set, restore CPSR from SPSR
         bool set_flags = bits<20,20>(instruction);

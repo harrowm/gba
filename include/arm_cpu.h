@@ -81,6 +81,43 @@ public:
         parentCPU.CPSR() = cpsr;
     }
 
+    // Update flags after ADC (result = op1 + op2 + carry_in): N, Z, C, V
+    // Must use original op2 (not op2+carry) to avoid 32-bit wrapping in flag calc
+    FORCE_INLINE void updateFlagsAdc(uint32_t op1, uint32_t op2, uint32_t result, uint32_t carry_in) {
+        uint32_t n = (result >> 31) & 1;
+        uint32_t z = (result == 0) ? 1 : 0;
+        // C: carry from (op1 + op2 + carry_in) via two-step check
+        uint32_t temp = op1 + op2;
+        uint32_t c = ((temp < op1) | (result < temp)) ? 1u : 0u;
+        // V: signed overflow using original operands (same formula as ADD)
+        uint32_t v = ((~(op1 ^ op2) & (op1 ^ result)) >> 31) & 1;
+        uint32_t cpsr = parentCPU.CPSR();
+        cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+        cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+        cpsr = (cpsr & ~(1u << 29)) | (c << 29); // C
+        cpsr = (cpsr & ~(1u << 28)) | (v << 28); // V
+        parentCPU.CPSR() = cpsr;
+    }
+
+    // Update flags after SBC (result = op1 - op2 - (1-carry_in)): N, Z, C, V
+    // Must use original op2 (not op2+borrow) to avoid 32-bit wrapping in flag calc
+    FORCE_INLINE void updateFlagsSbc(uint32_t op1, uint32_t op2, uint32_t result, uint32_t carry_in) {
+        uint32_t n = (result >> 31) & 1;
+        uint32_t z = (result == 0) ? 1 : 0;
+        // C: no borrow from (op1 - op2 - borrow)
+        // carry=1 (no borrow input): C = (op1 >= op2)
+        // carry=0 (borrow input):    C = (op1 > op2)
+        uint32_t c = carry_in ? (op1 >= op2 ? 1u : 0u) : (op1 > op2 ? 1u : 0u);
+        // V: signed overflow using original operands (same formula as SUB)
+        uint32_t v = (((op1 ^ op2) & (op1 ^ result)) >> 31) & 1;
+        uint32_t cpsr = parentCPU.CPSR();
+        cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+        cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+        cpsr = (cpsr & ~(1u << 29)) | (c << 29); // C
+        cpsr = (cpsr & ~(1u << 28)) | (v << 28); // V
+        parentCPU.CPSR() = cpsr;
+    }
+
     // Only update N and Z flags for multiply instructions (preserve C and V)
     FORCE_INLINE void updateFlagsMultiply(uint32_t hi, uint32_t lo) {
         //uint32_t result = (hi == 0) ? lo : hi; // For 32-bit ops, hi==0, lo==result; for 64-bit, hi is high word
