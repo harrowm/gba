@@ -275,9 +275,59 @@ void DMAController::performTransfer(int channelId) {
     LOG_DMA("[DMA%d] STARTING TRANSFER: src=0x%08X dst=0x%08X count=%d size=%s\n",
            channelId, srcAddr, destAddr, count, is32bit ? "32bit" : "16bit");
     
+    // === DMA Timing (matching mGBA's GBADMAService / GBADMASchedule) ===
+    // DMA transfers use their own cycle accounting, not the normal memory access
+    // wait cycle path.  We bypass addWaitCycles() and charge cycles directly.
+    //
+    // Per-unit cost: 2 (internal) + srcWait + dstWait
+    //   First unit:  nonsequential waits for both source and destination
+    //   Subsequent:  sequential waits (cached, recalculated on region crossing)
+    //
+    // Additional fixed costs:
+    //   Startup:  3 cycles before first unit
+    //   Teardown: 2 cycles after last unit if either side is non-ROM (<0x08)
+    
+    // Note: mGBA schedules DMA with info->when = now + 3, but those 3 cycles
+    // overlap with the triggering STR instruction's I/O write cost which our
+    // memory system already charges.  No additional startup delay needed here.
+    
+    // Bypass normal memory wait-cycle charging — we compute DMA waits ourselves
+    memory->setWaitCyclesBypass(true);
+    
+    // Cache sequential costs for subsequent transfers (recalculated on region crossing)
+    uint32_t srcRegionCur = (srcAddr >> 24) & 0xFF;
+    uint32_t dstRegionCur = (destAddr >> 24) & 0xFF;
+    int32_t cachedSeqCycles;
+    if (is32bit) {
+        cachedSeqCycles = memory->getSeqWaitCycles32(srcAddr)
+                        + memory->getSeqWaitCycles32(destAddr);
+    } else {
+        cachedSeqCycles = memory->getSeqWaitCycles16(srcAddr)
+                        + memory->getSeqWaitCycles16(destAddr);
+    }
+    
     // Perform all transfers
     for (uint16_t i = 0; i < count; i++) {
-        // Read from source
+        // --- Cycle cost for this transfer unit ---
+        int32_t unitCycles = 2;  // Fixed 2-cycle internal overhead per unit
+        
+        if (i == 0) {
+            // First unit uses nonsequential wait states
+            if (is32bit) {
+                unitCycles += memory->getNonseqWaitCycles32(srcAddr)
+                            + memory->getNonseqWaitCycles32(destAddr);
+            } else {
+                unitCycles += memory->getNonseqWaitCycles16(srcAddr)
+                            + memory->getNonseqWaitCycles16(destAddr);
+            }
+        } else {
+            // Subsequent units use cached sequential wait states
+            unitCycles += cachedSeqCycles;
+        }
+        
+        scheduler->advanceCycles(unitCycles);
+        
+        // --- Data transfer ---
         uint32_t value;
         
         // Source address is already stored with a 28-bit mask (0x0FFFFFFE) for all
@@ -330,12 +380,34 @@ void DMAController::performTransfer(int channelId) {
             memory->write16(destAddr, static_cast<uint16_t>(value));
         }
         
-        // Advance scheduler: 2 cycles per transfer (internal + 1 access)
-        scheduler->advanceCycles(2);
-        
         // Update addresses
         updateAddresses(channelId, srcAddr, destAddr);
+        
+        // If source or destination crossed a region boundary, recalculate cached
+        // sequential costs (matching mGBA's boundary crossing check)
+        uint32_t newSrcRegion = (srcAddr >> 24) & 0xFF;
+        uint32_t newDstRegion = (destAddr >> 24) & 0xFF;
+        if (newSrcRegion != srcRegionCur || newDstRegion != dstRegionCur) {
+            srcRegionCur = newSrcRegion;
+            dstRegionCur = newDstRegion;
+            if (is32bit) {
+                cachedSeqCycles = memory->getSeqWaitCycles32(srcAddr)
+                                + memory->getSeqWaitCycles32(destAddr);
+            } else {
+                cachedSeqCycles = memory->getSeqWaitCycles16(srcAddr)
+                                + memory->getSeqWaitCycles16(destAddr);
+            }
+        }
     }
+    
+    // Teardown: 2 extra cycles if either source or destination is non-ROM
+    // (matching mGBA: sourceRegion < GBA_REGION_ROM0 || destRegion < GBA_REGION_ROM0)
+    if (srcRegionCur < 0x08 || dstRegionCur < 0x08) {
+        scheduler->advanceCycles(2);
+    }
+    
+    // Re-enable normal memory wait-cycle charging
+    memory->setWaitCyclesBypass(false);
     
     // Update internal registers
     channel.internalSource = srcAddr;
