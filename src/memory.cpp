@@ -1464,11 +1464,16 @@ void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
     // The wait state tables store EXTRA waits beyond the base 1 cycle
     // (matching mGBA's model), so we add 1 here.
     //
-    // Examples (total charged here):
-    // - BIOS/I/O/IWRAM: 1+0=1 cycle
-    // - EWRAM 16-bit: 1+2=3 cycles
-    // - ROM 32-bit (default): 1+7=8 cycles
-    uint32_t waitCycles = 1 + getNonseqWaitStates(address, accessWidth);
+    // For block transfers (LDM/STM), the first access is non-sequential
+    // and subsequent accesses to the same region are sequential.
+    // The nextDataAccessSequential flag is set by LDM/STM code.
+    uint32_t waitCycles;
+    if (nextDataAccessSequential) {
+        waitCycles = 1 + getSeqWaitStates(address, accessWidth);
+        nextDataAccessSequential = false;
+    } else {
+        waitCycles = 1 + getNonseqWaitStates(address, accessWidth);
+    }
     
     // Track whether data accesses target non-ROM addresses (for prefetch buffer)
     if (accumulatingCycles) {
@@ -1772,4 +1777,9 @@ void Memory::updateWaitstates(uint16_t waitcnt) {
 uint32_t Memory::getNonseqWaitStates(uint32_t address, uint32_t accessWidth) const {
     uint8_t region = (address >> 24) & 0xFF;
     return (accessWidth == 32) ? waitstatesNonseq32[region] : waitstatesNonseq16[region];
+}
+
+uint32_t Memory::getSeqWaitStates(uint32_t address, uint32_t accessWidth) const {
+    uint8_t region = (address >> 24) & 0xFF;
+    return (accessWidth == 32) ? waitstatesSeq32[region] : waitstatesSeq16[region];
 }

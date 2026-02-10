@@ -33,13 +33,16 @@ public:
 
     // GPU rendering guard: suppress wait cycles during hardware rendering
     void setWaitCyclesBypass(bool bypass) { disableWaitCycles = bypass; }
+    
+    // Signal that the next data access is sequential (for LDM/STM block transfers)
+    void setNextAccessSequential(bool seq) const { nextDataAccessSequential = seq; }
 
     // Instruction-level cycle accumulation (mGBA model):
     // During CPU instruction execution, data access wait cycles are accumulated
     // in pendingDataCycles instead of advancing the scheduler immediately.
     // The CPU drains them at the end of each instruction so that I/O side effects
     // (timer enable/read) see instruction-boundary cycle values, not mid-instruction ones.
-    void beginInstructionCycles() const { accumulatingCycles = true; pendingDataCycles = 0; hadNonRomDataAccess = false; hadRomDataAccess = false; nonRomDataCycles = 0; }
+    void beginInstructionCycles() const { accumulatingCycles = true; pendingDataCycles = 0; hadNonRomDataAccess = false; hadRomDataAccess = false; nonRomDataCycles = 0; nextDataAccessSequential = false; }
     uint32_t endInstructionCycles() const { accumulatingCycles = false; uint32_t c = pendingDataCycles; pendingDataCycles = 0; return c; }
     bool hadNonRomAccess() const { return hadNonRomDataAccess; }
     bool hadRomAccess() const { return hadRomDataAccess; }
@@ -165,6 +168,11 @@ private:
     // Flag to temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
     mutable bool disableWaitCycles = false;
     
+    // Sequential data access flag for LDM/STM block transfers.
+    // When set, the next addWaitCycles() call uses sequential wait states
+    // instead of non-sequential. Automatically cleared after use.
+    mutable bool nextDataAccessSequential = false;
+    
     // Cycle accumulation: when true, addWaitCycles adds to pendingDataCycles
     // instead of advancing the scheduler (used during CPU instruction execution)
     mutable bool accumulatingCycles = false;
@@ -206,6 +214,9 @@ private:
     
     // Get non-sequential wait states for an address
     uint32_t getNonseqWaitStates(uint32_t address, uint32_t accessWidth) const;
+    
+    // Get sequential wait states for an address
+    uint32_t getSeqWaitStates(uint32_t address, uint32_t accessWidth) const;
 
     // mGBA debug interface (0x04FFF600 - 0x04FFF780)
     // Used by test ROMs (mgba-emu/suite) to output PASS/FAIL results

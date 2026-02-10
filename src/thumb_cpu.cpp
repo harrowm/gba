@@ -1154,11 +1154,19 @@ void ThumbCPU::thumb_push_registers(uint16_t instruction) {
 
     // Push registers onto the stack in ascending order of addresses
     int offset = 0;
+    bool first_access = true;
+    uint8_t prevRegion = 0;
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
             uint32_t address = base_address + (offset * 4);
+            uint8_t curRegion = (address >> 24) & 0xFF;
+            if (!first_access && curRegion == prevRegion) {
+                parentCPU.getMemory().setNextAccessSequential(true);
+            }
             parentCPU.getMemory().write32(address, parentCPU.R()[i]); // Write register to memory
             DEBUG_INFO("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(address) + "] = R" + std::to_string(i));
+            prevRegion = curRegion;
+            first_access = false;
             offset++;
         }
     }
@@ -1188,17 +1196,31 @@ void ThumbCPU::thumb_push_registers_and_lr(uint16_t instruction) {
 
     // Push registers onto the stack in ascending order of addresses
     int offset = 0;
+    bool first_access = true;
+    uint8_t prevRegion = 0;
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
             uint32_t address = base_address + (offset * 4);
+            uint8_t curRegion = (address >> 24) & 0xFF;
+            if (!first_access && curRegion == prevRegion) {
+                parentCPU.getMemory().setNextAccessSequential(true);
+            }
             parentCPU.getMemory().write32(address, parentCPU.R()[i]); // Write register to memory
             DEBUG_INFO("Pushing R" + std::to_string(i) + " onto stack: [0x" + std::to_string(address) + "] = R" + std::to_string(i));
+            prevRegion = curRegion;
+            first_access = false;
             offset++;
         }
     }
 
     // Push LR onto the stack (at the highest address)
     uint32_t lr_address = base_address + (offset * 4);
+    {
+        uint8_t curRegion = (lr_address >> 24) & 0xFF;
+        if (!first_access && curRegion == prevRegion) {
+            parentCPU.getMemory().setNextAccessSequential(true);
+        }
+    }
     parentCPU.getMemory().write32(lr_address, parentCPU.R()[14]); // Write LR to memory
     DEBUG_INFO("Pushing LR onto stack: [0x" + std::to_string(lr_address) + "] = LR");
 }
@@ -1207,12 +1229,20 @@ void ThumbCPU::thumb_pop_registers(uint16_t instruction) {
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
     
     // Pop registers from the stack
+    bool first_access = true;
+    uint8_t prevRegion = 0;
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
             uint32_t sp = parentCPU.R()[13];
+            uint8_t curRegion = (sp >> 24) & 0xFF;
+            if (!first_access && curRegion == prevRegion) {
+                parentCPU.getMemory().setNextAccessSequential(true);
+            }
             uint32_t val = parentCPU.getMemory().read32(sp);
             parentCPU.R()[i] = val;
             DEBUG_INFO("Popping R" + std::to_string(i) + " from stack: R" + std::to_string(i) + " = [0x" + std::to_string(parentCPU.R()[13]) + "]");
+            prevRegion = curRegion;
+            first_access = false;
             parentCPU.R()[13] += 4; // Increment SP by 4
         }
     }
@@ -1222,15 +1252,31 @@ void ThumbCPU::thumb_pop_registers_and_pc(uint16_t instruction) {
     uint16_t register_list = instruction & 0xFF; // Register list (bits 0-7)
 
     // Pop registers from the stack
+    bool first_access = true;
+    uint8_t prevRegion = 0;
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
+            uint32_t sp = parentCPU.R()[13];
+            uint8_t curRegion = (sp >> 24) & 0xFF;
+            if (!first_access && curRegion == prevRegion) {
+                parentCPU.getMemory().setNextAccessSequential(true);
+            }
             parentCPU.R()[i] = parentCPU.getMemory().read32(parentCPU.R()[13]); // Read register from memory
             DEBUG_INFO("Popping R" + std::to_string(i) + " from stack: R" + std::to_string(i) + " = [0x" + std::to_string(parentCPU.R()[13]) + "]");
+            prevRegion = curRegion;
+            first_access = false;
             parentCPU.R()[13] += 4; // Increment SP by 4
         }
     }
 
     // Pop PC from the stack
+    {
+        uint32_t sp = parentCPU.R()[13];
+        uint8_t curRegion = (sp >> 24) & 0xFF;
+        if (!first_access && curRegion == prevRegion) {
+            parentCPU.getMemory().setNextAccessSequential(true);
+        }
+    }
     uint32_t new_pc = parentCPU.getMemory().read32(parentCPU.R()[13]); // Read PC from memory
     if (new_pc & 1) {
         parentCPU.setFlag(CPU::FLAG_T);
@@ -1258,8 +1304,16 @@ void ThumbCPU::thumb_stmia(uint16_t instruction) {
 
     // Store multiple registers to memory
     uint32_t address = parentCPU.R()[rn];
+    bool first_access = true;
+    uint8_t prevRegion = 0;
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
+            // STM bus timing: first access is nonsequential,
+            // subsequent accesses to the same region are sequential
+            uint8_t curRegion = (address >> 24) & 0xFF;
+            if (!first_access && curRegion == prevRegion) {
+                parentCPU.getMemory().setNextAccessSequential(true);
+            }
             static int stm_count_inner = 0;
             if (stm_count_inner < 20 || instruction == 0xC0CA) {
                 LOG_STACK("[STM #%d] Writing R%d=0x%08X to address 0x%08X\n", 
@@ -1268,6 +1322,8 @@ void ThumbCPU::thumb_stmia(uint16_t instruction) {
             stm_count_inner++;
             parentCPU.getMemory().write32(address, parentCPU.R()[i]); // Write register to memory
             DEBUG_INFO("Storing R" + std::to_string(i) + " to [0x" + std::to_string(address) + "]");
+            prevRegion = curRegion;
+            first_access = false;
             address += 4; // Increment address by 4
         }
     }
@@ -1291,10 +1347,20 @@ void ThumbCPU::thumb_ldmia(uint16_t instruction) {
 
     // Load multiple registers from memory
     uint32_t address = parentCPU.R()[rn];
+    bool first_access = true;
+    uint8_t prevRegion = 0;
     for (int i = 0; i < 8; i++) {
         if (register_list & (1 << i)) {
+            // LDM bus timing: first access is nonsequential,
+            // subsequent accesses to the same region are sequential
+            uint8_t curRegion = (address >> 24) & 0xFF;
+            if (!first_access && curRegion == prevRegion) {
+                parentCPU.getMemory().setNextAccessSequential(true);
+            }
             parentCPU.R()[i] = parentCPU.getMemory().read32(address); // Read register from memory
             DEBUG_INFO("Loading R" + std::to_string(i) + " from [0x" + std::to_string(address) + "]");
+            prevRegion = curRegion;
+            first_access = false;
             address += 4; // Increment address by 4
         }
     }

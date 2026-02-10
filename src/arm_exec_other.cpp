@@ -92,14 +92,19 @@ void ARMCPU::exec_arm_ldm(uint32_t instruction) {
     // }
     
     bool r15_updated = false;
+    bool first_access = true;
+    uint8_t prevRegion = 0;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
-            // DISABLED debug logging
-            // if (ldm_count <= 10 && parentCPU.R()[15] < 0x4000) {
-            //     printf("    Loading R%d from 0x%08X...", i, addr);
-            //     fflush(stdout);
-            // }
+            // LDM bus timing: first access is nonsequential,
+            // subsequent accesses to the same region are sequential
+            uint8_t curRegion = (addr >> 24) & 0xFF;
+            if (!first_access && curRegion == prevRegion) {
+                parentCPU.getMemory().setNextAccessSequential(true);
+            }
             parentCPU.R()[i] = parentCPU.getMemory().read32(addr);
+            prevRegion = curRegion;
+            first_access = false;
             if (i == 15) {
                 r15_updated = true;
             }
@@ -144,11 +149,21 @@ void ARMCPU::exec_arm_stm(uint32_t instruction) {
     else addr = base;                                  // IA/DA
     
     bool r15_updated = false;
+    bool first_access = true;
+    uint8_t prevRegion = 0;
     for (int i = 0; i < 16; ++i) {
         if (reg_list & (1 << i)) {
+            // STM bus timing: first access is nonsequential,
+            // subsequent accesses to the same region are sequential
+            uint8_t curRegion = (addr >> 24) & 0xFF;
+            if (!first_access && curRegion == prevRegion) {
+                parentCPU.getMemory().setNextAccessSequential(true);
+            }
             uint32_t value = parentCPU.R()[i];
             if (i == 15) value += 8; // ARM pipeline effect for PC
             parentCPU.getMemory().write32(addr, value);
+            prevRegion = curRegion;
+            first_access = false;
             // For DA, decrement after each write
             if (!up && !pre) addr -= 4; // DA
             // For DB, INCREMENT after each write (we started at lowest address)
