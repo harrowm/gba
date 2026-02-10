@@ -183,18 +183,10 @@ void CPU::handleInterrupt() {
         return;  // Interrupts disabled, don't process
     }
     
-    static int irq_count = 0;
-    irq_count++;
-    
     DEBUG_INFO("CPU: Handling interrupt");
     
     // Save current CPSR before mode switch
     uint32_t old_cpsr = cpsr;
-    
-    if (irq_count <= 5) {
-        LOG_IRQ("[IRQ #%d] handleInterrupt: CPSR before=0x%08X, PC=0x%08X\n", irq_count, cpsr, registers[15]);
-        fflush(stdout);
-    }
     
     // Calculate return address for IRQ
     // After IRQ completes, "SUBS PC, LR, #4" returns to resume execution
@@ -207,19 +199,7 @@ void CPU::handleInterrupt() {
     // For both cases, we want LR = R[15] + 4 so SUBS PC, LR, #4 gives R[15]
     // - Normal: Return = (addr+2) + 4 - 4 = addr+2 (next instruction) ✓
     // - PC-mod: Return = target + 4 - 4 = target (correct destination) ✓
-    uint32_t returnAddress;
-    if (getFlag(FLAG_T)) {
-        // Thumb mode: LR = PC + 4, so SUBS PC, LR, #4 returns to PC
-        returnAddress = registers[15] + 4;
-    } else {
-        // ARM mode: LR = PC + 4, so SUBS PC, LR, #4 returns to PC
-        // (ARM step increments by 4, so same logic applies)
-        returnAddress = registers[15] + 4;
-    }
-    
-    if (irq_count <= 5) {
-        LOG_IRQ("[IRQ #%d] Calculated return address=0x%08X\n", irq_count, returnAddress);
-    }
+    uint32_t returnAddress = registers[15] + 4;
     
     // Switch to IRQ mode (this handles register banking)
     setMode(IRQ);
@@ -233,20 +213,11 @@ void CPU::handleInterrupt() {
     // Disable further interrupts (set I flag in CPSR)
     cpsr |= 0x80; // Set I flag (bit 7)
     
-    if (irq_count <= 5) {
-        LOG_IRQ("[IRQ #%d] Set I flag, CPSR now=0x%08X\n", irq_count, cpsr);
-    }
-    
     // Switch to ARM mode (clear T flag in CPSR)
     cpsr &= ~FLAG_T;
     
     // Set PC to IRQ vector (0x00000018)
     registers[15] = 0x00000018;
-    
-    if (irq_count <= 5) {
-        LOG_IRQ("[IRQ #%d] Set PC to IRQ vector 0x00000018\n", irq_count);
-        fflush(stdout);
-    }
     
     DEBUG_INFO("CPU: Interrupt handled, jumped to IRQ vector 0x00000018, return address = 0x" + 
                debug_to_hex_string(returnAddress, 8));

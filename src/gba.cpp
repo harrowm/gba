@@ -28,12 +28,18 @@ GBA::GBA(bool testMode)
     interruptController.setIRQCallback([this]() {
         // Always wake from HALT — real hardware wakes on ANY interrupt
         // (IE & IF match), regardless of IME or CPSR I-flag.
-        // The I-flag only gates whether the IRQ is actually taken.
+        // The I-flag and IME only gate whether the IRQ is actually taken.
         cpu->unhalt();
         
-        // This is called by the scheduled IRQ_TRIGGER event after IRQ_LATENCY_CYCLES
-        // Check the CPU's I flag before raising IRQ (like mGBA's _triggerIRQ)
-        if (!(cpu->CPSR() & 0x80)) {  // I flag is bit 7
+        // This is called by the scheduled IRQ_TRIGGER event after IRQ_LATENCY_CYCLES.
+        // GBA hardware requires ALL THREE conditions for IRQ entry:
+        //   1. IE & IF != 0  (already checked by scheduleIRQCheck)
+        //   2. IME = 1       (Master Interrupt Enable)
+        //   3. CPSR.I = 0    (IRQ not disabled in CPSR)
+        // The libgba interrupt dispatcher temporarily sets IME=0 while
+        // processing in System mode to prevent re-entrant IRQs.
+        uint16_t ime = memory.readDirectIO16(0x04000208);  // REG_IME
+        if ((ime & 1) && !(cpu->CPSR() & 0x80)) {
             cpu->handleInterrupt();
         }
     });

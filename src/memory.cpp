@@ -335,6 +335,17 @@ void Memory::write8(uint32_t address, uint8_t value) {
     // The BIOS writes here during SWI 0x02 (Halt), SWI 0x04 (IntrWait),
     // SWI 0x05 (VBlankIntrWait). On real hardware this stops the CPU clock
     // until an enabled interrupt fires.
+    // IME (0x04000208): Interrupt Master Enable
+    // The BIOS IntrWait uses strb to toggle IME. When IME transitions
+    // to 1, we must schedule an IRQ check for any pending IE & IF match.
+    if (address == 0x04000208) {
+        base[offset] = value;
+        if ((value & 1) && interruptController) {
+            interruptController->scheduleIRQCheck();
+        }
+        return;
+    }
+
     if (address == 0x04000301) {
         if (cpu) {
             if ((value & 0x80) == 0) {
