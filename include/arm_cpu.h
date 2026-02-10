@@ -118,11 +118,9 @@ public:
         parentCPU.CPSR() = cpsr;
     }
 
-    // Only update N and Z flags for multiply instructions (preserve C and V)
+    // Update N and Z flags for 32-bit multiply (MUL/MLA) — preserve C and V
     FORCE_INLINE void updateFlagsMultiply(uint32_t hi, uint32_t lo) {
-        //uint32_t result = (hi == 0) ? lo : hi; // For 32-bit ops, hi==0, lo==result; for 64-bit, hi is high word
         uint32_t cpsr = parentCPU.CPSR();
-        // Clear N and Z
         cpsr &= ~((1u << 31) | (1u << 30));
         if (hi == 0 && lo == 0) {
             cpsr |= (1u << 30); // Z
@@ -134,6 +132,111 @@ public:
             }
         }
         parentCPU.CPSR() = (parentCPU.CPSR() & ~((1u << 31) | (1u << 30))) | (cpsr & ((1u << 31) | (1u << 30)));
+    }
+
+    // ---------- Booth Multiplier Carry Helpers ----------
+    // ARM7TDMI sets the C flag to a deterministic value from its internal
+    // carry-save adder.  Algorithm ported from NanoBoyAdvance
+    // (Copyright 2024 zaydlang, calc84maniac — zlib license).
+
+    // Check if Rs requires all 4 multiplier ticks (no early termination)
+    static bool isMultiplyFull(uint32_t multiplier, bool isSigned) {
+        uint32_t mask = 0xFFFFFF00;
+        while (true) {
+            multiplier &= mask;
+            if (multiplier == 0) break;
+            if (isSigned && multiplier == mask) break;
+            mask <<= 8;
+        }
+        return mask == 0;
+    }
+
+    // Carry for the "full ticks" short-multiply case (bits [31:30] == 0b10)
+    FORCE_INLINE static bool multiplyCarrySimple(uint32_t multiplier) {
+        return (multiplier >> 30) == 2;
+    }
+
+    // Carry from bit 31 of the carry-save adder (early-terminated case)
+    static bool multiplyCarryLo(uint32_t multiplicand, uint32_t multiplier,
+                                uint32_t accum = 0) {
+        multiplicand |= 1;
+        uint32_t booth = (uint32_t)((int32_t)(multiplier << 31) >> 31);
+        uint32_t carry = multiplicand * booth;
+        uint32_t sum   = carry + accum;
+        int shift = 29;
+        do {
+            for (int i = 0; i < 4; i++, shift -= 2) {
+                uint32_t next_booth = (uint32_t)((int32_t)(multiplier << shift) >> shift);
+                uint32_t factor = next_booth - booth;
+                booth = next_booth;
+                uint32_t addend = multiplicand * factor;
+                accum ^= carry ^ addend;
+                sum   += addend;
+                carry  = sum - accum;
+            }
+        } while (booth != multiplier);
+        return (carry >> 31) & 1;
+    }
+
+    // Carry from bit 63 (full-ticks long-multiply case)
+    template<bool signExtend>
+    static bool multiplyCarryHi(uint32_t multiplicand, uint32_t multiplier,
+                                uint32_t accum_hi = 0) {
+        if constexpr (signExtend) {
+            multiplicand = (uint32_t)((int32_t)multiplicand >> 6);
+            multiplier   = (uint32_t)((int32_t)multiplier >> 26);
+        } else {
+            multiplicand >>= 6;
+            multiplier   >>= 26;
+        }
+        multiplicand |= 1;
+
+        uint32_t carry = ~accum_hi & 0x20000000;
+        uint32_t accum = accum_hi - 0x08000000;
+
+        uint32_t booth0 = (uint32_t)((int32_t)(multiplier << 27) >> 27);
+        uint32_t booth1 = (uint32_t)((int32_t)(multiplier << 29) >> 29);
+        uint32_t booth2 = (uint32_t)((int32_t)(multiplier << 31) >> 31);
+        uint32_t factor0 = multiplier - booth0;
+        uint32_t factor1 = booth0 - booth1;
+        uint32_t factor2 = booth1 - booth2;
+
+        uint32_t addend = multiplicand * factor2;
+        accum -= addend & 0x10000000;
+        addend = multiplicand * factor1;
+        accum -= addend & 0x40000000;
+        uint32_t s = accum + (addend & 0x20000000);
+        accum -= carry;
+        addend = multiplicand * factor0;
+        s += addend & 0x40000000;
+
+        return ((s ^ accum) >> 31) & 1;
+    }
+
+    // Update flags for 64-bit multiply-long (UMULL/UMLAL/SMULL/SMLAL with S bit)
+    // N = bit 31 of RdHi, Z = (RdHi:RdLo == 0), C = Booth carry, V unchanged
+    FORCE_INLINE void updateFlagsMultiplyLong(uint32_t hi, uint32_t lo,
+                                               uint32_t rm_val, uint32_t rs_val,
+                                               bool signExtend,
+                                               uint32_t accum_lo, uint32_t accum_hi) {
+        uint32_t cpsr = parentCPU.CPSR();
+        uint32_t n = (hi >> 31) & 1;
+        uint32_t z = (hi == 0 && lo == 0) ? 1u : 0u;
+
+        bool full = isMultiplyFull(rs_val, signExtend);
+        uint32_t c;
+        if (full) {
+            c = signExtend ? (multiplyCarryHi<true>(rm_val, rs_val, accum_hi) ? 1u : 0u)
+                           : (multiplyCarryHi<false>(rm_val, rs_val, accum_hi) ? 1u : 0u);
+        } else {
+            c = multiplyCarryLo(rm_val, rs_val, accum_lo) ? 1u : 0u;
+        }
+
+        cpsr = (cpsr & ~(1u << 31)) | (n << 31); // N
+        cpsr = (cpsr & ~(1u << 30)) | (z << 30); // Z
+        cpsr = (cpsr & ~(1u << 29)) | (c << 29); // C
+        // V unchanged
+        parentCPU.CPSR() = cpsr;
     }
 
     // ARM shift operations as static inline functions (now with carry argument)

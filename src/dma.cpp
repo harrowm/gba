@@ -52,6 +52,9 @@ void DMAController::reset() {
         channels[i].reset();
     }
     dmaOpenBus = 0;
+    pendingDMAActive = false;
+    pendingDMAActivationCycle = 0;
+    pendingDMAChannel = -1;
 }
 
 uint32_t DMAController::readSourceAddress(int channelId) const {
@@ -138,6 +141,10 @@ void DMAController::writeControl(int channelId, uint16_t value) {
     // If DMA got disabled, stop any active transfer
     if (wasEnabled && !isEnabled) {
         channels[channelId].active = false;
+        // Cancel pending deferred DMA if it was for this channel
+        if (pendingDMAActive && pendingDMAChannel == channelId) {
+            pendingDMAActive = false;
+        }
     }
 }
 
@@ -174,9 +181,29 @@ void DMAController::startTransfer(int channelId) {
     DMATimingMode mode = channel.getTimingMode();
     
     if (mode == DMATimingMode::IMMEDIATE) {
-        // Immediate DMA starts right away
+        // Defer DMA start by 3 cycles (matching mGBA's GBADMASchedule:
+        // info->when = mTimingCurrentTime(&gba->timing) + 3).
+        //
+        // This delay is critical for timing accuracy: from fast memory (IWRAM),
+        // the CPU executes 1-2 more instructions before DMA takes over the
+        // bus. The test suite's DMA timing tests rely on this — the timer read
+        // instruction executes BEFORE DMA fires from fast memory, making DMA
+        // cycles invisible to the timer (expected value = 2 = just STR cost).
+        // From slow memory (ROM), the instruction fetch takes >= 3 cycles, so
+        // DMA fires before the next instruction and its cost IS visible.
+        //
+        // Implementation: set a pending flag checked in GBA::runFrame() after
+        // each instruction, rather than using scheduler events (which would
+        // move currentCycle backward when the event fires late).
         channel.active = true;
-        performTransfer(channelId);
+        if (scheduler) {
+            pendingDMAActive = true;
+            pendingDMAActivationCycle = scheduler->getCurrentCycle() + 3;
+            pendingDMAChannel = channelId;
+        } else {
+            // No scheduler (test mode) — run synchronously
+            performTransfer(channelId);
+        }
     } else {
         // Other modes wait for trigger
         channel.active = false;
@@ -284,12 +311,9 @@ void DMAController::performTransfer(int channelId) {
     //   Subsequent:  sequential waits (cached, recalculated on region crossing)
     //
     // Additional fixed costs:
-    //   Startup:  3 cycles before first unit
+    //   Startup:  3 cycles before first unit (handled by deferred scheduling
+    //             in startTransfer — scheduler->schedule(3, ...) )
     //   Teardown: 2 cycles after last unit if either side is non-ROM (<0x08)
-    
-    // Note: mGBA schedules DMA with info->when = now + 3, but those 3 cycles
-    // overlap with the triggering STR instruction's I/O write cost which our
-    // memory system already charges.  No additional startup delay needed here.
     
     // DMA uses the Game Pak bus, invalidating any prefetched data.
     // Without this flush, the CPU would incorrectly benefit from stale
@@ -502,6 +526,16 @@ void DMAController::updateAddresses(int channelId, uint32_t& srcAddr, uint32_t& 
         case DMAAddressControl::FIXED:
             // No change
             break;
+    }
+}
+
+void DMAController::executePendingDMA() {
+    if (!pendingDMAActive) return;
+    pendingDMAActive = false;
+    int ch = pendingDMAChannel;
+    pendingDMAChannel = -1;
+    if (ch >= 0 && ch < 4 && channels[ch].active && channels[ch].isEnabled()) {
+        performTransfer(ch);
     }
 }
 

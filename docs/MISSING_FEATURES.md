@@ -8,9 +8,9 @@
 | 2 | **EEPROM saves** (512B / 8KB) | 🔴 High | No serial protocol emulation. Many commercial games use EEPROM |
 | 3 | **Flash saves** (64K / 128K) | 🔴 High | No Atmel/SST/Macronix command protocol. Many games use Flash |
 | 4 | **Save persistence to disk** | 🔴 High | Even SRAM data is lost on exit |
-| 5 | **WAITCNT register** (`0x04000204`) | 🔴 High | Value stored but never parsed to update wait state tables. ROM timing hardcoded to 5/3 cycles. TODOs in memory.cpp |
+| 5 | ~~WAITCNT register~~ | ✅ Done | Fully implemented — `updateWaitstates()` parses WAITCNT and updates all ROM/SRAM wait state tables |
 | 6 | **VCount match / VCount IRQ** | 🔴 High | DISPSTAT VCount setting (bits 8–15) never compared against current scanline. VCount match bit never set, IRQ never fired. Breaks raster effects |
-| 7 | **Prefetch buffer** | 🟠 Medium | Game Pak prefetch not emulated. Affects ROM fetch timing overlap |
+| 7 | ~~Prefetch buffer~~ | ✅ Done | Prefetch buffer with stall/credit model implemented. Passes 87% of timing suite |
 | 8 | **Mosaic effect** | 🟠 Medium | Sprite/BG mosaic flags parsed but no stretch/repeat rendering applied. `REG_MOSAIC` not defined |
 | 9 | **GPU Mode 5** | 🟠 Medium | Falls through to default in scanline renderer — no per-scanline compositing with effects |
 | 10 | **Keypad interrupt** (KEYCNT) | 🟡 Low | `IRQ_KEYPAD` defined but KEYCNT register (`0x04000132`) not handled |
@@ -29,7 +29,7 @@
 | # | Feature | Gap |
 |---|---------|-----|
 | 1 | **SPSR in exception handler** | Comment says "SPSR not supported" — if SPSR isn't saved during IRQ/SWI entry, returning via `SUBS PC, LR` restores garbage CPSR. Critical for interrupt-heavy games |
-| 2 | **DMA cycle timing** | Flat cycle cost per transfer. Real hardware has nonseq first access + seq subsequent, plus bus width and region-dependent costs |
+| 2 | **DMA cycle timing** | Per-unit cost model implemented (nonseq first + seq subsequent + region waits + teardown). Still ~116 timing suite failures — CPU-visible cycle accounting differs from mGBA model. See `docs/TIMING_ISSUES_INVESTIGATED.md` |
 | 3 | **VRAM/Palette/OAM bus contention** | TODOs in memory.cpp: "+1 if video controller accessing (not implemented yet)". No extra cycle during active rendering |
 | 4 | **GPU Mode 3/4 compositing** | Mode 3 reads VRAM directly. Unclear if sprites, blending, and windowing are applied on top |
 | 5 | **Sprite per-scanline cycle limit** | GBA limits to 1210 cycles (normal) / 954 (HBlank-free). Not enforced — all sprites always render |

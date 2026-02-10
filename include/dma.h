@@ -112,6 +112,14 @@ public:
     // Sound FIFO DMA trigger (called when FIFO needs refill)
     void triggerSoundFIFO(int fifoIndex);  // 0 = FIFO A, 1 = FIFO B
     
+    // Deferred DMA execution (3-cycle startup delay for IMMEDIATE mode).
+    // Called from GBA::runFrame() after each instruction to check if
+    // a pending DMA should fire.
+    bool hasPendingDMA(uint64_t currentCycle) const {
+        return pendingDMAActive && currentCycle >= pendingDMAActivationCycle;
+    }
+    void executePendingDMA();
+    
     // Reset all channels
     void reset();
 
@@ -125,6 +133,11 @@ private:
     // When DMA reads from an unreadable region (BIOS, unmapped), this value is
     // returned instead, matching real GBA hardware behavior.
     uint32_t dmaOpenBus;
+    
+    // Deferred IMMEDIATE DMA state (3-cycle startup delay, matching mGBA)
+    bool pendingDMAActive = false;
+    uint64_t pendingDMAActivationCycle = 0;
+    int pendingDMAChannel = -1;
     
     // Transfer execution
     void startTransfer(int channelId);

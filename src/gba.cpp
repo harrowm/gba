@@ -406,6 +406,17 @@ void GBA::runFrame() {
         
         uint64_t cycleAfterInstr = scheduler.getCurrentCycle();
         
+        // Check for deferred IMMEDIATE DMA (3-cycle startup delay).
+        // mGBA schedules DMA at now+3: from fast memory (IWRAM), the CPU
+        // executes 1-2 instructions before DMA takes the bus. From slow
+        // memory (ROM), the instruction cost >= 3 so DMA fires immediately
+        // at the next instruction boundary. This check runs at each
+        // instruction boundary — the natural point where DMA can begin.
+        if (dmaController.hasPendingDMA(cycleAfterInstr)) {
+            dmaController.executePendingDMA();
+            cycleAfterInstr = scheduler.getCurrentCycle();
+        }
+        
         // Process all pending scheduler events up to the current cycle.
         // This must run after EVERY instruction so that GPU scanline events,
         // audio sample events, and IRQ triggers fire at the correct time.

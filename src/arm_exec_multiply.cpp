@@ -79,13 +79,15 @@ void ARMCPU::exec_arm_umull(uint32_t instruction) {
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
-    uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs];
+    uint32_t rm_val = parentCPU.R()[rm];
+    uint32_t rs_val = parentCPU.R()[rs];
+    uint64_t result = (uint64_t)rm_val * (uint64_t)rs_val;
     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
     parentCPU.R()[rdHi] = (uint32_t)(result >> 32);
     if (rdHi != 15 && rdLo != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsMultiply(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+        if (set_flags) updateFlagsMultiplyLong(parentCPU.R()[rdHi], parentCPU.R()[rdLo], rm_val, rs_val, false, 0, 0);
     }
 }
 
@@ -101,17 +103,21 @@ void ARMCPU::exec_arm_umlal(uint32_t instruction) {
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
+    uint32_t rm_val = parentCPU.R()[rm];
+    uint32_t rs_val = parentCPU.R()[rs];
 
-    // Get the accumulator value from RdHi/RdLo
-    uint64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | (uint64_t)parentCPU.R()[rdLo];
-    uint64_t result = (uint64_t)parentCPU.R()[rm] * (uint64_t)parentCPU.R()[rs] + acc;
+    // Get the accumulator value from RdHi/RdLo (save before overwrite)
+    uint32_t accum_lo = parentCPU.R()[rdLo];
+    uint32_t accum_hi = parentCPU.R()[rdHi];
+    uint64_t acc = ((uint64_t)accum_hi << 32) | (uint64_t)accum_lo;
+    uint64_t result = (uint64_t)rm_val * (uint64_t)rs_val + acc;
     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
     parentCPU.R()[rdHi] = (uint32_t)(result >> 32);
 
     if (rdHi != 15 && rdLo != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsMultiply(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+        if (set_flags) updateFlagsMultiplyLong(parentCPU.R()[rdHi], parentCPU.R()[rdLo], rm_val, rs_val, false, accum_lo, accum_hi);
     }
 }
 
@@ -127,14 +133,16 @@ void ARMCPU::exec_arm_smull(uint32_t instruction) {
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
-    int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs];
+    uint32_t rm_val = parentCPU.R()[rm];
+    uint32_t rs_val = parentCPU.R()[rs];
+    int64_t result = (int64_t)(int32_t)rm_val * (int64_t)(int32_t)rs_val;
     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
     parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
 
     if (rdHi != 15 && rdLo != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsMultiply(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+        if (set_flags) updateFlagsMultiplyLong(parentCPU.R()[rdHi], parentCPU.R()[rdLo], rm_val, rs_val, true, 0, 0);
     }
 }
 
@@ -150,16 +158,20 @@ void ARMCPU::exec_arm_smlal(uint32_t instruction) {
     uint8_t rdLo = bits<15,12>(instruction);
     uint8_t rm = bits<3,0>(instruction);
     uint8_t rs = bits<11,8>(instruction);
+    uint32_t rm_val = parentCPU.R()[rm];
+    uint32_t rs_val = parentCPU.R()[rs];
 
-    // Get the accumulator value from RdHi/RdLo (unsigned 64-bit)
-    int64_t acc = ((uint64_t)parentCPU.R()[rdHi] << 32) | (uint32_t)parentCPU.R()[rdLo];
-    int64_t result = (int64_t)(int32_t)parentCPU.R()[rm] * (int64_t)(int32_t)parentCPU.R()[rs] + acc;
+    // Get the accumulator value from RdHi/RdLo (save before overwrite)
+    uint32_t accum_lo = (uint32_t)parentCPU.R()[rdLo];
+    uint32_t accum_hi = (uint32_t)parentCPU.R()[rdHi];
+    int64_t acc = ((uint64_t)accum_hi << 32) | accum_lo;
+    int64_t result = (int64_t)(int32_t)rm_val * (int64_t)(int32_t)rs_val + acc;
     parentCPU.R()[rdLo] = (uint32_t)(result & 0xFFFFFFFF);
     parentCPU.R()[rdHi] = (uint32_t)((result >> 32) & 0xFFFFFFFF);
 
     if (rdHi != 15 && rdLo != 15) {
         parentCPU.R()[15] += 4; // Increment PC for next instruction
         bool set_flags = bits<20,20>(instruction); 
-        if (set_flags) updateFlagsMultiply(parentCPU.R()[rdHi], parentCPU.R()[rdLo]);
+        if (set_flags) updateFlagsMultiplyLong(parentCPU.R()[rdHi], parentCPU.R()[rdLo], rm_val, rs_val, true, accum_lo, accum_hi);
     }
 }
