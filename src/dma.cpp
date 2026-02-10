@@ -291,6 +291,12 @@ void DMAController::performTransfer(int channelId) {
     // overlap with the triggering STR instruction's I/O write cost which our
     // memory system already charges.  No additional startup delay needed here.
     
+    // DMA uses the Game Pak bus, invalidating any prefetched data.
+    // Without this flush, the CPU would incorrectly benefit from stale
+    // prefetch state after DMA completes (matching mGBA where CPU is blocked
+    // during DMA and no prefetch occurs).
+    memory->flushPrefetch();
+    
     // Bypass normal memory wait-cycle charging — we compute DMA waits ourselves
     memory->setWaitCyclesBypass(true);
     
