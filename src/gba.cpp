@@ -66,6 +66,7 @@ GBA::GBA(bool testMode)
     // Wire up timer controller
     timerController.setScheduler(&scheduler);
     timerController.setInterruptController(&interruptController);
+    timerController.setMemory(&memory);
     memory.setTimerController(&timerController);
     
     // Wire up DMA controller

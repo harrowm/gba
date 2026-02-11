@@ -81,9 +81,7 @@ void CPU::advanceCycles(uint32_t cycles) {
 // the very next instruction boundary.
 void CPU::onCPSRWrite() {
     if (!(cpsr & 0x80)) {  // I flag clear — interrupts enabled
-        // Schedule an IRQ check. This uses the scheduler's 7-cycle latency
-        // which matches the ARM7TDMI's pipeline delay before taking an IRQ.
-        // The IME/IE/IF check happens inside the scheduled callback.
+        // Schedule an IRQ check with standard latency.
         interruptController.scheduleIRQCheck();
     }
 }
@@ -218,6 +216,20 @@ void CPU::handleInterrupt() {
     
     // Set PC to IRQ vector (0x00000018)
     registers[15] = 0x00000018;
+    
+    // Pipeline refill: jumping to the IRQ vector requires refilling the
+    // ARM 3-stage pipeline at the target address. This costs 1N + 1S
+    // fetch cycles at the target (BIOS ROM at 0x18). Matches mGBA's
+    // ARM_WRITE_PC in ARMRaiseIRQ which deducts
+    //   activeNonseqCycles32 + activeSeqCycles32
+    // from cpu->cycles.
+    if (scheduler) {
+        uint32_t irqRefillCycles = memory.getNonseqWaitCycles32(0x18)
+                                 + memory.getSeqWaitCycles32(0x18);
+        // Add base 1+1 = 2 cycles for the two fetches (1N + 1S pipeline refill)
+        irqRefillCycles += 2;
+        scheduler->advanceCycles(irqRefillCycles);
+    }
     
     DEBUG_INFO("CPU: Interrupt handled, jumped to IRQ vector 0x00000018, return address = 0x" + 
                debug_to_hex_string(returnAddress, 8));

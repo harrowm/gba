@@ -1,10 +1,11 @@
 #include "timer_controller.h"
 #include "scheduler.h"
 #include "interrupt.h"
+#include "memory.h"
 #include "debug.h"
 
 TimerController::TimerController() 
-    : scheduler(nullptr), interruptController(nullptr) {
+    : scheduler(nullptr), interruptController(nullptr), memory(nullptr) {
     reset();
 }
 
@@ -52,17 +53,21 @@ void TimerController::writeControl(int timerID, uint16_t value) {
         // Timer just enabled
         timer.enabled = true;
         timer.counter = timer.reload;
-        timer.lastReloadCycle = scheduler ? scheduler->getCurrentCycle() : 0;
         
-        // TIMING DEBUG: Track timer 0 enable events
-        if (timerID == 0) {
-            static int timer0_enable_count = 0;
-            if (timer0_enable_count < 50) {
-                fprintf(stderr, "[TIMER0 ENABLE #%d] reload=0x%04X lastReloadCycle=%llu prescaler=%u\n",
-                        timer0_enable_count, timer.reload, timer.lastReloadCycle, timer.getPrescalerValue());
-                timer0_enable_count++;
-            }
+        // Match mGBA: lastEvent = mTimingCurrentTime() & ~tickMask
+        // mTimingCurrentTime() includes the current instruction's pending cycles
+        // (the data access that triggered this write). This shifts the overflow
+        // grid so the first overflow fires at the correct cycle.
+        uint64_t effectiveCycle = scheduler ? scheduler->getCurrentCycle() : 0;
+        if (memory) {
+            effectiveCycle += memory->getPendingCycles();
         }
+        // Prescaler alignment (matches mGBA's tickMask)
+        uint32_t prescalerValue = timer.getPrescalerValue();
+        if (prescalerValue > 1) {
+            effectiveCycle = effectiveCycle - (effectiveCycle % prescalerValue);
+        }
+        timer.lastReloadCycle = effectiveCycle;
         
         // Schedule timer event (unless in cascade mode)
         if (!timer.isCountUpMode()) {
@@ -72,7 +77,31 @@ void TimerController::writeControl(int timerID, uint16_t value) {
         DEBUG_INFO("Timer " + std::to_string(timerID) + " started from 0x" + 
                    debug_to_hex_string(timer.reload, 4));
     } else if (wasEnabled && !nowEnabled) {
-        // Timer just disabled
+        // Timer just disabled — freeze counter at current interpolated value.
+        // Without this, readCounter() on a disabled timer returns the stale
+        // reload value from the last overflow, not the in-progress count.
+        // IMPORTANT: Use OLD control word for prescaler/cascade since timer.control
+        // was already updated to the new (disabled) value above.
+        bool wasCountUp = (oldControl & TIMER_COUNT_UP) != 0;
+        if (scheduler && !wasCountUp) {
+            // Match mGBA: use effective current time including pending instruction cycles
+            uint64_t currentCycle = scheduler->getCurrentCycle();
+            if (memory) {
+                currentCycle += memory->getPendingCycles();
+            }
+            uint64_t elapsed = (currentCycle >= timer.lastReloadCycle)
+                             ? (currentCycle - timer.lastReloadCycle) : 0;
+            // Derive prescaler from the old control word, not the new one
+            static constexpr uint32_t prescalerLUT[] = {1, 64, 256, 1024};
+            uint32_t prescaler = prescalerLUT[oldControl & 0x3];
+            uint64_t elapsedTicks = elapsed / prescaler;
+            uint32_t periodTicks = 0x10000 - timer.reload;
+            uint32_t ticksInPeriod = (periodTicks > 0)
+                                   ? static_cast<uint32_t>(elapsedTicks % periodTicks)
+                                   : 0;
+            timer.counter = static_cast<uint16_t>(timer.reload + ticksInPeriod);
+
+        }
         timer.enabled = false;
         cancelTimer(timerID);
         
@@ -102,17 +131,9 @@ uint16_t TimerController::readCounter(int timerID) const {
     // how many samples to mix — a stale read returns 0 delta = silence.
     if (scheduler) {
         uint64_t currentCycle = scheduler->getCurrentCycle();
-        
-        // TIMING DEBUG: Track timer 0 reads
-        if (timerID == 0) {
-            static int timer0_read_count = 0;
-            if (timer0_read_count < 50) {
-                uint64_t rawElapsed = (currentCycle >= timer.lastReloadCycle)
-                                    ? (currentCycle - timer.lastReloadCycle) : 0;
-                fprintf(stderr, "[TIMER0 READ #%d] currentCycle=%llu lastReloadCycle=%llu rawElapsed=%llu prescaler=%u\n",
-                        timer0_read_count, currentCycle, timer.lastReloadCycle, rawElapsed, timer.getPrescalerValue());
-                timer0_read_count++;
-            }
+        // Include pending instruction cycles (matches mGBA's mTimingCurrentTime)
+        if (memory) {
+            currentCycle += memory->getPendingCycles();
         }
         
         // Subtract 2 cycles to account for the load instruction reading
@@ -167,9 +188,15 @@ void TimerController::scheduleTimer(int timerID) {
     
     timer.cyclesUntilOverflow = cyclesUntilOverflow;
     
-    // Schedule overflow event
+    // Schedule overflow event at absolute time relative to lastReloadCycle.
+    // This matches mGBA's GBATimerUpdateRegister which uses scheduleAbsolute:
+    //   mTimingScheduleAbsolute(timing, event, currentTime + tickIncrement)
+    // where currentTime = lastEvent (aligned). Using absolute scheduling from
+    // lastReloadCycle ensures the overflow grid is consistent regardless of
+    // when getCurrentCycle() gets advanced.
     EventType eventType = static_cast<EventType>(static_cast<int>(EventType::TIMER_0_OVERFLOW) + timerID);
-    scheduler->schedule(cyclesUntilOverflow, 
+    uint64_t overflowCycle = timer.lastReloadCycle + cyclesUntilOverflow;
+    scheduler->scheduleAt(overflowCycle,
                        [this, timerID]() { onTimerOverflow(timerID); },
                        eventType, 0);
     

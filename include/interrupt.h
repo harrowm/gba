@@ -50,7 +50,9 @@ public:
     // Schedule an IRQ check event if pending interrupts exist.
     // Self-retries every IRQ_LATENCY_CYCLES until CPSR I=0 allows handling.
     // Called from requestInterrupt and should be called when CPSR I changes 1→0.
-    void scheduleIRQCheck();
+    // latency: cycles before the check fires. Use 0 for immediate (CPSR restore),
+    //          IRQ_LATENCY_CYCLES for hardware-raised interrupts.
+    void scheduleIRQCheck(uint32_t latency = IRQ_LATENCY_CYCLES);
     
     // Check if any enabled interrupts are pending
     bool hasPendingInterrupt() const;

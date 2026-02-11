@@ -7,6 +7,7 @@
 // Forward declarations
 class Scheduler;
 class InterruptController;
+class Memory;
 
 // Timer control register bits
 constexpr uint16_t TIMER_ENABLE = (1 << 7);      // Timer enable
@@ -53,6 +54,7 @@ public:
     // Setup dependencies
     void setScheduler(Scheduler* sched) { scheduler = sched; }
     void setInterruptController(InterruptController* ic) { interruptController = ic; }
+    void setMemory(Memory* mem) { memory = mem; }
     
     // Timer control
     void writeControl(int timerID, uint16_t value);
@@ -75,6 +77,7 @@ private:
     Timer timers[4];
     Scheduler* scheduler;
     InterruptController* interruptController;
+    Memory* memory;
     std::function<void(int)> timerOverflowCallback;
     
     // Helper methods

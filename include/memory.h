@@ -44,6 +44,7 @@ public:
     // (timer enable/read) see instruction-boundary cycle values, not mid-instruction ones.
     void beginInstructionCycles() const { accumulatingCycles = true; pendingDataCycles = 0; hadNonRomDataAccess = false; hadRomDataAccess = false; nonRomDataCycles = 0; nextDataAccessSequential = false; }
     uint32_t endInstructionCycles() const { accumulatingCycles = false; uint32_t c = pendingDataCycles; pendingDataCycles = 0; return c; }
+    uint32_t getPendingCycles() const { return pendingDataCycles; }
     bool hadNonRomAccess() const { return hadNonRomDataAccess; }
     bool hadRomAccess() const { return hadRomDataAccess; }
     uint32_t getNonRomDataCycles() const { return nonRomDataCycles; }

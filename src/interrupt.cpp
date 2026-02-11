@@ -57,7 +57,7 @@ void InterruptController::requestInterrupt(uint16_t irqFlag) {
 
 // Schedule an IRQ_TRIGGER event if none is already pending.
 // The callback unhalts the CPU and (if CPSR I=0) takes the interrupt.
-void InterruptController::scheduleIRQCheck() {
+void InterruptController::scheduleIRQCheck(uint32_t latency) {
     if (!scheduler || !memory) return;
     if (scheduler->hasEventsOfType(EventType::IRQ_TRIGGER)) return;
 
@@ -65,7 +65,7 @@ void InterruptController::scheduleIRQCheck() {
     uint16_t ifr = memory->readDirectIO16(REG_IF);
     if (!(ie & ifr)) return;
 
-    scheduler->schedule(IRQ_LATENCY_CYCLES, [this]() {
+    scheduler->schedule(latency, [this]() {
         uint16_t ie2 = memory->readDirectIO16(REG_IE);
         uint16_t ifr2 = memory->readDirectIO16(REG_IF);
         if ((ie2 & ifr2) && irqCallback) {
