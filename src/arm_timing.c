@@ -106,6 +106,10 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, con
             // Memory wait cycles (the 1N data access) added by memory.cpp addWaitCycles
             bool is_load = (instruction >> 20) & 1;  // L bit
             extra_cycles = is_load ? 1 : 0;
+            // LDRH/LDRSB/LDRSH to PC: pipeline refill adds 1S+1N
+            if (is_load && ARM_GET_RD(instruction) == 15) {
+                extra_cycles += 2;
+            }
         } else if ((instruction & 0x0FFFFFF0) == 0x012FFF10) {
             // BX (Branch and Exchange): same pipeline refill as regular branch
             // ARM7TDMI: 2S + 1N — same as B/BL
@@ -143,6 +147,10 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, con
         // Memory wait cycles (data access) added by memory.cpp addWaitCycles
         bool is_load = (instruction >> 20) & 1;  // L bit
         extra_cycles = is_load ? 1 : 0;
+        // LDR/LDRB to PC: pipeline refill adds 1S+1N (matching mGBA ARMWritePC)
+        if (is_load && ARM_GET_RD(instruction) == 15) {
+            extra_cycles += 2;
+        }
     } else if (format == 0x4) {
         // 100: Block data transfer (LDM/STM)
         // ARM7TDMI timing:
@@ -152,6 +160,10 @@ uint32_t arm_calculate_instruction_cycles(uint32_t instruction, uint32_t pc, con
         // addWaitCycles() in the LDM/STM implementation code.
         bool is_load = (instruction >> 20) & 1;  // L bit
         extra_cycles = is_load ? 1 : 0;
+        // LDM with R15: pipeline refill adds 1S+1N (matching mGBA ARMWritePC)
+        if (is_load && (instruction & 0x8000)) {
+            extra_cycles += 2;
+        }
     } else {
         // Fallback: 1 cycle base
         extra_cycles = 0;

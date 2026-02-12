@@ -60,6 +60,13 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
             cycles = THUMB_CYCLES_BRANCH_TAKEN;
         } else {
             cycles = THUMB_CYCLES_HI_REG_OP;
+            // ADD/MOV to PC: pipeline refill adds 1S+1N (matching mGBA ThumbWritePC)
+            if (op != 1) { // CMP doesn't write to Rd
+                uint8_t rd = (instruction & 0x7) | ((instruction >> 4) & 0x8);
+                if (rd == 15) {
+                    cycles += 2;
+                }
+            }
         }
         
     } else if ((instruction & THUMB_FORMAT_MASK_PC_REL) == THUMB_FORMAT_VAL_PC_REL) {
@@ -128,6 +135,10 @@ uint32_t thumb_calculate_instruction_cycles(uint16_t instruction, uint32_t pc, u
         // Per-register memory access cycles charged by addWaitCycles().
         bool is_pop = (instruction & (1 << 11)) != 0;  // L bit: 1=POP(LDM), 0=PUSH(STM)
         cycles = THUMB_CYCLES_PUSH_POP_BASE + (is_pop ? 1 : 0);
+        // POP {PC}: pipeline refill adds 1S+1N (matching mGBA ThumbWritePC)
+        if (is_pop && (instruction & (1 << 8))) {
+            cycles += 2;
+        }
         
     } else if ((instruction & THUMB_FORMAT_MASK_MULTIPLE) == THUMB_FORMAT_VAL_MULTIPLE) {
         // Format 15: Multiple load/store (LDMIA/STMIA)

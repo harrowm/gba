@@ -551,8 +551,11 @@ void ARMCPU::executeOneInstruction() {
     // Detect branches: if PC changed non-sequentially, the ARM7TDMI must
     // refill its 3-stage pipeline at the target address.  This costs 1N + 1S
     // fetch cycles at the target (matching mGBA's ARMWritePC/ThumbWritePC).
-    // The 2 internal cycles for the refill are already included in
-    // instruction_cycles (arm_timing.c returns 3 for B/BL/BX/SWI).
+    // The base 2-cycle refill cost (1N+1S at zero-wait) is included in
+    // instruction_cycles for ALL PC-writing instructions (B/BL/BX/SWI return
+    // 3; data processing/LDR/LDM/halfword loads to PC add +2 in timing).
+    // branchRefillCycles here adds only the EXTRA wait-state cycles at the
+    // branch target address, matching mGBA's activeNonseqCycles + activeSeqCycles.
     uint32_t branchRefillCycles = 0;
     uint32_t newPc = parentCPU.R()[15];
     if (newPc != pc + 4) {
