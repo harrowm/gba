@@ -71,18 +71,27 @@ void CPU::advanceCycles(uint32_t cycles) {
 // restored from SPSR (e.g. SUBS PC,LR / LDMFD SP!,{...,PC}^).
 // This ensures VBlank IRQs raised while CPSR I=1 get delivered promptly
 // once the previous IRQ handler returns and clears I.
-// Only triggers when I flag is currently clear (bit 7 = 0), since that's
-// when the CPU can actually accept interrupts.
-// Like mGBA's ARMWriteCPSR / GBATestIRQ: immediately check for pending
-// interrupts when the I flag might have been cleared.  On real hardware the
-// CPU re-evaluates IRQ on every instruction boundary — there is no 7-cycle
-// scheduling delay.  We call this from CPSR-restoring instructions (SUBS
-// PC,LR / LDM {PC}^ / MSR CPSR) so the pending VBlank can be taken on
-// the very next instruction boundary.
+//
+// When returning from an IRQ handler, IF may already be set (e.g. a timer
+// overflowing every cycle).  During the handler the IRQ delivery chain
+// reschedules an IRQ_TRIGGER event every 7 cycles, but the alignment of
+// that chain with the handler-return instruction is arbitrary.  On real
+// hardware the CPU re-evaluates the IRQ line every cycle, so a pending
+// IF & IE triggers a new IRQ essentially immediately after CPSR I clears.
+//
+// To match this: when I clears and IE & IF are already set, cancel any
+// stale chain event and reschedule with 0 delay so the IRQ fires as part
+// of the current instruction's event processing (i.e. before the next
+// user-mode instruction can read stale I/O state).
 void CPU::onCPSRWrite() {
     if (!(cpsr & 0x80)) {  // I flag clear — interrupts enabled
-        // Schedule an IRQ check with standard latency.
-        interruptController.scheduleIRQCheck();
+        if (scheduler && scheduler->hasEventsOfType(EventType::IRQ_TRIGGER)) {
+            // An IRQ chain event is already queued (from timer overflow
+            // during the handler).  Cancel it and re-fire immediately so
+            // the CPU doesn't execute extra polling iterations.
+            scheduler->cancelEventsOfType(EventType::IRQ_TRIGGER);
+        }
+        interruptController.scheduleIRQCheck(0);
     }
 }
 
