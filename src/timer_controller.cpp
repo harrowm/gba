@@ -55,21 +55,16 @@ void TimerController::writeControl(int timerID, uint16_t value) {
         timer.counter = timer.reload;
         
         // Match mGBA: lastEvent = mTimingCurrentTime() & ~tickMask
-        // mTimingCurrentTime() includes the current instruction's pending cycles
-        // (the data access that triggered this write). This shifts the overflow
-        // grid so the first overflow fires at the correct cycle.
+        // Use raw getCurrentCycle() (instruction-start time) with prescaler
+        // alignment. mGBA's mTimingCurrentTime() includes in-progress costs,
+        // but after prescaler rounding the result is equivalent.
         uint64_t effectiveCycle = scheduler ? scheduler->getCurrentCycle() : 0;
-        if (memory) {
-            effectiveCycle += memory->getPendingCycles();
-        }
-        // Prescaler alignment (matches mGBA's tickMask)
         uint32_t prescalerValue = timer.getPrescalerValue();
         if (prescalerValue > 1) {
             effectiveCycle = effectiveCycle - (effectiveCycle % prescalerValue);
         }
         timer.lastReloadCycle = effectiveCycle;
         
-        // Schedule timer event (unless in cascade mode)
         if (!timer.isCountUpMode()) {
             scheduleTimer(timerID);
         }
@@ -84,14 +79,10 @@ void TimerController::writeControl(int timerID, uint16_t value) {
         // was already updated to the new (disabled) value above.
         bool wasCountUp = (oldControl & TIMER_COUNT_UP) != 0;
         if (scheduler && !wasCountUp) {
-            // Match mGBA: use effective current time including pending instruction cycles
+            // Use raw getCurrentCycle() for the disable freeze point.
             uint64_t currentCycle = scheduler->getCurrentCycle();
-            if (memory) {
-                currentCycle += memory->getPendingCycles();
-            }
             uint64_t elapsed = (currentCycle >= timer.lastReloadCycle)
                              ? (currentCycle - timer.lastReloadCycle) : 0;
-            // Derive prescaler from the old control word, not the new one
             static constexpr uint32_t prescalerLUT[] = {1, 64, 256, 1024};
             uint32_t prescaler = prescalerLUT[oldControl & 0x3];
             uint64_t elapsedTicks = elapsed / prescaler;
@@ -100,7 +91,6 @@ void TimerController::writeControl(int timerID, uint16_t value) {
                                    ? static_cast<uint32_t>(elapsedTicks % periodTicks)
                                    : 0;
             timer.counter = static_cast<uint16_t>(timer.reload + ticksInPeriod);
-
         }
         timer.enabled = false;
         cancelTimer(timerID);
@@ -127,21 +117,15 @@ uint16_t TimerController::readCounter(int timerID) const {
     // On real hardware the counter increments every (prescaler) CPU cycles.
     // Our scheduler only updates timer.counter on overflow events, so between
     // overflows we must compute the current value for any mid-frame reads.
-    // M4A (Nintendo's sound driver) reads Timer0 every VBlank to determine
-    // how many samples to mix — a stale read returns 0 delta = silence.
     if (scheduler) {
         uint64_t currentCycle = scheduler->getCurrentCycle();
-        // Include pending instruction cycles (matches mGBA's mTimingCurrentTime)
-        if (memory) {
-            currentCycle += memory->getPendingCycles();
-        }
         
-        // Subtract 2 cycles to account for the load instruction reading
-        // the timer (1N+1I = 2 cycles). This matches mGBA's approach:
+        // mGBA subtracts 2 from mTimingCurrentTime() when reading timers:
         //   GBATimerUpdateRegister(gba, timer, 2)
-        // where the 2 is subtracted from currentTime before computing
-        // the timer value. The reading instruction's own cost should not
-        // be visible in the timer value.
+        // mTimingCurrentTime() includes instruction fetch progress (~1 cycle
+        // for IWRAM/BIOS), while our getCurrentCycle() is at instruction start.
+        // Net: mGBA reads at (base + fetchCost - 2) ≈ (base - 1) for fast mem.
+        // We match with (base + 0 - 2) = (base - 2).
         if (currentCycle >= timer.lastReloadCycle + 2) {
             currentCycle -= 2;
         } else {
@@ -153,12 +137,8 @@ uint16_t TimerController::readCounter(int timerID) const {
         uint32_t prescaler = timer.getPrescalerValue();
         uint64_t elapsedTicks = elapsed / prescaler;
         
-        // Period = number of ticks from reload to overflow (0x10000)
+        // Counter = reload + elapsed ticks, with period wrapping
         uint32_t periodTicks = 0x10000 - timer.reload;
-        
-        // Modular arithmetic handles the case where the scheduler hasn't
-        // processed overflow events yet (e.g. mid-instruction reads).
-        // The counter wraps correctly within a single period.
         uint32_t ticksInPeriod = (periodTicks > 0)
                                ? static_cast<uint32_t>(elapsedTicks % periodTicks)
                                : 0;
