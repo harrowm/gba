@@ -4,6 +4,8 @@ Baseline: **1946/2020 PASS (96.3%)** — 74 unique failing tests.
 
 Previous baseline: 1882/2020 at commit `caf7292`. Gains came from deferred DMA startup delay fix (+64 tests).
 
+**Date last verified:** 2026-02-14 (commit `95c18b4`). Score unchanged — these 74 failures are all in instruction-level cycle accuracy, unaffected by timer/IRQ/BIOS changes.
+
 ---
 
 ## Failure Breakdown by Category
@@ -355,6 +357,8 @@ When `ldr[sp]` executes a non-ROM data access, it doesn't disrupt the prefetch b
 | 🟡 **4th** | ldr[sp]/ldr[ROM] | 2 | 3% of remaining | PARKED — prefetch buffer state after non-ROM load |
 
 **Current score: 1946/2020 (96.3%)** — up from 1882/2020 (93.2%).
+
+**Date last verified:** 2026-02-14 (commit `95c18b4`)
 
 **All 74 unique failures reviewed.** Every failing test has been categorized, root-cause-analyzed, and has its mGBA behavior documented. No unreviewed categories remain.
 

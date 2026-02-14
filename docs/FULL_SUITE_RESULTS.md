@@ -1,5 +1,7 @@
 # mgba-emu/suite — Full Test Results
 
+**Last updated:** 2026-02-14 (commit `95c18b4`)
+
 All 14 test suites run with `--skip-bios --run-suite=NAME assets/roms/suite.gba`.
 
 ---
@@ -11,11 +13,11 @@ All 14 test suites run with `--skip-bios --run-suite=NAME assets/roms/suite.gba`
 | 0 | **memory** | 1552 | 1552 | **100%** | PERFECT |
 | 1 | **io-read** | 130 | 130 | **100%** | PERFECT |
 | 2 | **timing** | 1946 | 2020 | 96.3% | 74 failures — see TIMING_ISSUES_INVESTIGATED.md |
-| 3 | **timers** | 0 | ? | — | CRASH — PC jumped to I/O region during IRQ |
-| 4 | **timer-irq** | 34 | 90 | 37.8% | 56 failures — timer overflow counting off-by-N |
+| 3 | **timers** | 646 | 938 | 68.9% | 292 failures — IRQ delivery alignment (see TIMER_TEST_ANALYSIS.md) |
+| 4 | **timer-irq** | 44 | 90 | 48.9% | 46 failures — IRQ fires ~1 NOP late |
 | 5 | **shifter** | 140 | 140 | **100%** | PERFECT |
-| 6 | **carry** | 70 | 93 | 75.3% | 23 failures — V flag wrong on sbcs/rscs/adcs |
-| 7 | **multiply-long** | 44 | 72 | 61.1% | 28 failures — C flag wrong on umulls/smulls |
+| 6 | **carry** | 93 | 93 | **100%** | PERFECT (fixed: ADC/SBC/RSC flags) |
+| 7 | **multiply-long** | 72 | 72 | **100%** | PERFECT (fixed: N/C flags) |
 | 8 | **bios-math** | 615 | 615 | **100%** | PERFECT |
 | 9 | **dma** | 1188 | 1256 | 94.6% | 68 failures — DMA data correctness |
 | 10 | **sio-read** | 25 | 90 | 27.8% | 65 failures — SIO registers not implemented |
@@ -23,7 +25,8 @@ All 14 test suites run with `--skip-bios --run-suite=NAME assets/roms/suite.gba`
 | 12 | **misc-edge** | 1 | 10 | 10% | 9 failures — DMA prefetch + H-blank timing |
 | 13 | **video** | — | — | — | Visual-only (no text PASS/FAIL output) |
 
-**Totals (text-based suites):** 5745 / 6062+ = ~94.8%
+**Totals (text-based):** 6452 / 7010 = **92.0%**
+**Perfect suites:** 6/12 (memory, io-read, shifter, carry, multiply-long, bios-math)
 
 ---
 
@@ -39,66 +42,46 @@ See [TIMING_ISSUES_INVESTIGATED.md](TIMING_ISSUES_INVESTIGATED.md) for full anal
 
 ---
 
-### Suite 3: timers — CRASH
+### Suite 3: timers (292 failures) — ACTIVE WORK AREA
 
-The emulator crashes before producing any test output. The CPU enters IRQ mode (CPSR mode 0x12) and the PC jumps to `0x04000000` (I/O register space), then runs through `0xDEADBEEF` values.
+See [TIMER_TEST_ANALYSIS.md](TIMER_TEST_ANALYSIS.md) for full analysis. Score: **646/938 (68.9%)**.
 
-**Root cause:** The timers suite installs its own IRQ handler and expects timer overflow IRQs to fire. The IRQ dispatch path has a bug — the return address in LR_irq or the jump target from the IRQ vector table is wrong, causing execution to land in I/O space instead of returning to the handler.
+The suite was previously crashing (PC jumped to I/O region during IRQ). This was fixed by correcting the IRQ vector dispatch, IME address, and timer pending cycles handling.
 
-**Key crash trace evidence:**
-- Mode 0x12 (IRQ), LR=0x00000138 (BIOS IRQ return point)
-- R0=0x04000000 — the CPU tried to use this as a branch target
-- The handler at 0x030004B0 looks valid (contains counter increment logic)
-- Likely cause: IRQ vector/dispatch table not properly set up, or the BIOS IRQ handler trampoline at 0x128–0x138 isn't working correctly with the test's custom handler
+**Failure breakdown by prescaler:**
+
+| Prescaler | Fails | Notes |
+|-----------|-------|-------|
+| 0b (÷1) | 160 | Most sensitive — every CPU cycle = 1 timer tick |
+| 6b (÷64) | 45 | Only `xs` (loop count) fails; `xv` (counter value) passes |
+| 8b (÷256) | 43 | Same pattern as 6b |
+| 10b (÷1024) | 44 | Same pattern as 6b |
+
+**Root cause:** IRQ delivery fires 1 instruction boundary too late. The polling loop executes one extra iteration before seeing the timer disabled. Higher iteration counts (2i/4i) accumulate this error.
 
 ---
 
-### Suite 4: timer-irq (56 failures)
+### Suite 4: timer-irq (46 failures) — IMPROVED
 
-Tests set a timer reload value (FFFF, FFFE, ..., FFF7) and execute 0–9 NOP instructions, then check how many times the timer IRQ fired.
+Tests set a timer reload value (FFFF, FFFE, ..., FFF7) and execute 0–9 NOP instructions, then check how many times the timer IRQ fired. Improved from 34→44 PASS (was 56 failures, now 46).
 
 **Failure pattern:** Our IRQ fires ~1 NOP too late compared to hardware.
-- `FFFF 0 nops` → PASS (0 fires, correct)
-- `FFFF 1 nop` → FAIL: Got 0000, expected 0001 (IRQ should have fired after 1 NOP)
-- `FFFF 4+ nops` → FAIL: Got 0000, expected 0051 (way off — likely IRQ never fires at all for some configs)
+- FFFF/FFFE: all NOP counts 1-9 fail — period too short, timing must be exact
+- FFF7: 0-6 NOPs fail — more margin but still off
 
-For reload values further from overflow (FFFD, FFFC), the "0 nops" case also fails with Got 0000 != FFFF, suggesting the timer counter read-back is wrong too.
-
-**Root cause:** Timer IRQ latency or timer counter update timing is wrong. The timer overflow detection and IRQ assertion happen at the wrong cycle boundary relative to the CPU instruction stream.
+**Root cause:** Same as timers suite — the 7-cycle deferred IRQ delivery model places the interrupt 1 instruction boundary later than hardware.
 
 ---
 
-### Suite 6: carry (23 failures)
+### Suite 6: carry — FIXED ✅ (was 23 failures, now 0)
 
-All failures are **V (overflow) flag** errors on `sbcs`, `rscs`, and `adcs` instructions. The result value is always correct — only the flags differ.
-
-| Pattern | Got CPSR | Expected CPSR | Flag diff |
-|---------|----------|---------------|-----------|
-| `0, 0x7FFFFFFF (.) sbcs` | 9 (NV) | 8 (N) | V set, should be clear |
-| `0, 0x7FFFFFFF (C) adcs` | 8 (N) | 9 (NV) | V clear, should be set |
-| `0, 0xFFFFFFFF (.) sbcs` | 6 (CV) | 4 (C) | V set, should be clear |
-| `0, 0xFFFFFFFF (C) adcs` | 4 (C) | 6 (CV) | V clear, should be set |
-
-CPSR flags encoding: bit 3=N, bit 2=Z, bit 1=C, bit 0=V (as printed by the test).
-
-**Root cause:** The V flag calculation for SBC/RSC/ADC with carry is getting the overflow detection wrong for edge cases involving 0x7FFFFFFF, 0x80000000, and 0xFFFFFFFF. The carry-in from CPSR affects the overflow differently than our implementation computes.
-
-Specifically: `SBC` is `Rn - Op2 - !C`. The overflow should be computed on the full subtraction including the borrow, but our code may compute it on the intermediate result or miss the carry-in contribution.
+All 93 tests pass. Fixed in commit `7d8d6cf` by correcting carry and overflow flag computation on ADC, SBC, RSC for both ARM and Thumb modes.
 
 ---
 
-### Suite 7: multiply-long (28 failures)
+### Suite 7: multiply-long — FIXED ✅ (was 28 failures, now 0)
 
-All failures are on `umulls` (unsigned multiply long + S flag) and `smulls` (signed multiply long + S flag). Results are always correct — only CPSR flags differ.
-
-**Pattern:** We're setting the N flag based on bit 63 of the result, but the **C flag** behavior is wrong. On ARM7TDMI hardware, the C flag after MULL+S is "UNPREDICTABLE" per the ARM ARM, but real GBA hardware has deterministic behavior that the test expects.
-
-| Example | Got CPSR | Expected CPSR | Issue |
-|---------|----------|---------------|-------|
-| `-1 * 1 umulls` → result `00000000:FFFFFFFF` | 8 (N) | 0 (none) | N flag wrong |
-| `-1 * -1 umulls` → result `FFFFFFFE:00000001` | 8 (N) | A (NZ) | N and Z flag both wrong |
-
-**Root cause:** Our `updateFlagsMultiply()` is likely computing N from the wrong half of the 64-bit result, or the C/V flag clearing behavior doesn't match hardware. The ARM7TDMI sets N from bit 31 of RdHi, Z from the full 64-bit result being zero, and C/V are "meaningless" but have specific hardware behavior.
+All 72 tests pass. Fixed in commit `80e9f56` by correcting multiply-long N flag (from RdHi bit 31) and C flag (from Booth multiplier carry).
 
 ---
 
@@ -179,12 +162,12 @@ This suite outputs test patterns on screen for visual comparison. No text PASS/F
 
 | Priority | Issue | Failures Fixed | Difficulty | Impact |
 |----------|-------|----------------|------------|--------|
-| **1** | Carry flag (V) on SBC/RSC/ADC | 23 | Easy | Correctness |
-| **2** | Multiply-long flags (UMULLS/SMULLS) | 28 | Easy | Correctness |
-| **3** | Timer IRQ crash (timers suite) | Unknown | Medium | Unblocks a whole suite |
-| **4** | Timer IRQ latency | 56 | Medium | Timer accuracy |
-| **5** | H-blank flag timing | 7 | Medium | GPU accuracy |
-| **6** | DMA data correctness | 68 | Medium-Hard | DMA accuracy |
-| **7** | DMA prefetch interaction | 2 | Hard | Edge case |
-| **8** | Timing suite remaining | 74 | Hard | Already documented |
-| **9** | SIO registers | 69 | Large feature | Link cable only |
+| ~~1~~ | ~~Carry flag (V) on SBC/RSC/ADC~~ | ~~23~~ | ~~Easy~~ | ✅ DONE |
+| ~~2~~ | ~~Multiply-long flags (UMULLS/SMULLS)~~ | ~~28~~ | ~~Easy~~ | ✅ DONE |
+| ~~3~~ | ~~Timer IRQ crash (timers suite)~~ | ~~Unknown~~ | ~~Medium~~ | ✅ DONE |
+| **1** | Timer/IRQ delivery alignment | ~280 (timers+timer-irq) | Medium | Timer accuracy |
+| **2** | DMA data correctness | 68 | Medium-Hard | DMA accuracy |
+| **3** | H-blank flag timing | 7 | Medium | GPU accuracy |
+| **4** | Timing suite remaining | 74 | Hard | Already documented |
+| **5** | DMA prefetch interaction | 2 | Hard | Edge case |
+| **6** | SIO registers | 69 | Large feature | Link cable only |

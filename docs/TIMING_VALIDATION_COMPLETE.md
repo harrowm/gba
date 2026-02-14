@@ -1,169 +1,176 @@
-# GBA Emulator Timing Validation - COMPLETE ✅
+# GBA Emulator — Test Suite Status
 
-## Date: October 16, 2025
+**Last updated:** 2026-02-14
+**Commit:** `95c18b4` — Fix BIOS boot freeze: add write-to-clear for IF register in write8
 
-## Summary
-Successfully validated that our GBA emulator's cycle timing matches mGBA's reference implementation. The BIOS execution loop shows **perfect timing alignment** with 6 cycles per iteration on both emulators.
+---
 
-## Key Findings
+## mgba-emu/suite Results Summary
 
-### Loop Timing Comparison
-Both emulators execute the BIOS memory clear loop (0x11C-0x124) with identical timing:
+| # | Suite | Pass | Total | % | Change vs Baseline | Status |
+|---|-------|------|-------|---|--------------------|--------|
+| 0 | **memory** | 1552 | 1552 | **100%** | — | PERFECT |
+| 1 | **io-read** | 130 | 130 | **100%** | — | PERFECT |
+| 2 | **timing** | 1946 | 2020 | 96.3% | — | 74 failures (see TIMING_ISSUES_INVESTIGATED.md) |
+| 3 | **timers** | 646 | 938 | 68.9% | — | Active work area (see TIMER_TEST_ANALYSIS.md) |
+| 4 | **timer-irq** | 44 | 90 | 48.9% | +10 vs old | IRQ delivery timing off by ~1 NOP |
+| 5 | **shifter** | 140 | 140 | **100%** | — | PERFECT |
+| 6 | **carry** | 93 | 93 | **100%** | +23 vs old | PERFECT (was 75.3%) |
+| 7 | **multiply-long** | 72 | 72 | **100%** | +28 vs old | PERFECT (was 61.1%) |
+| 8 | **bios-math** | 615 | 615 | **100%** | — | PERFECT |
+| 9 | **dma** | 1188 | 1256 | 94.6% | — | 68 failures — DMA data correctness |
+| 10 | **sio-read** | 25 | 90 | 27.8% | — | SIO registers not implemented |
+| 11 | **sio-timing** | 0 | 4 | 0% | — | SIO not implemented |
+| 12 | **misc-edge** | 1 | 10 | 10% | — | DMA prefetch + H-blank edge cases |
+| 13 | **video** | — | — | — | — | Visual-only (no text output) |
 
-**Our Emulator:**
-- Iteration 1: Cycle 50
-- Iteration 2: Cycle 56 (Δ=6)
-- Iteration 3: Cycle 62 (Δ=6)
-- Iteration 4: Cycle 68 (Δ=6)
-- **Consistent 6 cycles per iteration**
+**Totals (text-based):** 6452 / 7010 = **92.0%**
+**Perfect suites:** 6/12 (memory, io-read, shifter, carry, multiply-long, bios-math)
 
-**mGBA:**
-- Iteration 1: Cycle 6
-- Iteration 2: Cycle 12 (Δ=6)
-- Iteration 3: Cycle 18 (Δ=6)
-- Iteration 4: Cycle 24 (Δ=6)
-- **Consistent 6 cycles per iteration**
+---
 
-### Instruction Breakdown
-The loop consists of 4 THUMB instructions:
+## Recent Improvements
 
-```assembly
-0x11E: LDR r1, [pc, #352]  @ Load next address (2 cycles)
-0x120: STR r0, [r4, r1]    @ Store zero         (2 cycles)  
-0x122: ADDS r1, r1, #4     @ Increment address  (1 cycle)
-0x124: BLT 0x120           @ Branch if negative (3 cycles when taken)
-```
+### Commit `95c18b4` — BIOS Boot Fix
+- **Bug:** `write8` to IF register (0x04000202) had no write-to-clear semantics
+- **Impact:** BIOS IRQ handler uses `STRB` to acknowledge VBlank interrupts. Without write-to-clear, the VBlank flag was never cleared, trapping the CPU in an infinite IRQ loop. Result: no Nintendo logo animation, games freeze when booting through BIOS
+- **Fix:** Added `base[offset] = base[offset] & ~value` for write8 to 0x04000202/0x04000203
 
-**Total: 2 + 2 + 1 + 3 = 8 cycles**
+### Commit `7d8d6cf` — Carry/Overflow Flags (carry: 70→93, multiply-long: 44→72)
+- Fixed carry and overflow flag computation on ADC, SBC, RSC for ARM and Thumb
+- Fixed multiply-long N flag (from RdHi) and C flag (from Booth carry)
 
-Wait - this is 8 cycles, not 6. Let me recalculate...
+### Commit `efb6278` — Timer Enable/Disable Path (timers: 556→646)
+- Use raw `getCurrentCycle()` for timer enable/disable instead of adding `pendingCycles + 1`
+- Prescaler alignment on enable (`lastReloadCycle & ~tickMask`)
 
-Actually, the LDR at 0x11E happens *before* entering the main loop. The repeating loop is:
-- STR (0x120): 2 cycles
-- ADDS (0x122): 1 cycle  
-- BLT (0x124): 3 cycles
-- **Total: 6 cycles per iteration** ✅
+### Commit `fc1e6ed` — Pipeline Refill on PC Load (timers: ~495→526)
+- Added +2 cycle pipeline refill for LDR/LDM/POP that modify PC
 
-## Instrumentation Details
+---
 
-### mGBA Instrumentation
-Added fprintf statements to mGBA's ARM/THUMB execution functions:
-- File: `~/mgba-instrumented/src/arm/arm.c`
-- Line 217 (ARMStep): `fprintf(stderr, "ARM: PC=%08x Cycles=%d\n", cpu->gprs[ARM_PC] - 8, cpu->cycles);`
-- Line 227 (ThumbStep): `fprintf(stderr, "THUMB: PC=%08x Cycles=%d\n", cpu->gprs[ARM_PC] - 4, cpu->cycles);`
+## Failure Analysis by Suite
 
-### Important Note on mGBA's Trace
-mGBA's fprintf happens *after* instruction execution, which means:
-- Branch instructions don't appear in the log
-- The PC shown is the branch target, not the branch instruction itself
-- This caused initial confusion but doesn't affect timing validation
+### timers (292 failures) — Primary Work Area
 
-## Fixed Issues
+**Test format:** `Nb, 0xRRRR Mxs/Mxv Dd Di`
+- `Nb` = prescaler (0=1, 6=64, 8=256, 10=1024)
+- `0xRRRR` = reload value (period = 0x10000 - reload)
+- `xs`/`xv` = loop iteration count / timer counter value
+- `Dd` = delay iterations before timer start
+- `Di` = number of overflows before disable
 
-### 1. Initial Pipeline Fill (FIXED)
-- **Problem**: We were adding 2 cycles at reset for pipeline fill
-- **Solution**: Commented out `scheduler->advanceCycles(2)` in cpu.cpp reset()
-- **Result**: Both emulators now start at cycle 0
+**Breakdown by prescaler:**
 
-### 2. Memory Wait Cycles (FIXED)
-- **Problem**: Using `nonseq - seq` formula which undercounted memory access cycles
-- **Solution**: Changed to charge full `nonseq` wait states
-- **File**: src/memory.cpp, addWaitCycles()
+| Prescaler | Fails | Total | % Pass |
+|-----------|-------|-------|--------|
+| 0b (÷1) | 160 | ~468 | 65.8% |
+| 6b (÷64) | 45 | ~156 | 71.2% |
+| 8b (÷256) | 43 | ~156 | 72.4% |
+| 10b (÷1024) | 44 | ~156 | 71.8% |
 
-### 3. ARM LDR/STR Base Cost (FIXED)
-- **Problem**: ARM load/store had base cost of 1 cycle
-- **Solution**: Increased to 2 cycles (1 internal + 1 address calculation)
-- **File**: src/arm_timing.c
+**Breakdown by iteration count:**
 
-### 4. THUMB Conditional Branches (FIXED - CRITICAL)
-- **Problem**: Conditional branches always cost 1 cycle even when taken
-- **Solution**: Implemented CPSR-aware condition checking at runtime
-  - Taken branches: 3 cycles (branch + pipeline refill)
-  - Not taken branches: 1 cycle
-- **Files**: src/thumb_timing.c, include/thumb_timing.h, src/thumb_cpu.cpp
-- **Impact**: This was the main timing bug causing cumulative drift
+| Iterations | Fails | % of failures | Observation |
+|------------|-------|---------------|-------------|
+| 1i | 57 | 20% | Single overflow — base timing error |
+| 2i | 98 | 34% | Error doubles |
+| 4i | 137 | 47% | Error quadruples — cumulative drift |
 
-### 5. THUMB Memory Operation Double-Counting (FIXED)
-- **Problem**: Memory cycles were pre-calculated and added again during execution
-- **Solution**: Removed timing_calculate_memory_cycles() calls from thumb_timing.c
-- **Result**: LDR/STR now correctly cost 2 cycles (1 internal + 1 memory wait)
+**Root cause categories:**
+1. **Category 1 (57 tests, 1i):** Single-overflow cycle count error in IRQ handler → timer disable path. Small reload values (0x0005–0x0015) are most sensitive because the error mod period produces a wrong counter value.
+2. **Category 2 (235 tests, 2i/4i):** Same per-overflow error accumulated across multiple overflows. The per-overflow error is consistent (~1 cycle), meaning the fundamental IRQ-to-disable path timing is off by 1 instruction boundary.
+3. **Category 3 (0b overlap, ~18 tests):** Prescaler=1 makes every CPU cycle visible as a timer tick, amplifying instruction-level timing errors hidden by ÷64/÷256/÷1024 prescalers.
 
-## Timing Implementation Details
+**Key insight:** The 6b/8b/10b `xv` (counter value) tests mostly **pass** — the timer counter itself is correct. Only the `xs` (loop iteration count) tests fail. This proves the timer is counting cycles correctly but IRQ delivery fires 1 instruction boundary too late, causing the polling loop to execute one extra iteration.
 
-### ARM7TDMI Pipeline Model
-- 3-stage pipeline: Fetch → Decode → Execute
-- Only internal execution cycles are charged to instructions
-- Memory prefetch runs in parallel with execution
-- No initial pipeline fill cycles at reset (matches mGBA)
+### timer-irq (46 failures)
 
-### Memory Access Timing
-- BIOS (0x00000000-0x00003FFF): 1 wait state (nonseq)
-- IWRAM (0x03000000-0x03007FFF): 1 wait state (nonseq)
-- ROM (0x08000000-0x09FFFFFF): 5 wait states (nonseq), 3 (seq)
-- Instruction execution charges full nonseq wait states for data access
+Tests configure timer with reload FFFF–FFF7, execute 0–9 NOP instructions, then check how many times the timer IRQ fired. Pattern: our IRQ fires ~1 NOP too late. Same root cause as timers Category 2 — the 7-cycle deferred IRQ delivery model places the interrupt 1 instruction later than hardware.
 
-### THUMB Instruction Costs
-- Data processing: 1 cycle
-- Load/Store: 1 internal + 1 memory = 2 cycles (+ additional wait states)
-- Conditional branches:
-  - Not taken: 1 cycle
-  - Taken: 3 cycles (1 + 2 pipeline refill)
-- Unconditional branches: 3 cycles
+**Failing pattern:**
+- FFFF (period=1): all 1–9 NOPs fail
+- FFFE (period=2): all 1–9 NOPs fail
+- FFFD (period=3): 0 NOPs fail
+- ...down to FFF7 (period=9): 0–6 NOPs fail
 
-## Validation Method
+### timing (74 failures)
 
-1. **Instrumented mGBA** to log PC and cycle count for every instruction
-2. **Generated traces** from both emulators running identical BIOS + ROM
-3. **Compared timing** focusing on repeating patterns rather than absolute cycles
-4. **Result**: Perfect match on per-iteration timing (6 cycles/iteration)
+Fully analyzed in [TIMING_ISSUES_INVESTIGATED.md](TIMING_ISSUES_INVESTIGATED.md):
+- 52 DMA ROM wait states (±1 per-unit)
+- 16 LDMIA OAM→ROM overflow (-1 to -4 with prefetch)
+- 4 C loop (+1 from LDR→STR credit waste)
+- 2 ldr pair (-1 prefetch buffer state)
 
-## Testing Infrastructure
+### dma (68 failures)
 
-### Files Created
-- `compare_instruction_costs.py`: Initial PC-by-PC comparison tool
-- `analyze_cycle_divergence.py`: Cumulative difference tracking
-- `compare_loop_costs.py`: Pattern-based timing validation
-- `docs/TIMING_VALIDATION_COMPLETE.md`: This document
+DMA data transfer correctness — not yet deeply investigated. Likely related to region crossing, alignment, or DMA mode handling.
 
-### Test Commands
+### sio-read (65 failures) / sio-timing (4 failures)
+
+Serial I/O completely unimplemented. These will all fail until SIO register stubs are added.
+
+### misc-edge (9 failures)
+
+DMA prefetch interactions and H-blank timing edge cases. Low priority.
+
+---
+
+## What to Fix Next — Priority Recommendations
+
+### Priority 1: Timer/IRQ Delivery Alignment (est. +200 tests across timers + timer-irq)
+**Impact:** Would fix timers Categories 2+3 (~235 tests) and timer-irq (~46 tests)
+**Approach:** The consistent +1 iteration count across all prescalers and configurations points to a single root cause: the 7-cycle deferred IRQ delivery fires at the wrong instruction boundary. Need to trace the exact cycle where mGBA delivers the timer overflow IRQ vs where we deliver it. Possible fixes:
+- Adjust `cyclesLate` compensation when scheduling the timer overflow IRQ event
+- Change when in the instruction cycle the IRQ check happens (before vs after advance)
+- Fine-tune the interaction between timer overflow event and IRQ scheduling
+
+### Priority 2: Save Support (game compatibility)
+**Impact:** Most commercial games can't save — EEPROM, Flash, SRAM persistence all missing
+**Approach:** Implement SRAM file persistence first (easiest), then EEPROM serial protocol, then Flash command protocol
+
+### Priority 3: VCount Match IRQ (game compatibility)
+**Impact:** Breaks raster effects and VCount-based timing in many games
+**Approach:** Compare DISPSTAT VCount setting against current scanline each HBlank, fire IRQ on match
+
+### Priority 4: PSG Audio Channels 1–4 (polish)
+**Impact:** Nearly every game has missing music/SFX
+**Approach:** Implement square wave (ch1/2), wave table (ch3), noise (ch4), frame sequencer
+
+---
+
+## Build & Test Commands
+
 ```bash
-# Build our emulator
-cd ~/gba
-make clean && make -j8
+# Build
+make -j4
 
-# Generate our trace
-timeout 5 ./gba_emulator --trace-memory assets/roms/hello.gba
+# Run individual suite
+timeout 30 ./gba_emulator --skip-bios --run-suite=timers assets/roms/suite.gba 2>&1 \
+  | grep "mGBA DEBUG" | grep -o "PASS\|FAIL" | sort | uniq -c
 
-# Build instrumented mGBA
-cd ~/mgba-instrumented/build
-cmake .. -DBUILD_QT=OFF -DBUILD_SDL=ON -DCMAKE_BUILD_TYPE=Release
-make -j8
+# Run with BIOS boot (Nintendo logo animation)
+./gba_emulator assets/roms/sonic.gba
 
-# Generate mGBA trace
-timeout 2 ./sdl/mgba --bios ~/gba/assets/bios.bin ~/gba/assets/roms/hello.gba 2>~/mgba_trace.log
+# Run with skip-bios
+./gba_emulator --skip-bios assets/roms/sonic.gba
 
-# Compare timing
-cd ~/gba
-python3 compare_loop_costs.py
+# Header dependency note: Makefile doesn't track headers
+rm -f build/memory.o   # after changing memory.h
+rm -f build/interrupt.o build/gba.o build/cpu.o  # after changing interrupt.h
 ```
 
-## Conclusion
+---
 
-Our GBA emulator now has **cycle-accurate timing** that matches the mGBA reference implementation. All major timing issues have been identified and fixed:
+## Historical Milestones
 
-✅ Pipeline fill timing
-✅ Memory wait cycle calculation  
-✅ ARM instruction costs
-✅ THUMB instruction costs
-✅ Conditional branch timing
-✅ Load/store timing
-
-The emulator is ready for real ROM testing with correct timing behavior.
-
-## Next Steps
-
-1. **Remove debug fprintf statements** from thumb_cpu.cpp
-2. **Test with commercial ROMs** (Sonic, Pokemon, etc.)
-3. **Verify frame timing** for 60 FPS gameplay
-4. **Profile performance** and optimize hot paths
-5. **Document any game-specific timing quirks**
+| Date | Commit | Event | Score Change |
+|------|--------|-------|--------------|
+| 2025-10 | various | Initial timing validation — loop timing matches mGBA | — |
+| 2025-10 | `caf7292` | Sequential wait states for LDM/STM | timing: 1882→1946 |
+| 2025-10 | various | DMA 3-cycle startup delay | timing: +64 tests |
+| 2026-02 | `b750ea0` | Timer fixes: pending cycles, prescaler alignment | timers: 0→469 |
+| 2026-02 | `fc1e6ed` | Pipeline refill for PC loads | timers: 495→526 |
+| 2026-02 | `efb6278` | Timer enable/disable raw cycle | timers: 556→646 |
+| 2026-02 | `7d8d6cf` | Carry/overflow flag fixes | carry: 70→93, mul-long: 44→72 |
+| 2026-02 | `95c18b4` | BIOS boot fix (IF write-to-clear in write8) | BIOS boot works |

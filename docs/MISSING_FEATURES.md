@@ -9,6 +9,7 @@
 | 3 | **Flash saves** (64K / 128K) | 🔴 High | No Atmel/SST/Macronix command protocol. Many games use Flash |
 | 4 | **Save persistence to disk** | 🔴 High | Even SRAM data is lost on exit |
 | 5 | ~~WAITCNT register~~ | ✅ Done | Fully implemented — `updateWaitstates()` parses WAITCNT and updates all ROM/SRAM wait state tables |
+| 5b | ~~IF write-to-clear (write8)~~ | ✅ Done | BIOS IRQ handler uses STRB to acknowledge IF — write8 now has write-to-clear semantics |
 | 6 | **VCount match / VCount IRQ** | 🔴 High | DISPSTAT VCount setting (bits 8–15) never compared against current scanline. VCount match bit never set, IRQ never fired. Breaks raster effects |
 | 7 | ~~Prefetch buffer~~ | ✅ Done | Prefetch buffer with stall/credit model implemented. Passes 87% of timing suite |
 | 8 | **Mosaic effect** | 🟠 Medium | Sprite/BG mosaic flags parsed but no stretch/repeat rendering applied. `REG_MOSAIC` not defined |
@@ -28,8 +29,8 @@
 
 | # | Feature | Gap |
 |---|---------|-----|
-| 1 | **SPSR in exception handler** | Comment says "SPSR not supported" — if SPSR isn't saved during IRQ/SWI entry, returning via `SUBS PC, LR` restores garbage CPSR. Critical for interrupt-heavy games |
-| 2 | **DMA cycle timing** | Per-unit cost model implemented (nonseq first + seq subsequent + region waits + teardown). Still ~116 timing suite failures — CPU-visible cycle accounting differs from mGBA model. See `docs/TIMING_ISSUES_INVESTIGATED.md` |
+| 1 | ~~SPSR in exception handler~~ | ✅ Fixed — SPSR saved/restored correctly in IRQ/SWI entry. `SUBS PC, LR` restores CPSR from SPSR. BIOS boot works. |
+| 2 | **DMA cycle timing** | Per-unit cost model implemented (nonseq first + seq subsequent + region waits + teardown). 52 timing suite failures remain (±1 off). See `docs/TIMING_ISSUES_INVESTIGATED.md` |
 | 3 | **VRAM/Palette/OAM bus contention** | TODOs in memory.cpp: "+1 if video controller accessing (not implemented yet)". No extra cycle during active rendering |
 | 4 | **GPU Mode 3/4 compositing** | Mode 3 reads VRAM directly. Unclear if sprites, blending, and windowing are applied on top |
 | 5 | **Sprite per-scanline cycle limit** | GBA limits to 1210 cycles (normal) / 954 (HBlank-free). Not enforced — all sprites always render |
@@ -51,9 +52,9 @@
 
 ## Recommended Priority Order
 
-Biggest bang-for-buck improvements for game compatibility:
+Biggest bang-for-buck improvements for test accuracy and game compatibility:
 
-1. **Save support** (SRAM persistence + EEPROM + Flash) — most games can't save at all right now
-2. **PSG audio** — nearly every game uses PSG for some SFX/music
+1. **Timer/IRQ delivery alignment** — ~280 test failures across timers + timer-irq suites. IRQ fires 1 instruction boundary late.
+2. **Save support** (SRAM persistence + EEPROM + Flash) — most games can't save at all right now
 3. **VCount match/IRQ** — breaks raster effects and VCount-based timing in many games
-4. **WAITCNT parsing** — cycle accuracy for all ROM-executing code
+4. **PSG audio** — nearly every game uses PSG for some SFX/music
