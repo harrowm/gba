@@ -182,17 +182,6 @@ void GBA::skipBIOS() {
            cpu->R()[13], cpu->R()[13] == 0x03007F00 ? "OK" : "FAIL!");
     printf("=== END PHASE 2 VERIFICATION ===\n\n");
     
-    // Print ROM ENTRY style state for comparison with BIOS boot
-    uint16_t ime = memory.readDirectIO16(0x04000208);
-    uint16_t ie = memory.readDirectIO16(0x04000200);
-    uint16_t if_reg = memory.readDirectIO16(0x04000202);
-    uint8_t postflg = memory.readDirectIO8(0x04000300);
-    uint16_t dispcnt = memory.readDirectIO16(0x04000000);
-    fprintf(stderr, "[SKIP-BIOS] IME=0x%04X IE=0x%04X IF=0x%04X POSTFLG=0x%02X DISPCNT=0x%04X\n",
-            ime, ie, if_reg, postflg, dispcnt);
-    fprintf(stderr, "[SKIP-BIOS] R13(SP)=0x%08X R14(LR)=0x%08X\n",
-            cpu->R()[13], cpu->R()[14]);
-
     DEBUG_INFO("Skipped BIOS, jumping directly to ROM at 0x08000000");
 }
 

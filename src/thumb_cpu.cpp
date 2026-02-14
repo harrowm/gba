@@ -1498,8 +1498,6 @@ void ThumbCPU::thumb_ble(uint16_t instruction) {
 void ThumbCPU::thumb_swi(uint16_t instruction) {
     uint8_t comment = instruction & 0xFF; // Software interrupt comment (bits 0-7)
 
-    // Track SWI calls - only log decompression SWIs
-    
     // Handle the software interrupt - trigger SVC exception
     DEBUG_INFO("Executing Thumb SWI: Software interrupt with comment 0x" + std::to_string(comment));
     

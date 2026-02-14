@@ -252,7 +252,8 @@ uint8_t Memory::read8(uint32_t address) const {
     if ((address >> 24) == 0x04 && (address & 0x00FF0000) == 0) {
         uint16_t offset = address & 0xFFFE;  // halfword-aligned offset within 64KB I/O block
         uint16_t val16 = ioRead16(offset);
-        return (address & 1) ? (val16 >> 8) : (val16 & 0xFF);
+        uint8_t result = (address & 1) ? (val16 >> 8) : (val16 & 0xFF);
+        return result;
     }
 
     uint32_t offset;
@@ -271,10 +272,6 @@ uint8_t Memory::read8(uint32_t address) const {
     // Debug: Print reads from logo and entry point
     // if (address == 0x0800009C || address == 0x080000B4) {
     //     printf("[Memory::read8] Read from 0x%08X: 0x%02X\n", address, base[offset]);
-    // }
-    // Debug: Print POSTFLG reads
-    // if (address == 0x04000300) {
-    //     printf("[Memory::read8] POSTFLG read: 0x%02X\n", base[offset]);
     // }
     return base[offset];
 }
@@ -343,6 +340,14 @@ void Memory::write8(uint32_t address, uint8_t value) {
         if ((value & 1) && interruptController) {
             interruptController->scheduleIRQCheck();
         }
+        return;
+    }
+
+    // IF register (0x04000202-0x04000203): write-1-to-clear semantics for byte writes.
+    // The BIOS IRQ handler uses STRB to acknowledge interrupts (e.g. STRB R1, [R3, #0x202]).
+    // Without this, the interrupt flag is never cleared and IRQs fire endlessly.
+    if (address == 0x04000202 || address == 0x04000203) {
+        base[offset] = base[offset] & ~value;
         return;
     }
 
