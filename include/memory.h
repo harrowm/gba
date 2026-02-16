@@ -33,6 +33,11 @@ public:
 
     // GPU rendering guard: suppress wait cycles during hardware rendering
     void setWaitCyclesBypass(bool bypass) { disableWaitCycles = bypass; }
+
+    // GPU HDraw state: set by GPU at scanline start (visible lines 0-159),
+    // cleared at HBlank start and during VBlank. During HDraw, CPU accesses
+    // to VRAM/Palette/OAM cost +1 wait state due to bus contention.
+    void setHDrawActive(bool active) { hDrawActive = active; }
     
     // Signal that the next data access is sequential (for LDM/STM block transfers)
     void setNextAccessSequential(bool seq) const { nextDataAccessSequential = seq; }
@@ -166,8 +171,11 @@ public:
 
 private:
     
-    // Flag to temporarily disable wait cycles (for tracer reads that shouldn't affect timing)
+    // Flag to temporarily disable wait cycles (for tracer reads or instruction fetch)
     mutable bool disableWaitCycles = false;
+
+    // GPU HDraw contention flag: when true, VRAM/Palette/OAM accesses cost +1
+    bool hDrawActive = false;
     
     // Sequential data access flag for LDM/STM block transfers.
     // When set, the next addWaitCycles() call uses sequential wait states

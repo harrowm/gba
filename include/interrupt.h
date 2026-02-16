@@ -48,10 +48,9 @@ public:
     void requestInterrupt(uint16_t irqFlag);
     
     // Schedule an IRQ check event if pending interrupts exist.
-    // Self-retries every IRQ_LATENCY_CYCLES until CPSR I=0 allows handling.
-    // Called from requestInterrupt and should be called when CPSR I changes 1→0.
-    // latency: cycles before the check fires. Use 0 for immediate (CPSR restore),
-    //          IRQ_LATENCY_CYCLES for hardware-raised interrupts.
+    // Matches mGBA's GBATestIRQ: schedules with GBA_IRQ_DELAY if no event
+    // is already pending.  Called from requestInterrupt (hardware assertion)
+    // and onCPSRWrite (when CPSR I-flag clears on handler return).
     void scheduleIRQCheck(uint32_t latency = IRQ_LATENCY_CYCLES);
     
     // Check if any enabled interrupts are pending

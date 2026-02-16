@@ -1490,6 +1490,16 @@ void Memory::addWaitCycles(uint32_t address, uint32_t accessWidth) const {
     } else {
         waitCycles = 1 + getNonseqWaitStates(address, accessWidth);
     }
+
+    // VRAM/Palette/OAM bus contention during HDraw (visible scanlines, not HBlank):
+    // The GPU reads these regions during active display, causing +1 wait state
+    // for any CPU access.  hDrawActive is set/cleared by the GPU scheduler.
+    if (hDrawActive) {
+        uint8_t region = (address >> 24) & 0xFF;
+        if (region == 0x05 || region == 0x06 || region == 0x07) {
+            waitCycles += 1;
+        }
+    }
     
     // Track whether data accesses target non-ROM addresses (for prefetch buffer)
     if (accumulatingCycles) {

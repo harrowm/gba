@@ -152,3 +152,65 @@ The GBA has 6 sound channels:
 ### PSG Timing  
 - Frame sequencer runs at 512 Hz (32768 cycles)
 - Controls length, envelope, sweep timing
+
+## Current Status
+
+### Phase 1 & 2: COMPLETED ✅
+- SDL2 push-mode audio at 48kHz stereo with Bresenham PLL rate adjustment
+- FIFO A/B with 8-entry circular uint32_t buffer, byte-by-byte consume
+- Timer overflow → APU → DMA refill → FIFO consume pipeline
+- Scheduler-driven AUDIO_SAMPLE event (~350 cycle interval)
+- SOUNDCNT_H routing (volume, L/R enable, timer select)
+
+### Phase 3: PSG — IN PROGRESS 🚧
+- Channel 1 (Square+Sweep) and Channel 2 (Square): struct defined, not generating audio yet in committed code
+- Channel 3 (Wave): placeholder
+- Channel 4 (Noise): placeholder
+
+### Phase 4: Mixing — PARTIAL
+- FIFO mixing with SOUNDCNT_H volume/enable done
+- PSG mixing scaffolded but channels not producing output yet
+
+---
+
+## DMA Sound Buffer Clamp — Investigation & Findings
+
+### The Problem
+
+Games using the M4A sound engine exhibit two distinct DMA buffering patterns that are incompatible with a single clamping strategy:
+
+| | **Sonic Advance** | **Pokemon FireRed** |
+|---|---|---|
+| **Pattern** | Double-buffer: M4A writes new DMAxSAD each VBlank | Continuous: M4A writes DMAxSAD once, DMA reads forward forever |
+| **Buffer region** | IWRAM (0x03xxxxxx) | IWRAM (0x03xxxxxx) |
+| **M4A buffer size** | `pcmDmaPeriod(9) × spv(176) = 0x630` | `pcmDmaPeriod(7) × spv(224) = 0x620` |
+| **Symptom without clamp** | Rhythmic clicks — 1–2 extra DMA reads between VBlank and M4A handler read past the mix buffer into engine internals | No issue — continuous reads are valid |
+| **Symptom with clamp** | Works correctly ✅ | Complete silence ❌ — all reads exceed stale base+limit |
+
+### Why mGBA Doesn't Need a Clamp
+
+mGBA's cycle-accurate timing ensures the M4A VBlank handler runs before any extra DMA reads occur. Our emulator has slight timing differences (1946/2020 on the timing suite) that allow 1–2 extra timer overflows to fire between VBlank start and the M4A handler execution, causing DMA reads past the buffer end.
+
+### Previous Approaches (Failed)
+
+1. **Static clamp with `getSourceAddress()`**: Used the initial registered DMA source as the base. Broke FireRed because the base was stale after the first frame — all subsequent reads exceeded `base + limit`.
+
+2. **`lastReloadSource` in `startTransfer()`**: Only set when DMA transitions disabled→enabled. FireRed never re-enables sound DMA (repeat mode), so the base was never updated.
+
+3. **`lastReloadSource` in `triggerSoundFIFO()`**: Set the base to `internalSource` (the running read position). This defeated the clamp entirely since the base advanced with every read.
+
+4. **`lastReloadSource` in `writeSourceAddress()`**: Set when the game writes DMAxSAD. Works for Sonic (writes new address each VBlank) but FireRed never writes a new address — it writes once and relies on repeat mode.
+
+5. **Clamp disabled entirely**: FireRed gets sound but Sonic clicks.
+
+### Solution: Byte-Count Accumulator (Option A)
+
+Track bytes transferred per sound DMA channel since the last reset. Clamp to zero when count exceeds the M4A buffer limit.
+
+**Reset rules:**
+- **On DMAxSAD write** → reset counter (handles Sonic's VBlank double-buffer pattern)
+- **On VBlank** → reset counter ONLY IF no DMAxSAD write occurred this frame (handles FireRed's continuous pattern where M4A re-mixes the same buffer region each frame)
+
+This correctly handles both patterns:
+- **Sonic**: Counter resets on each VBlank DMAxSAD write. The 1–2 extra reads push the counter past the limit and get clamped.
+- **FireRed**: No DMAxSAD write occurs, so VBlank resets the counter. Each frame's worth of reads stays within the limit.

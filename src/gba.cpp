@@ -436,20 +436,15 @@ void GBA::runFrame() {
     // This ensures GPU events fire at correct cycle boundaries
     scheduler.runUntil(targetCycle);
     
-    // CRITICAL FIX: The loop above will overshoot the target by executing one more
-    // instruction after we've already reached targetCycle. This is because we check
-    // "< targetCycle" BEFORE executing, but the instruction we execute may take
-    // multiple cycles. To ensure frame timing is exact, we must reset the cycle
-    // counter to exactly the target after execution completes.
-    // 
-    // Example: target=280896, current=280895, execute 2-cycle instruction → 280897
-    // Without this fix, tests fail with off-by-1 or off-by-2 cycle errors.
-    uint64_t actualCycle = scheduler.getCurrentCycle();
-    if (actualCycle != targetCycle) {
-        // Overshoot detected - this is expected and normal
-        // Force cycle count back to exact frame boundary
-        scheduler.setCurrentCycle(targetCycle);
-    }
+    // Allow overshoot to carry into the next frame.  Each runFrame() computes
+    // targetCycle = getCurrentCycle() + CYCLES_PER_FRAME, so any extra cycles
+    // from the last instruction naturally shorten the next frame.  Over time
+    // frames average exactly 280,896 cycles, keeping timer grids aligned.
+    //
+    // Previously this code snapped the cycle counter back to targetCycle,
+    // which deleted overshoot cycles.  That made every frame systematically
+    // shorter, causing timers to drift slightly fast — a major contributor
+    // to audio clicks (more timer overflows per frame than real hardware).
     
     frameCount++;
     

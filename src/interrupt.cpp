@@ -71,9 +71,12 @@ void InterruptController::scheduleIRQCheck(uint32_t latency) {
         if ((ie2 & ifr2) && irqCallback) {
             irqCallback();
         }
-        // After delivering, check if more interrupts are still pending
-        // (e.g. VBlank queued behind HBlank). Only retry once — further
-        // retries come from onCPSRWrite when the handler returns.
+        // After delivering (or failing to deliver because IME=0 / CPSR.I=1),
+        // schedule a single retry.  This covers the narrow window where IME
+        // was temporarily 0 and gets re-enabled before onCPSRWrite fires.
+        // Matches the pattern: hardware re-checks periodically as long as
+        // IE & IF are asserted.  Further re-checks come from onCPSRWrite
+        // (CPSR.I clears) or IME/IE writes in memory.cpp.
         uint16_t ie3 = memory->readDirectIO16(REG_IE);
         uint16_t ifr3 = memory->readDirectIO16(REG_IF);
         if ((ie3 & ifr3) && !scheduler->hasEventsOfType(EventType::IRQ_TRIGGER)) {

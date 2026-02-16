@@ -176,9 +176,11 @@ void TimerController::scheduleTimer(int timerID) {
     // when getCurrentCycle() gets advanced.
     EventType eventType = static_cast<EventType>(static_cast<int>(EventType::TIMER_0_OVERFLOW) + timerID);
     uint64_t overflowCycle = timer.lastReloadCycle + cyclesUntilOverflow;
+    // Priority 2: lower than video events (priority 0) so VBlank/HBlank
+    // flags are set before timer overflow callbacks run at the same cycle.
     scheduler->scheduleAt(overflowCycle,
                        [this, timerID]() { onTimerOverflow(timerID); },
-                       eventType, 0);
+                       eventType, 2);
     
     DEBUG_INFO("Timer " + std::to_string(timerID) + " scheduled: " + 
                std::to_string(ticksUntilOverflow) + " ticks * " + 

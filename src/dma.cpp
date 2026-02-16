@@ -240,65 +240,6 @@ void DMAController::performTransfer(int channelId) {
         destAddr &= ~1u;
     }
     
-    // Debug sound DMA data - only log non-zero transfers
-    bool isSoundDMA = (channelId == 1 || channelId == 2) && 
-                      (destAddr == 0x040000A0 || destAddr == 0x040000A4);
-    
-    // For sound FIFO DMA: clamp reads to prevent buffer overrun.
-    // M4A's PCM DMA buffers are sized as pcmDmaPeriod * samplesPerVBlank (typically 0x630).
-    // Due to timer overflows occurring between VBlank start and the M4A VBlank handler
-    // running, 1-2 extra DMA reads can advance past the end of the PCM buffer into
-    // M4A internal structures (channel data, ROM pointers), producing loud clicks.
-    //
-    // We dynamically detect the buffer size from the M4A SoundInfo struct at 0x03007FF0:
-    //   +0x0B: pcmDmaPeriod (typically 7-9)
-    //   +0x10: pcmSamplesPerVBlank (typically 176)
-    //   bufferSize = pcmDmaPeriod * pcmSamplesPerVBlank
-    //
-    // If we can't read the struct, fall back to a conservative 0x800 limit.
-    uint32_t soundDmaBase = channel.getSourceAddress();  // registered (reload) source
-    uint32_t soundBufferLimit = 0x800;  // conservative fallback
-
-    // Try to detect M4A buffer size dynamically
-    if (isSoundDMA && memory) {
-        static uint32_t cachedBufferLimit = 0;
-        static uint32_t cachedCheckFrame = 0;
-        
-        // Re-check every ~60 frames (1 second) in case M4A reinitializes
-        if (cachedBufferLimit == 0 || (g_current_frame - cachedCheckFrame) > 60) {
-            cachedCheckFrame = g_current_frame;
-            // Use setWaitCyclesBypass to avoid adding scheduler cycles during detection.
-            // These are purely diagnostic reads that should not affect emulation timing.
-            memory->setWaitCyclesBypass(true);
-            uint32_t siPtr = memory->read32(0x03007FF0);
-            if (siPtr >= 0x02000000 && siPtr < 0x04000000) {
-                uint32_t ident = memory->read32(siPtr);
-                // M4A ident is "Smsh" (0x68736D53) or sometimes off by 1 in the counter byte
-                if ((ident & 0xFFFFFF00) == 0x68736D00) {
-                    uint8_t pcmDmaPeriod = memory->read8(siPtr + 0x0B);
-                    int32_t pcmSamplesPerVBlank = memory->read32(siPtr + 0x10);
-                    
-                    if (pcmDmaPeriod >= 3 && pcmDmaPeriod <= 12 &&
-                        pcmSamplesPerVBlank >= 96 && pcmSamplesPerVBlank <= 400) {
-                        uint32_t newLimit = (uint32_t)(pcmDmaPeriod * pcmSamplesPerVBlank);
-                        // Align up to 16 bytes (DMA transfer granularity)
-                        newLimit = (newLimit + 15) & ~15u;
-                        if (newLimit != cachedBufferLimit) {
-                            fprintf(stderr, "[DMA-CLAMP] Detected M4A buffer: period=%d spv=%d limit=0x%X (was 0x%X) frame=%u\n",
-                                    pcmDmaPeriod, pcmSamplesPerVBlank, newLimit,
-                                    cachedBufferLimit, g_current_frame);
-                        }
-                        cachedBufferLimit = newLimit;
-                    }
-                }
-            }
-            memory->setWaitCyclesBypass(false);
-        }
-        if (cachedBufferLimit != 0) {
-            soundBufferLimit = cachedBufferLimit;
-        }
-    }
-
     LOG_DMA("[DMA%d] STARTING TRANSFER: src=0x%08X dst=0x%08X count=%d size=%s\n",
            channelId, srcAddr, destAddr, count, is32bit ? "32bit" : "16bit");
     
@@ -375,10 +316,7 @@ void DMAController::performTransfer(int channelId) {
         // This matches mGBA's "performingDMA == 1" check in GBALoad8.
         bool dma0SramBlock = (channelId == 0 && srcRegion >= 0x0E);
         
-        // Sound DMA buffer overrun safety clamp
-        if (isSoundDMA && srcAddr >= soundDmaBase + soundBufferLimit) {
-            value = 0;
-        } else if (dma0SramBlock) {
+        if (dma0SramBlock) {
             // DMA0 SRAM: the read physically returns 0 (bus can't reach SRAM).
             // The DMA transfer register is updated to 0, matching mGBA behavior
             // where GBALoad8 returns 0 and LOAD_SRAM replicates it to 32 bits.
@@ -605,6 +543,13 @@ void DMAController::triggerSoundFIFO(int fifoIndex) {
             channel.internalCount = 4;
             channel.active = true;
             
+            // DMA arbitration startup cost: ~2 cycles before first transfer.
+            // Immediate DMA uses 3 cycles (includes pipeline effect), but
+            // triggered DMA (sound, HBlank, VBlank) uses 2 cycles.
+            if (scheduler) {
+                scheduler->advanceCycles(2);
+            }
+            
             performTransfer(i);
             break;  // Only one channel should service each FIFO
         }
@@ -621,3 +566,5 @@ void DMAController::startTriggeredTransfers(DMATimingMode mode) {
         }
     }
 }
+
+

@@ -34,11 +34,21 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
                currentScanline, currentCycle, currentCycle + CYCLES_HDRAW);
         schedule_count++;
     }
+
+    // Set HDraw bus contention for visible scanlines (0-159).
+    // During HDraw, the GPU reads VRAM/Palette/OAM, contending with CPU.
+    // Cleared at HBlank start and during VBlank scanlines.
+    if (currentScanline < SCANLINES_VISIBLE) {
+        memory.setHDrawActive(true);
+    } else {
+        memory.setHDrawActive(false);
+    }
     
     // Schedule H-Draw completion
     scheduler->schedule(CYCLES_HDRAW, [this, scheduler]() {
-        // H-Draw complete, enter H-Blank
+        // H-Draw complete, enter H-Blank — clear bus contention flag
         inHBlank = true;
+        memory.setHDrawActive(false);
         // Use readDirectIO16/writeDirectIO to avoid adding spurious wait
         // cycles to the scheduler.  The GPU is a hardware component, not a
         // CPU bus master, so its register updates must be zero-cost.
@@ -108,8 +118,8 @@ void GPU::scheduleScanline(Scheduler* scheduler) {
             
             // Schedule next scanline immediately (new scanline starts now)
             scheduleScanline(scheduler);
-        }, EventType::VIDEO_SCANLINE, 1);
-    }, EventType::VIDEO_HBLANK, 1);
+        }, EventType::VIDEO_SCANLINE, 0);
+    }, EventType::VIDEO_HBLANK, 0);
 }
 
 void GPU::setupTiming(Scheduler* scheduler) {

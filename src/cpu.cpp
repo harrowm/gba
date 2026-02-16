@@ -72,23 +72,16 @@ void CPU::advanceCycles(uint32_t cycles) {
 // This ensures VBlank IRQs raised while CPSR I=1 get delivered promptly
 // once the previous IRQ handler returns and clears I.
 //
-// When returning from an IRQ handler, IF may already be set (e.g. a timer
-// overflowing every cycle).  During the handler the IRQ delivery chain
-// reschedules an IRQ_TRIGGER event every 7 cycles, but the alignment of
-// that chain with the handler-return instruction is arbitrary.  On real
-// hardware the CPU re-evaluates the IRQ line every cycle, so a pending
-// IF & IE triggers a new IRQ essentially immediately after CPSR I clears.
-//
-// To match this: when I clears and IE & IF are already set, cancel any
-// stale chain event and reschedule with 0 delay so the IRQ fires as part
-// of the current instruction's event processing (i.e. before the next
-// user-mode instruction can read stale I/O state).
+// When CPSR I-flag clears (e.g. returning from IRQ handler via SUBS PC,LR,#4),
+// re-check for pending interrupts.  We cancel any pending IRQ_TRIGGER event
+// and reschedule with 0 delay so the interrupt fires at the next instruction
+// boundary.  This is slightly faster than mGBA's model (which always uses 7
+// cycles via GBATestIRQNoDelay → GBATestIRQ(0)), but compensates for other
+// timing differences in our execution model.  The cancel ensures we deliver
+// immediately on CPSR restore rather than waiting for a stale retry event.
 void CPU::onCPSRWrite() {
     if (!(cpsr & 0x80)) {  // I flag clear — interrupts enabled
         if (scheduler && scheduler->hasEventsOfType(EventType::IRQ_TRIGGER)) {
-            // An IRQ chain event is already queued (from timer overflow
-            // during the handler).  Cancel it and re-fire immediately so
-            // the CPU doesn't execute extra polling iterations.
             scheduler->cancelEventsOfType(EventType::IRQ_TRIGGER);
         }
         interruptController.scheduleIRQCheck(0);
