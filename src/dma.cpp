@@ -296,6 +296,20 @@ void DMAController::performTransfer(int channelId) {
             unitCycles += cachedSeqCycles;
         }
         
+        // VRAM/Palette/OAM bus contention during HDraw: the GPU is reading
+        // these regions during visible scanlines, costing +1 wait state per
+        // DMA access to region 0x05-0x07 (same penalty as CPU accesses).
+        if (memory->isHDrawActive()) {
+            uint8_t srcReg = (srcAddr >> 24) & 0xFF;
+            uint8_t dstReg = (destAddr >> 24) & 0xFF;
+            if (srcReg == 0x05 || srcReg == 0x06 || srcReg == 0x07) {
+                unitCycles += 1;
+            }
+            if (dstReg == 0x05 || dstReg == 0x06 || dstReg == 0x07) {
+                unitCycles += 1;
+            }
+        }
+        
         scheduler->advanceCycles(unitCycles);
         
         // --- Data transfer ---
@@ -562,6 +576,12 @@ void DMAController::startTriggeredTransfers(DMATimingMode mode) {
         DMAChannel& channel = channels[i];
         if (channel.isEnabled() && !channel.active && channel.getTimingMode() == mode) {
             channel.active = true;
+            // DMA arbitration startup cost: ~2 cycles before first transfer.
+            // Matches the startup in triggerSoundFIFO and the 3-cycle immediate
+            // DMA deferred start (which includes pipeline effect).
+            if (scheduler) {
+                scheduler->advanceCycles(2);
+            }
             performTransfer(i);
         }
     }

@@ -38,6 +38,7 @@ public:
     // cleared at HBlank start and during VBlank. During HDraw, CPU accesses
     // to VRAM/Palette/OAM cost +1 wait state due to bus contention.
     void setHDrawActive(bool active) { hDrawActive = active; }
+    bool isHDrawActive() const { return hDrawActive; }
     
     // Signal that the next data access is sequential (for LDM/STM block transfers)
     void setNextAccessSequential(bool seq) const { nextDataAccessSequential = seq; }
